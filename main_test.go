@@ -122,12 +122,16 @@ func TestStatusPageUsesManagementKeyFlow(t *testing.T) {
 		"readManagementKey",
 		"color-scheme:dark",
 		"mgmtKeyInput",
-		"保存密钥",
+		"Save Key",
 		"OPS CONSOLE",
-		"编辑配置",
+		"Edit Config",
 		"probe_on_success",
 		"probe_action",
-		"当前巡检配置",
+		"auto_execute",
+		"Report only",
+		"Auto execute",
+		"Probe History",
+		"Current Probe Config",
 	} {
 		if !strings.Contains(page, required) {
 			t.Fatalf("page missing %q", required)
