@@ -105,8 +105,8 @@ func pluginRegistration() registration {
 		Metadata: pluginapi.Metadata{
 			Name:             pluginName,
 			Version:          pluginVersion,
-			Author:           "akihitohyh",
-			GitHubRepository: "https://github.com/akihitohyh/xai-autoban",
+			Author:           "apaidedie",
+			GitHubRepository: "https://github.com/apaidedie/xai-autoban",
 			ConfigFields:     configFields(),
 		},
 		Capabilities: registrationCapability{
