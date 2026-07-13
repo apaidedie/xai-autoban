@@ -1,6 +1,7 @@
 package pluginapi
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/url"
 	"time"
@@ -24,6 +25,9 @@ type ConfigFieldType string
 
 const (
 	ConfigFieldTypeInteger ConfigFieldType = "integer"
+	ConfigFieldTypeString  ConfigFieldType = "string"
+	ConfigFieldTypeEnum    ConfigFieldType = "enum"
+	ConfigFieldTypeBoolean ConfigFieldType = "boolean"
 )
 
 type ConfigField struct {
@@ -82,11 +86,12 @@ type ResourceRoute struct {
 }
 
 type ManagementRequest struct {
-	Method  string
-	Path    string
-	Headers http.Header
-	Query   url.Values
-	Body    []byte
+	Method         string
+	Path           string
+	Headers        http.Header
+	Query          url.Values
+	Body           []byte
+	HostCallbackID string `json:"host_callback_id,omitempty"`
 }
 
 type ManagementResponse struct {
@@ -129,4 +134,70 @@ type UsageDetail struct {
 	CacheReadTokens     int64
 	CacheCreationTokens int64
 	TotalTokens         int64
+}
+
+type HostAuthFileEntry struct {
+	ID             string    `json:"id,omitempty"`
+	AuthIndex      string    `json:"auth_index,omitempty"`
+	Name           string    `json:"name"`
+	Type           string    `json:"type,omitempty"`
+	Provider       string    `json:"provider,omitempty"`
+	Label          string    `json:"label,omitempty"`
+	Status         string    `json:"status,omitempty"`
+	StatusMessage  string    `json:"status_message,omitempty"`
+	Disabled       bool      `json:"disabled,omitempty"`
+	Unavailable    bool      `json:"unavailable,omitempty"`
+	RuntimeOnly    bool      `json:"runtime_only,omitempty"`
+	Source         string    `json:"source,omitempty"`
+	Path           string    `json:"path,omitempty"`
+	Email          string    `json:"email,omitempty"`
+	Priority       int       `json:"priority,omitempty"`
+	Note           string    `json:"note,omitempty"`
+	UpdatedAt      time.Time `json:"updated_at,omitempty"`
+	CreatedAt      time.Time `json:"created_at,omitempty"`
+	NextRetryAfter time.Time `json:"next_retry_after,omitempty"`
+}
+
+type HostAuthListResponse struct {
+	Files []HostAuthFileEntry `json:"files"`
+}
+
+type HostAuthGetRequest struct {
+	AuthIndex string `json:"auth_index"`
+}
+
+type HostAuthGetResponse struct {
+	AuthIndex string          `json:"auth_index"`
+	Name      string          `json:"name,omitempty"`
+	Path      string          `json:"path,omitempty"`
+	JSON      json.RawMessage `json:"json"`
+}
+
+type HostAuthSaveRequest struct {
+	Name string          `json:"name"`
+	JSON json.RawMessage `json:"json"`
+}
+
+type HostAuthSaveResponse struct {
+	Name string `json:"name"`
+	Path string `json:"path"`
+}
+
+type HTTPRequest struct {
+	Method  string      `json:"Method"`
+	URL     string      `json:"URL"`
+	Headers http.Header `json:"Headers,omitempty"`
+	Body    []byte      `json:"Body,omitempty"`
+}
+
+type HTTPResponse struct {
+	StatusCode int         `json:"StatusCode"`
+	Headers    http.Header `json:"Headers,omitempty"`
+	Body       []byte      `json:"Body,omitempty"`
+}
+
+type HostLogRequest struct {
+	Level   string         `json:"level,omitempty"`
+	Message string         `json:"message"`
+	Fields  map[string]any `json:"fields,omitempty"`
 }
