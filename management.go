@@ -17,6 +17,9 @@ func managementRegistration() pluginapi.ManagementRegistrationResponse {
 		Routes: []pluginapi.ManagementRoute{
 			{Method: http.MethodGet, Path: managementPrefix + "/bans", Description: "List xAI credentials excluded by xai-autoban."},
 			{Method: http.MethodGet, Path: managementPrefix + "/audit", Description: "List recent autoban audit events."},
+			{Method: http.MethodGet, Path: managementPrefix + "/settings", Description: "Get effective runtime settings."},
+			{Method: http.MethodPut, Path: managementPrefix + "/settings", Description: "Update runtime settings (probe actions, intervals, etc.)."},
+			{Method: http.MethodPost, Path: managementPrefix + "/settings", Description: "Update runtime settings (probe actions, intervals, etc.)."},
 			{Method: http.MethodPost, Path: managementPrefix + "/unban", Description: "Release one xAI credential. Body: {\"auth_id\":\"...\"}."},
 			{Method: http.MethodPost, Path: managementPrefix + "/unban-all", Description: "Release all credentials held by xai-autoban."},
 			{Method: http.MethodPost, Path: managementPrefix + "/import", Description: "Restore a previously exported ban snapshot."},
@@ -47,6 +50,10 @@ func dispatchManagement(req pluginapi.ManagementRequest) pluginapi.ManagementRes
 		return jsonResponse(http.StatusOK, currentStatus())
 	case method == http.MethodGet && strings.HasSuffix(path, managementPrefix+"/audit"):
 		return jsonResponse(http.StatusOK, map[string]any{"events": audit.list()})
+	case method == http.MethodGet && strings.HasSuffix(path, managementPrefix+"/settings"):
+		return jsonResponse(http.StatusOK, map[string]any{"ok": true, "settings": currentConfig().publicView()})
+	case (method == http.MethodPut || method == http.MethodPost) && strings.HasSuffix(path, managementPrefix+"/settings"):
+		return updateSettings(req.Body)
 	case method == http.MethodPost && strings.HasSuffix(path, managementPrefix+"/unban"):
 		var body struct {
 			AuthID string `json:"auth_id"`
@@ -117,6 +124,26 @@ func dispatchManagement(req pluginapi.ManagementRequest) pluginapi.ManagementRes
 	}
 }
 
+func updateSettings(raw []byte) pluginapi.ManagementResponse {
+	var patch map[string]any
+	if err := json.Unmarshal(raw, &patch); err != nil {
+		return jsonResponse(http.StatusBadRequest, map[string]any{"error": "invalid_json", "message": err.Error()})
+	}
+	// allow nested {"settings":{...}}
+	if nested, ok := patch["settings"].(map[string]any); ok {
+		patch = nested
+	}
+	cfg, warnings := mergeConfigPatch(currentConfig(), patch)
+	setConfig(cfg)
+	audit.add("manual", "", "settings", "ok", "runtime settings updated", 0)
+	return jsonResponse(http.StatusOK, map[string]any{
+		"ok":       true,
+		"settings": cfg.publicView(),
+		"warnings": warnings,
+		"note":     "runtime only until CPA reloads plugins.configs.xai-autoban",
+	})
+}
+
 func importSnapshot(raw []byte) pluginapi.ManagementResponse {
 	var snapshot statusInfo
 	if err := json.Unmarshal(raw, &snapshot); err != nil {
@@ -149,12 +176,13 @@ func importSnapshot(raw []byte) pluginapi.ManagementResponse {
 }
 
 type statusInfo struct {
-	Plugin  string         `json:"plugin"`
-	Version string         `json:"version"`
-	Count   int            `json:"count"`
-	Bans    []banInfo      `json:"bans"`
-	Probe   map[string]any `json:"probe,omitempty"`
-	Audit   []auditEvent   `json:"audit,omitempty"`
+	Plugin   string         `json:"plugin"`
+	Version  string         `json:"version"`
+	Count    int            `json:"count"`
+	Bans     []banInfo      `json:"bans"`
+	Probe    map[string]any `json:"probe,omitempty"`
+	Settings map[string]any `json:"settings,omitempty"`
+	Audit    []auditEvent   `json:"audit,omitempty"`
 }
 
 type banInfo struct {
@@ -188,12 +216,13 @@ func currentStatus() statusInfo {
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].ResetAt < items[j].ResetAt })
 	st := statusInfo{
-		Plugin:  pluginName,
-		Version: pluginVersion,
-		Count:   len(items),
-		Bans:    items,
-		Probe:   probeSvc.status(),
-		Audit:   audit.list(),
+		Plugin:   pluginName,
+		Version:  pluginVersion,
+		Count:    len(items),
+		Bans:     items,
+		Probe:    probeSvc.status(),
+		Settings: currentConfig().publicView(),
+		Audit:    audit.list(),
 	}
 	return st
 }
