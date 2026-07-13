@@ -11,29 +11,128 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container: golang:1.24-bookworm
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            cc: gcc
+            ext: so
+          - goos: linux
+            goarch: arm64
+            cc: aarch64-linux-gnu-gcc
+            ext: so
+            packages: gcc-aarch64-linux-gnu
+          - goos: darwin
+            goarch: amd64
+            ext: dylib
+            zig: true
+          - goos: darwin
+            goarch: arm64
+            ext: dylib
+            zig: true
+          - goos: windows
+            goarch: amd64
+            cc: x86_64-w64-mingw32-gcc
+            ext: dll
+            packages: gcc-mingw-w64-x86-64
+          - goos: windows
+            goarch: arm64
+            ext: dll
+            zig: true
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.x"
+
+      - name: Install native toolchain
+        if: matrix.packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ matrix.packages }}
+
+      - name: Install zig for cross targets
+        if: matrix.zig
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xz-utils
+          curl -fsSL https://ziglang.org/download/0.13.0/zig-linux-x86_64-0.13.0.tar.xz | sudo tar -xJ -C /opt
+          echo "/opt/zig-linux-x86_64-0.13.0" >> "$GITHUB_PATH"
+
       - name: Test
+        if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
         run: go test ./...
 
-      - name: Build Linux amd64 plugin
+      - name: Build plugin
+        env:
+          CGO_ENABLED: "1"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
         run: |
-          mkdir -p dist
-          CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build \
-            -buildvcs=false \
-            -buildmode=c-shared \
-            -trimpath \
-            -ldflags="-s -w" \
-            -o dist/xai-autoban-linux-amd64.so \
-            .
-          sha256sum dist/xai-autoban-linux-amd64.so > dist/SHA256SUMS
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          OUT_DIR="dist/${{ matrix.goos }}_${{ matrix.goarch }}"
+          mkdir -p "$OUT_DIR" dist/zips
+          LIB="xai-autoban.${{ matrix.ext }}"
 
-      - name: Publish release
+          if [ "${{ matrix.zig }}" = "true" ]; then
+            case "${{ matrix.goos }}_${{ matrix.goarch }}" in
+              darwin_amd64) export CC="zig cc -target x86_64-macos" ;;
+              darwin_arm64) export CC="zig cc -target aarch64-macos" ;;
+              windows_arm64) export CC="zig cc -target aarch64-windows-gnu" ;;
+            esac
+          elif [ -n "${{ matrix.cc }}" ]; then
+            export CC="${{ matrix.cc }}"
+          fi
+
+          go build -buildvcs=false -buildmode=c-shared -trimpath -ldflags="-s -w" -o "$OUT_DIR/$LIB" .
+          (
+            cd "$OUT_DIR"
+            zip -9 "../../dist/zips/xai-autoban_${VERSION}_${{ matrix.goos }}_${{ matrix.goarch }}.zip" "$LIB"
+          )
+
+      - name: Upload platform artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/zips/*.zip
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: plugin-*
+          merge-multiple: true
+
+      - name: Prepare release assets
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          find artifacts -type f -name '*.zip' -exec cp {} release/ \;
+          cd release
+          sha256sum *.zip > checksums.txt
+          ls -la
+
+      - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
+          body: |
+            CLIProxyAPI 插件商店兼容发布。
+
+            资产命名：`xai-autoban_<version>_<goos>_<goarch>.zip`
+            zip 根目录动态库：`xai-autoban.so` / `xai-autoban.dylib` / `xai-autoban.dll`
+
+            安装：在 CPA `plugins.store-sources` 添加本仓库 `registry.json`，管理中心插件商店安装。
           files: |
-            dist/xai-autoban-linux-amd64.so
-            dist/SHA256SUMS
+            release/*.zip
+            release/checksums.txt
