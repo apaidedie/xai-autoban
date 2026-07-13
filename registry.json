@@ -6,7 +6,7 @@
       "name": "xAI Autoban",
       "description": "自动隔离异常 xAI 凭据（401/402/403/429），支持可配置 ban/动作、定时巡检、disable/delete 回退与管理密钥保护的恢复面板。",
       "author": "apaidedie",
-      "version": "0.3.1",
+      "version": "0.3.2",
       "repository": "https://github.com/apaidedie/xai-autoban",
       "homepage": "https://github.com/apaidedie/xai-autoban",
       "license": "MIT",
