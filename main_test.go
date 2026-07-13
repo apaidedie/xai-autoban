@@ -97,6 +97,9 @@ func TestStatusPageUsesManagementKeyFlow(t *testing.T) {
 		"Bearer",
 		"/v0/resource/plugins/xai-autoban",
 		"readManagementKey",
+		"color-scheme:dark",
+		"mgmtKeyInput",
+		"保存密钥",
 	} {
 		if !strings.Contains(page, required) {
 			t.Fatalf("page missing %q", required)
