@@ -32,23 +32,11 @@ jobs:
             cc: aarch64-linux-gnu-gcc
             ext: so
             packages: gcc-aarch64-linux-gnu
-          - goos: darwin
-            goarch: amd64
-            ext: dylib
-            zig: true
-          - goos: darwin
-            goarch: arm64
-            ext: dylib
-            zig: true
           - goos: windows
             goarch: amd64
             cc: x86_64-w64-mingw32-gcc
             ext: dll
             packages: gcc-mingw-w64-x86-64
-          - goos: windows
-            goarch: arm64
-            ext: dll
-            zig: true
     steps:
       - uses: actions/checkout@v4
 
@@ -62,14 +50,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ${{ matrix.packages }}
 
-      - name: Install zig for cross targets
-        if: matrix.zig
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y xz-utils
-          curl -fsSL https://ziglang.org/download/0.13.0/zig-linux-x86_64-0.13.0.tar.xz | sudo tar -xJ -C /opt
-          echo "/opt/zig-linux-x86_64-0.13.0" >> "$GITHUB_PATH"
-
       - name: Test
         if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
         run: go test ./...
@@ -80,8 +60,6 @@ jobs:
           set -euo pipefail
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             VERSION="${{ inputs.version }}"
-          elif [ "${{ github.event_name }}" = "release" ]; then
-            VERSION="${GITHUB_REF_NAME#v}"
           else
             VERSION="${GITHUB_REF_NAME#v}"
           fi
@@ -92,23 +70,13 @@ jobs:
           CGO_ENABLED: "1"
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
+          CC: ${{ matrix.cc }}
         run: |
           set -euo pipefail
           VERSION="${{ steps.ver.outputs.version }}"
           OUT_DIR="dist/${{ matrix.goos }}_${{ matrix.goarch }}"
           mkdir -p "$OUT_DIR" dist/zips
           LIB="xai-autoban.${{ matrix.ext }}"
-
-          if [ "${{ matrix.zig }}" = "true" ]; then
-            case "${{ matrix.goos }}_${{ matrix.goarch }}" in
-              darwin_amd64) export CC="zig cc -target x86_64-macos" ;;
-              darwin_arm64) export CC="zig cc -target aarch64-macos" ;;
-              windows_arm64) export CC="zig cc -target aarch64-windows-gnu" ;;
-            esac
-          elif [ -n "${{ matrix.cc }}" ]; then
-            export CC="${{ matrix.cc }}"
-          fi
-
           go build -buildvcs=false -buildmode=c-shared -trimpath -ldflags="-s -w" -o "$OUT_DIR/$LIB" .
           (
             cd "$OUT_DIR"
@@ -165,7 +133,9 @@ jobs:
             CLIProxyAPI 插件商店兼容发布。
 
             资产命名：`xai-autoban_<version>_<goos>_<goarch>.zip`
-            zip 根目录动态库：`xai-autoban.so` / `xai-autoban.dylib` / `xai-autoban.dll`
+            zip 根目录动态库：`xai-autoban.so` / `xai-autoban.dll`
+
+            当前 CI 发布 Linux/Windows（CPA Docker/常见部署）。macOS 可本地 CGO 构建。
 
             安装：在 CPA `plugins.store-sources` 添加本仓库 `registry.json`，管理中心插件商店安装。
           files: |
