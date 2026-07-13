@@ -65,8 +65,31 @@ func TestSchedulerDelegatesAfterFilter(t *testing.T) {
 	if err := json.Unmarshal(response.Result, &picked); err != nil {
 		t.Fatal(err)
 	}
-	if !picked.Handled || picked.DelegateBuiltin != pluginapi.SchedulerBuiltinRoundRobin || picked.AuthID != "" {
+	if !picked.Handled || picked.AuthID != "good" || picked.DelegateBuiltin != "" {
 		t.Fatalf("unexpected pick: %#v", picked)
+	}
+}
+
+func TestSchedulerSkipsBannedAliasIDs(t *testing.T) {
+	bans.clearAll()
+	setConfig(defaultConfig())
+	now := time.Now()
+	bans.set("xai-6cz4209z3r@jaliyaw.com.json", banEntry{StatusCode: 403, ResetAt: now.Add(time.Hour)})
+	req := pluginapi.SchedulerPickRequest{Candidates: []pluginapi.SchedulerAuthCandidate{
+		{ID: "xai-6cz4209z3r@jaliyaw.com", Provider: "xai", Priority: 100},
+		{ID: "xai-good@jaliyaw.com.json", Provider: "xai", Priority: 10},
+	}}
+	raw, _ := json.Marshal(req)
+	responseRaw, err := handleSchedulerPick(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var response envelope
+	_ = json.Unmarshal(responseRaw, &response)
+	var picked pluginapi.SchedulerPickResponse
+	_ = json.Unmarshal(response.Result, &picked)
+	if !picked.Handled || picked.AuthID != "xai-good@jaliyaw.com.json" {
+		t.Fatalf("expected good auth after alias ban match, got %#v", picked)
 	}
 }
 
