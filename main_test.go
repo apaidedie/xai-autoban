@@ -101,8 +101,10 @@ func TestStatusPageUsesManagementKeyFlow(t *testing.T) {
 		"mgmtKeyInput",
 		"保存密钥",
 		"OPS CONSOLE",
-		"Ban Ledger",
-		"Control Plane",
+		"编辑配置",
+		"probe_on_success",
+		"probe_action",
+		"当前巡检配置",
 	} {
 		if !strings.Contains(page, required) {
 			t.Fatalf("page missing %q", required)
