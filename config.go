@@ -29,6 +29,9 @@ type PluginConfig struct {
 	ProbePath               string `yaml:"probe_path"`
 	ProbeAction             string `yaml:"probe_action"`
 	ProbeOnSuccess          string `yaml:"probe_on_success"`
+	// AutoExecute mirrors CPA-Manager-Plus Codex inspection:
+	// false = report-only (只输出结果), true = apply probe_action / probe_on_success.
+	AutoExecute             bool   `yaml:"auto_execute"`
 	ActionCooldownSeconds   int    `yaml:"action_cooldown_seconds"`
 	DeleteFallback          string `yaml:"delete_fallback"`
 	SchedulerDelegate       string `yaml:"scheduler_delegate"`
@@ -56,6 +59,7 @@ func defaultConfig() PluginConfig {
 		ProbePath:             "/models",
 		ProbeAction:           actionBan,
 		ProbeOnSuccess:        successUnban,
+		AutoExecute:           true,
 		ActionCooldownSeconds: 60,
 		DeleteFallback:        actionDisable,
 		SchedulerDelegate:     pluginapi.SchedulerBuiltinRoundRobin,
@@ -218,6 +222,7 @@ func (c PluginConfig) publicView() map[string]any {
 		"probe_path":                c.ProbePath,
 		"probe_action":              c.ProbeAction,
 		"probe_on_success":          c.ProbeOnSuccess,
+		"auto_execute":              c.AutoExecute,
 		"action_cooldown_seconds":   c.ActionCooldownSeconds,
 		"delete_fallback":           c.DeleteFallback,
 		"scheduler_delegate":        c.SchedulerDelegate,
@@ -262,8 +267,9 @@ func configFields() []pluginapi.ConfigField {
 		{Name: "probe_concurrency", Type: pluginapi.ConfigFieldTypeInteger, Description: "Max concurrent probes."},
 		{Name: "probe_qps", Type: pluginapi.ConfigFieldTypeInteger, Description: "Global probe requests per second."},
 		{Name: "probe_mode", Type: pluginapi.ConfigFieldTypeEnum, EnumValues: []string{"models", "responses_mini"}, Description: "Probe strategy."},
-		{Name: "probe_action", Type: pluginapi.ConfigFieldTypeEnum, EnumValues: []string{actionBan, actionDisable, actionDelete}, Description: "Default action when probe fails."},
-		{Name: "probe_on_success", Type: pluginapi.ConfigFieldTypeEnum, EnumValues: []string{successNone, successUnban, successReenable, successUnbanAndReenable}, Description: "Action when probe succeeds."},
+		{Name: "probe_action", Type: pluginapi.ConfigFieldTypeEnum, EnumValues: []string{actionBan, actionDisable, actionDelete}, Description: "Default action when probe fails (used when auto_execute=true)."},
+		{Name: "probe_on_success", Type: pluginapi.ConfigFieldTypeEnum, EnumValues: []string{successNone, successUnban, successReenable, successUnbanAndReenable}, Description: "Action when probe succeeds (used when auto_execute=true)."},
+		{Name: "auto_execute", Type: pluginapi.ConfigFieldTypeBoolean, Description: "If false, probe only reports results (Codex-style report-only). If true, apply actions."},
 		{Name: "action_cooldown_seconds", Type: pluginapi.ConfigFieldTypeInteger, Description: "Cooldown between repeated actions for the same credential."},
 		{Name: "delete_fallback", Type: pluginapi.ConfigFieldTypeEnum, EnumValues: []string{actionDisable, actionBan}, Description: "Fallback when delete is unavailable."},
 		{Name: "scheduler_delegate", Type: pluginapi.ConfigFieldTypeEnum, EnumValues: []string{pluginapi.SchedulerBuiltinRoundRobin, pluginapi.SchedulerBuiltinFillFirst}, Description: "Builtin scheduler after filtering bans."},
