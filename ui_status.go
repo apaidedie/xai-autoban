@@ -156,7 +156,7 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
       <div id="empty" class="empty" hidden>当前没有隔离凭据</div>
     </div>
   </section>
-  <p class="foot">参考 Codex 巡检台：顶部配置摘要 + 右上角编辑配置侧栏。运行时改动能立即生效；CPA 热重载/重启后以 config.yaml 为准，除非你已同步写入宿主配置。</p>
+  <p class="foot">说明：动作 <b>ban</b> 是插件内存隔离（调度跳过），不会把 CPA 凭证开关打成「停用」。若要凭证列表显示停用，请在编辑配置里把失败动作设为 <b>disable</b>。运行时配置立即生效；重启后以 config.yaml 为准。</p>
 </div>
 
 <div class="drawer-mask" id="drawerMask"></div>
