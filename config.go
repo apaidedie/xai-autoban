@@ -198,6 +198,54 @@ func (c PluginConfig) actionForStatus(status int) string {
 	}
 }
 
+func (c PluginConfig) publicView() map[string]any {
+	return map[string]any{
+		"ban_401_seconds":           c.Ban401Seconds,
+		"ban_402_seconds":           c.Ban402Seconds,
+		"ban_403_seconds":           c.Ban403Seconds,
+		"ban_429_fallback_seconds":  c.Ban429FallbackSeconds,
+		"action_on_401":             c.ActionOn401,
+		"action_on_402":             c.ActionOn402,
+		"action_on_403":             c.ActionOn403,
+		"action_on_429":             c.ActionOn429,
+		"probe_enabled":             c.ProbeEnabled,
+		"probe_interval_seconds":    c.ProbeIntervalSeconds,
+		"probe_timeout_seconds":     c.ProbeTimeoutSeconds,
+		"probe_concurrency":         c.ProbeConcurrency,
+		"probe_qps":                 c.ProbeQPS,
+		"probe_mode":                c.ProbeMode,
+		"probe_base_url":            c.ProbeBaseURL,
+		"probe_path":                c.ProbePath,
+		"probe_action":              c.ProbeAction,
+		"probe_on_success":          c.ProbeOnSuccess,
+		"action_cooldown_seconds":   c.ActionCooldownSeconds,
+		"delete_fallback":           c.DeleteFallback,
+		"scheduler_delegate":        c.SchedulerDelegate,
+		"state_file":                c.StateFile,
+		"audit_max_events":          c.AuditMaxEvents,
+	}
+}
+
+func mergeConfigPatch(base PluginConfig, patch map[string]any) (PluginConfig, []string) {
+	raw, _ := yaml.Marshal(base)
+	var asMap map[string]any
+	_ = yaml.Unmarshal(raw, &asMap)
+	if asMap == nil {
+		asMap = map[string]any{}
+	}
+	for k, v := range patch {
+		if v == nil {
+			continue
+		}
+		asMap[k] = v
+	}
+	out, err := yaml.Marshal(asMap)
+	if err != nil {
+		return base, []string{"marshal patch failed: " + err.Error()}
+	}
+	return parseConfigYAML(string(out))
+}
+
 func configFields() []pluginapi.ConfigField {
 	return []pluginapi.ConfigField{
 		{Name: "ban_401_seconds", Type: pluginapi.ConfigFieldTypeInteger, Description: "Ban duration for 401 in seconds."},
