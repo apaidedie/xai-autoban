@@ -25,6 +25,8 @@ type probeService struct {
 	lastErr  string
 	lastOK   int
 	lastFail int
+	runSeq   int64
+	history  []probeRun
 }
 
 func newProbeService(cfg PluginConfig, host HostClient, engine *actionEngine) *probeService {
@@ -78,7 +80,7 @@ func (p *probeService) loop(interval time.Duration, stop <-chan struct{}) {
 		case <-stop:
 			return
 		case <-ticker.C:
-			if _, err := p.runOnce(false); err != nil {
+			if _, err := p.runOnceTrigger(false, "scheduled"); err != nil {
 				slog.Warn("xai-autoban: probe run failed", "error", err)
 			}
 		}
@@ -86,17 +88,42 @@ func (p *probeService) loop(interval time.Duration, stop <-chan struct{}) {
 }
 
 type probeResult struct {
-	Checked int `json:"checked"`
-	OK      int `json:"ok"`
-	Failed  int `json:"failed"`
-	Skipped int `json:"skipped"`
+	Checked      int    `json:"checked"`
+	OK           int    `json:"ok"`
+	Failed       int    `json:"failed"`
+	Skipped      int    `json:"skipped"`
+	Banned       int    `json:"banned"`
+	Disabled     int    `json:"disabled"`
+	Deleted      int    `json:"deleted"`
+	Unbanned     int    `json:"unbanned"`
+	Reenabled    int    `json:"reenabled"`
+	ReportOnly   bool   `json:"report_only"`
+	Trigger      string `json:"trigger,omitempty"`
+	StartedAt    string `json:"started_at,omitempty"`
+	FinishedAt   string `json:"finished_at,omitempty"`
+	AutoExecute  bool   `json:"auto_execute"`
+	ProbeAction  string `json:"probe_action,omitempty"`
+	OnSuccess    string `json:"probe_on_success,omitempty"`
 }
 
+type probeRun struct {
+	ID     int64       `json:"id"`
+	Result probeResult `json:"result"`
+	Error  string      `json:"error,omitempty"`
+}
+
+const maxProbeHistory = 30
+
 func (p *probeService) runOnce(force bool) (probeResult, error) {
+	return p.runOnceTrigger(force, "manual")
+}
+
+func (p *probeService) runOnceTrigger(force bool, trigger string) (probeResult, error) {
 	p.mu.Lock()
 	cfg := p.cfg
 	host := p.host
 	p.mu.Unlock()
+	started := time.Now()
 	if host == nil {
 		return probeResult{}, fmt.Errorf("host unavailable")
 	}
@@ -114,8 +141,17 @@ func (p *probeService) runOnce(force bool) (probeResult, error) {
 		}
 		targets = append(targets, f)
 	}
-	res := probeResult{Checked: len(targets)}
+	res := probeResult{
+		Checked:     len(targets),
+		ReportOnly:  !cfg.AutoExecute,
+		AutoExecute: cfg.AutoExecute,
+		ProbeAction: cfg.ProbeAction,
+		OnSuccess:   cfg.ProbeOnSuccess,
+		Trigger:     trigger,
+		StartedAt:   started.Format(time.RFC3339),
+	}
 	if len(targets) == 0 {
+		res.FinishedAt = time.Now().Format(time.RFC3339)
 		p.recordRun(res, "")
 		return res, nil
 	}
@@ -169,14 +205,45 @@ func (p *probeService) runOnce(force bool) (probeResult, error) {
 					}
 					entry.Source = "probe"
 				}
+				if !cfg.AutoExecute {
+					// Codex-style 只输出结果: still mark ban ledger for visibility, but never disable/delete.
+					entry.Action = actionBan
+					_ = p.engine.applyAction(authKey(f), actionBan, "probe-report", entry, force)
+					res.Banned++
+					return
+				}
+				action := entry.Action
 				_ = p.engine.applyFailure(authKey(f), "probe", entry, force)
+				switch action {
+				case actionDisable:
+					res.Disabled++
+					res.Banned++
+				case actionDelete:
+					res.Deleted++
+					res.Banned++
+				default:
+					res.Banned++
+				}
 				return
 			}
 			res.OK++
+			if !cfg.AutoExecute {
+				return
+			}
 			_ = p.engine.applySuccess(authKey(f), "probe", force)
+			switch cfg.ProbeOnSuccess {
+			case successUnban:
+				res.Unbanned++
+			case successReenable:
+				res.Reenabled++
+			case successUnbanAndReenable:
+				res.Unbanned++
+				res.Reenabled++
+			}
 		}(file)
 	}
 	wg.Wait()
+	res.FinishedAt = time.Now().Format(time.RFC3339)
 	p.recordRun(res, "")
 	return res, nil
 }
@@ -293,20 +360,36 @@ func (p *probeService) recordRun(res probeResult, errMsg string) {
 	p.lastOK = res.OK
 	p.lastFail = res.Failed
 	p.lastErr = errMsg
+	p.runSeq++
+	run := probeRun{ID: p.runSeq, Result: res, Error: errMsg}
+	p.history = append([]probeRun{run}, p.history...)
+	if len(p.history) > maxProbeHistory {
+		p.history = p.history[:maxProbeHistory]
+	}
+}
+
+func (p *probeService) historySnapshot() []probeRun {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out := make([]probeRun, len(p.history))
+	copy(out, p.history)
+	return out
 }
 
 func (p *probeService) status() map[string]any {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return map[string]any{
-		"enabled":   p.cfg.ProbeEnabled,
-		"running":   p.running,
-		"last_run":  p.lastRun.Format(time.RFC3339),
-		"last_ok":   p.lastOK,
-		"last_fail": p.lastFail,
-		"last_err":  p.lastErr,
-		"mode":      p.cfg.ProbeMode,
-		"interval":  p.cfg.ProbeIntervalSeconds,
+		"enabled":      p.cfg.ProbeEnabled,
+		"running":      p.running,
+		"last_run":     p.lastRun.Format(time.RFC3339),
+		"last_ok":      p.lastOK,
+		"last_fail":    p.lastFail,
+		"last_err":     p.lastErr,
+		"mode":         p.cfg.ProbeMode,
+		"interval":     p.cfg.ProbeIntervalSeconds,
+		"auto_execute": p.cfg.AutoExecute,
+		"history":      append([]probeRun(nil), p.history...),
 	}
 }
 
