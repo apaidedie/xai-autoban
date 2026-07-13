@@ -37,16 +37,49 @@ func (s *banState) set(authID string, entry banEntry) {
 func (s *banState) active(authID string, now time.Time) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	entry, ok := s.bans[authID]
-	if !ok {
-		return false
+	return s.activeLocked(authID, now)
+}
+
+func (s *banState) activeLocked(authID string, now time.Time) bool {
+	// exact key first
+	if entry, ok := s.bans[authID]; ok {
+		if !now.Before(entry.ResetAt) {
+			delete(s.bans, authID)
+			slog.Info("xai-autoban: automatically released credential", "auth_id", authID)
+			return false
+		}
+		return true
 	}
-	if !now.Before(entry.ResetAt) {
-		delete(s.bans, authID)
-		slog.Info("xai-autoban: automatically released credential", "auth_id", authID)
-		return false
+	// fuzzy match aliases (filename vs bare id, case, etc.)
+	for id, entry := range s.bans {
+		if !authIDsEqual(id, authID) {
+			continue
+		}
+		if !now.Before(entry.ResetAt) {
+			delete(s.bans, id)
+			slog.Info("xai-autoban: automatically released credential", "auth_id", id)
+			return false
+		}
+		return true
 	}
-	return true
+	return false
+}
+
+func (s *banState) isBannedCandidateID(id string, now time.Time) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.activeLocked(id, now) {
+		return true
+	}
+	for _, alias := range authIDAliases(id) {
+		if alias == id {
+			continue
+		}
+		if s.activeLocked(alias, now) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *banState) clear(authID string) bool {
