@@ -37,6 +37,13 @@ type PluginConfig struct {
 	SchedulerDelegate       string `yaml:"scheduler_delegate"`
 	StateFile               string `yaml:"state_file"`
 	AuditMaxEvents          int    `yaml:"audit_max_events"`
+	// DisableVia: host_auth (default, via host.auth.save) or management_api (CPA Management PATCH /auth-files/status).
+	DisableVia                           string `yaml:"disable_via"`
+	ManagementURL                        string `yaml:"management_url"`
+	ManagementKey                        string `yaml:"management_key"`
+	ManagementKeyEnv                     string `yaml:"management_key_env"`
+	ManagementTimeoutSeconds             int    `yaml:"management_timeout_seconds"`
+	ManagementAuthFailureCooldownSeconds  int    `yaml:"management_auth_failure_cooldown_seconds"`
 }
 
 func defaultConfig() PluginConfig {
@@ -61,10 +68,16 @@ func defaultConfig() PluginConfig {
 		ProbeOnSuccess:        successUnban,
 		AutoExecute:           true,
 		ActionCooldownSeconds: 60,
-		DeleteFallback:        actionDisable,
-		SchedulerDelegate:     pluginapi.SchedulerBuiltinRoundRobin,
-		StateFile:             "",
-		AuditMaxEvents:        200,
+		DeleteFallback:                       actionDisable,
+		SchedulerDelegate:                    pluginapi.SchedulerBuiltinRoundRobin,
+		StateFile:                            "",
+		AuditMaxEvents:                       200,
+		DisableVia:                           disableViaHostAuth,
+		ManagementURL:                        defaultManagementURL,
+		ManagementKey:                        "",
+		ManagementKeyEnv:                     defaultManagementKeyEnv,
+		ManagementTimeoutSeconds:             defaultMgmtTimeoutSec,
+		ManagementAuthFailureCooldownSeconds: defaultMgmtAuthCooldownSec,
 	}
 }
 
@@ -145,6 +158,23 @@ func normalizeConfig(cfg PluginConfig) (PluginConfig, []string) {
 		cfg.SchedulerDelegate = def.SchedulerDelegate
 		warnings = append(warnings, "invalid scheduler_delegate; using round-robin")
 	}
+	cfg.DisableVia = strings.ToLower(strings.TrimSpace(cfg.DisableVia))
+	if cfg.DisableVia != disableViaHostAuth && cfg.DisableVia != disableViaManagementAPI {
+		cfg.DisableVia = def.DisableVia
+		warnings = append(warnings, "invalid disable_via; using host_auth")
+	}
+	if strings.TrimSpace(cfg.ManagementURL) == "" {
+		cfg.ManagementURL = def.ManagementURL
+	}
+	if strings.TrimSpace(cfg.ManagementKeyEnv) == "" {
+		cfg.ManagementKeyEnv = def.ManagementKeyEnv
+	}
+	if cfg.ManagementTimeoutSeconds <= 0 {
+		cfg.ManagementTimeoutSeconds = def.ManagementTimeoutSeconds
+	}
+	if cfg.ManagementAuthFailureCooldownSeconds <= 0 {
+		cfg.ManagementAuthFailureCooldownSeconds = def.ManagementAuthFailureCooldownSeconds
+	}
 	return cfg, warnings
 }
 
@@ -224,10 +254,16 @@ func (c PluginConfig) publicView() map[string]any {
 		"probe_on_success":          c.ProbeOnSuccess,
 		"auto_execute":              c.AutoExecute,
 		"action_cooldown_seconds":   c.ActionCooldownSeconds,
-		"delete_fallback":           c.DeleteFallback,
-		"scheduler_delegate":        c.SchedulerDelegate,
-		"state_file":                c.StateFile,
-		"audit_max_events":          c.AuditMaxEvents,
+		"delete_fallback":            c.DeleteFallback,
+		"scheduler_delegate":         c.SchedulerDelegate,
+		"state_file":                 c.StateFile,
+		"audit_max_events":           c.AuditMaxEvents,
+		"disable_via":                c.DisableVia,
+		"management_url":             c.ManagementURL,
+		"management_key_env":         c.ManagementKeyEnv,
+		"management_key_configured":  strings.TrimSpace(c.ManagementKey) != "",
+		"management_timeout_seconds": c.ManagementTimeoutSeconds,
+		"management_auth_failure_cooldown_seconds": c.ManagementAuthFailureCooldownSeconds,
 	}
 }
 
@@ -275,5 +311,11 @@ func configFields() []pluginapi.ConfigField {
 		{Name: "scheduler_delegate", Type: pluginapi.ConfigFieldTypeEnum, EnumValues: []string{pluginapi.SchedulerBuiltinRoundRobin, pluginapi.SchedulerBuiltinFillFirst}, Description: "Builtin scheduler after filtering bans."},
 		{Name: "state_file", Type: pluginapi.ConfigFieldTypeString, Description: "Optional path to persist ban state."},
 		{Name: "audit_max_events", Type: pluginapi.ConfigFieldTypeInteger, Description: "Max in-memory audit events."},
+		{Name: "disable_via", Type: pluginapi.ConfigFieldTypeEnum, EnumValues: []string{disableViaHostAuth, disableViaManagementAPI}, Description: "How to disable/reenable credentials: host_auth (plugin host save) or management_api (CPA Management PATCH)."},
+		{Name: "management_url", Type: pluginapi.ConfigFieldTypeString, Description: "CPA base URL when disable_via=management_api (default http://127.0.0.1:8317)."},
+		{Name: "management_key", Type: pluginapi.ConfigFieldTypeString, Description: "CPA Management Key for disable_via=management_api (prefer env)."},
+		{Name: "management_key_env", Type: pluginapi.ConfigFieldTypeString, Description: "Env var name for Management Key (default CPA_MANAGEMENT_KEY)."},
+		{Name: "management_timeout_seconds", Type: pluginapi.ConfigFieldTypeInteger, Description: "Management API timeout seconds."},
+		{Name: "management_auth_failure_cooldown_seconds", Type: pluginapi.ConfigFieldTypeInteger, Description: "Cooldown after Management API 401/403 to avoid IP ban."},
 	}
 }

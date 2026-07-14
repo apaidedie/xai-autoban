@@ -2,7 +2,7 @@
 
 CLIProxyAPI 原生插件：自动隔离异常 xAI 凭据，支持可配置 ban 时长/动作、定时+手动巡检、disable/delete（best-effort）、管理面板。
 
-版本：**0.5.3**
+版本：**0.5.4**
 
 ## 方式 A：插件商店安装（推荐）
 
@@ -130,7 +130,26 @@ plugins:
       scheduler_delegate: round-robin
       state_file: ""
       audit_max_events: 200
+      # disable/reenable 路径：host_auth（默认，host.auth.save）或 management_api（CPA 管理接口）
+      disable_via: host_auth
+      management_url: http://127.0.0.1:8317
+      management_key_env: CPA_MANAGEMENT_KEY
+      # management_key: ""   # 不推荐明文；可用环境变量
+      management_timeout_seconds: 10
+      management_auth_failure_cooldown_seconds: 600
 ```
+
+### disable_via=management_api
+
+启用后，`disable` / `reenable` 会调用 CPA Management API：
+
+```http
+PATCH /v0/management/auth-files/status
+{"name":"<auth file>","disabled":true|false}
+```
+
+需配置 `management_key` 或 `management_key_env`（默认读 `CPA_MANAGEMENT_KEY`）。  
+管理接口返回 401/403 时会进入冷却，避免连续错误触发 CPA 管理口 IP 封禁。
 
 ## 管理 API
 

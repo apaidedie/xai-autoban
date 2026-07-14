@@ -36,6 +36,7 @@ type actionEngine struct {
 	bans      *banState
 	audit     *auditLog
 	host      HostClient
+	mgmt      *managementDisabler
 	onChanged func()
 }
 
@@ -46,6 +47,7 @@ func newActionEngine(cfg PluginConfig, bans *banState, audit *auditLog, host Hos
 		bans:      bans,
 		audit:     audit,
 		host:      host,
+		mgmt:      newManagementDisabler(cfg, host),
 		onChanged: onChanged,
 	}
 }
@@ -54,6 +56,9 @@ func (e *actionEngine) updateConfig(cfg PluginConfig) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.cfg = cfg
+	if e.mgmt != nil {
+		e.mgmt.updateConfig(cfg)
+	}
 }
 
 func (e *actionEngine) classifyFailure(status int, headers http.Header, now time.Time) (banEntry, bool) {
@@ -287,17 +292,22 @@ func (e *actionEngine) lookupEmail(authID string) string {
 }
 
 func (e *actionEngine) setDisabled(authID string, disabled bool, note string) error {
-	if e.host == nil {
+	e.mu.Lock()
+	cfg := e.cfg
+	host := e.host
+	mgmt := e.mgmt
+	e.mu.Unlock()
+	if host == nil {
 		return fmt.Errorf("host callbacks unavailable")
 	}
-	files, err := e.host.AuthList()
+	files, err := host.AuthList()
 	if err != nil {
 		return err
 	}
 	var target *pluginapi.HostAuthFileEntry
 	for i := range files {
 		f := files[i]
-		if f.ID == authID || f.AuthIndex == authID || f.Name == authID {
+		if f.ID == authID || f.AuthIndex == authID || f.Name == authID || authIDsEqual(authKey(f), authID) {
 			target = &f
 			break
 		}
@@ -312,7 +322,24 @@ func (e *actionEngine) setDisabled(authID string, disabled bool, note string) er
 	if index == "" {
 		index = target.Name
 	}
-	got, err := e.host.AuthGet(index)
+
+	// Optional: CPA Management API path (vrxiaojie-style real disable).
+	if strings.EqualFold(cfg.DisableVia, disableViaManagementAPI) && mgmt != nil {
+		name := target.Name
+		if name == "" {
+			name = target.ID
+		}
+		if name == "" {
+			name = authID
+		}
+		if err := mgmt.setAuthDisabled(name, index, disabled); err != nil {
+			return err
+		}
+		slog.Info("xai-autoban: updated credential via management api", "auth_id", authID, "disabled", disabled)
+		return nil
+	}
+
+	got, err := host.AuthGet(index)
 	if err != nil {
 		return err
 	}
@@ -348,10 +375,10 @@ func (e *actionEngine) setDisabled(authID string, disabled bool, note string) er
 	if !strings.HasSuffix(strings.ToLower(name), ".json") {
 		name = name + ".json"
 	}
-	if _, err := e.host.AuthSave(name, raw); err != nil {
+	if _, err := host.AuthSave(name, raw); err != nil {
 		return err
 	}
-	slog.Info("xai-autoban: updated credential disabled flag", "auth_id", authID, "disabled", disabled)
+	slog.Info("xai-autoban: updated credential disabled flag", "auth_id", authID, "disabled", disabled, "via", "host_auth")
 	return nil
 }
 

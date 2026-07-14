@@ -385,6 +385,12 @@ func currentStatusPaged(query url.Values) statusInfo {
 		Settings:    currentConfig().publicView(),
 		Audit:       audit.list(),
 	}
+	if engine != nil && engine.mgmt != nil {
+		if st.Probe == nil {
+			st.Probe = map[string]any{}
+		}
+		st.Probe["management"] = engine.mgmt.status()
+	}
 	return st
 }
 

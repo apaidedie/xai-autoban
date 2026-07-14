@@ -198,6 +198,46 @@ func TestImportSnapshot(t *testing.T) {
 	}
 }
 
+func TestDisableViaManagementAPI(t *testing.T) {
+	bans.clearAll()
+	var patched []string
+	stub := &stubHost{
+		files: []pluginapi.HostAuthFileEntry{
+			{ID: "m1", AuthIndex: "3", Name: "xai-m1.json", Provider: "xai"},
+		},
+		jsonBy: map[string]json.RawMessage{
+			"3": json.RawMessage(`{"access_token":"tok","disabled":false}`),
+		},
+		httpFn: func(req pluginapi.HTTPRequest) (pluginapi.HTTPResponse, error) {
+			if req.Method == http.MethodPatch && strings.Contains(req.URL, "/auth-files/status") {
+				patched = append(patched, string(req.Body))
+				return pluginapi.HTTPResponse{StatusCode: 200, Body: []byte(`{"ok":true}`)}, nil
+			}
+			if req.Method == http.MethodGet && strings.Contains(req.URL, "/auth-files") {
+				return pluginapi.HTTPResponse{StatusCode: 200, Body: []byte(`{"files":[{"id":"m1","auth_index":"3","name":"xai-m1.json","disabled":true}]}`)}, nil
+			}
+			return pluginapi.HTTPResponse{StatusCode: 200, Body: []byte(`{}`)}, nil
+		},
+	}
+	cfg := defaultConfig()
+	cfg.DisableVia = disableViaManagementAPI
+	cfg.ManagementURL = "http://127.0.0.1:8317"
+	cfg.ManagementKey = "test-mgmt-key"
+	eng := newActionEngine(cfg, &bans, newAuditLog(20), stub, nil)
+	if err := eng.setDisabled("m1", true, "xai-autoban:test"); err != nil {
+		t.Fatal(err)
+	}
+	if len(patched) != 1 {
+		t.Fatalf("expected management patch, got %d saves=%d", len(patched), len(stub.saves))
+	}
+	if len(stub.saves) != 0 {
+		t.Fatal("host_auth save should not be used when disable_via=management_api")
+	}
+	if !strings.Contains(patched[0], `"disabled":true`) {
+		t.Fatalf("patch body=%s", patched[0])
+	}
+}
+
 func TestRecheckSelectedIncludesDisabled(t *testing.T) {
 	bans.clearAll()
 	stub := &stubHost{
