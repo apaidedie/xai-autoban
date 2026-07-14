@@ -285,7 +285,7 @@ func (p *probeService) probeOne(cfg PluginConfig, host HostClient, f pluginapi.H
 	switch cfg.ProbeMode {
 	case "responses_mini":
 		body, _ := json.Marshal(map[string]any{
-			"model":  "grok-3",
+			"model":  "grok-4.5",
 			"stream": false,
 			"input":  "ping",
 		})

@@ -341,7 +341,7 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
       <div class="fg"><label>并发</label><input id="f_probe_concurrency" type="number" min="1" step="1"></div>
       <div class="fg"><label>QPS</label><input id="f_probe_qps" type="number" min="0.1" step="0.1"></div>
       <div class="fg"><label>探测模式</label>
-        <select id="f_probe_mode"><option value="models">models（轻量）</option><option value="responses_mini">responses_mini（更准）</option></select>
+        <select id="f_probe_mode"><option value="models">models（轻量）</option><option value="responses_mini">responses_mini · grok-4.5（更准）</option></select>
       </div>
     </div>
     <div class="sec">
