@@ -322,23 +322,51 @@ func (e *actionEngine) setDisabled(authID string, disabled bool, note string) er
 	if index == "" {
 		index = target.Name
 	}
-
-	// Optional: CPA Management API path (vrxiaojie-style real disable).
-	if strings.EqualFold(cfg.DisableVia, disableViaManagementAPI) && mgmt != nil {
-		name := target.Name
-		if name == "" {
-			name = target.ID
-		}
-		if name == "" {
-			name = authID
-		}
-		if err := mgmt.setAuthDisabled(name, index, disabled); err != nil {
-			return err
-		}
-		slog.Info("xai-autoban: updated credential via management api", "auth_id", authID, "disabled", disabled)
-		return nil
+	fileName := strings.TrimSpace(target.Name)
+	if fileName == "" {
+		fileName = strings.TrimSpace(target.ID)
+	}
+	if fileName == "" {
+		fileName = authID
 	}
 
+	// CPA UI "启用/停用" is controlled by Auth.Disabled (Management API),
+	// not merely a "disabled" field inside credential JSON.
+	// Prefer Management API whenever a key is available; host_auth alone often only updates note.
+	forceMgmt := strings.EqualFold(cfg.DisableVia, disableViaManagementAPI)
+	hasMgmtKey := mgmt != nil && mgmt.resolveKey() != ""
+	var mgmtErr error
+	if mgmt != nil && (forceMgmt || hasMgmtKey) {
+		if err := mgmt.setAuthDisabled(fileName, index, disabled); err != nil {
+			mgmtErr = err
+			if forceMgmt {
+				return fmt.Errorf("management_api disable failed: %w", err)
+			}
+			slog.Warn("xai-autoban: management_api disable failed, falling back to host_auth",
+				"auth_id", authID, "disabled", disabled, "error", err)
+		} else {
+			slog.Info("xai-autoban: updated credential via management api", "auth_id", authID, "name", fileName, "disabled", disabled)
+			// Still patch JSON note for operator visibility when possible.
+			_ = e.patchHostAuthJSON(host, index, fileName, disabled, note)
+			return nil
+		}
+	}
+
+	if err := e.patchHostAuthJSON(host, index, fileName, disabled, note); err != nil {
+		if mgmtErr != nil {
+			return fmt.Errorf("management_api: %v; host_auth: %w", mgmtErr, err)
+		}
+		return err
+	}
+	if !forceMgmt && !hasMgmtKey {
+		slog.Warn("xai-autoban: wrote disabled into auth JSON only; CPA UI toggle may stay enabled without management_key. Set disable_via=management_api and management_key/CPA_MANAGEMENT_KEY for real disable.",
+			"auth_id", authID, "disabled", disabled)
+	}
+	slog.Info("xai-autoban: updated credential disabled flag", "auth_id", authID, "disabled", disabled, "via", "host_auth")
+	return nil
+}
+
+func (e *actionEngine) patchHostAuthJSON(host HostClient, index, fileName string, disabled bool, note string) error {
 	got, err := host.AuthGet(index)
 	if err != nil {
 		return err
@@ -350,6 +378,13 @@ func (e *actionEngine) setDisabled(authID string, disabled bool, note string) er
 		return fmt.Errorf("decode auth json: %w", err)
 	}
 	obj["disabled"] = disabled
+	// Some CPA builds also honor metadata.disabled when synthesizing auth.
+	if meta, ok := obj["metadata"].(map[string]any); ok {
+		meta["disabled"] = disabled
+		obj["metadata"] = meta
+	} else if disabled {
+		obj["metadata"] = map[string]any{"disabled": true}
+	}
 	if note != "" {
 		obj["note"] = note
 		obj["status_message"] = note
@@ -367,10 +402,10 @@ func (e *actionEngine) setDisabled(authID string, disabled bool, note string) er
 	}
 	name := got.Name
 	if name == "" {
-		name = target.Name
+		name = fileName
 	}
 	if name == "" {
-		return fmt.Errorf("missing auth file name for %s", authID)
+		return fmt.Errorf("missing auth file name")
 	}
 	if !strings.HasSuffix(strings.ToLower(name), ".json") {
 		name = name + ".json"
@@ -378,7 +413,6 @@ func (e *actionEngine) setDisabled(authID string, disabled bool, note string) er
 	if _, err := host.AuthSave(name, raw); err != nil {
 		return err
 	}
-	slog.Info("xai-autoban: updated credential disabled flag", "auth_id", authID, "disabled", disabled, "via", "host_auth")
 	return nil
 }
 

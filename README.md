@@ -2,7 +2,7 @@
 
 CLIProxyAPI 原生插件：自动隔离异常 xAI 凭据，支持可配置 ban 时长/动作、定时+手动巡检、disable/delete（best-effort）、管理面板。
 
-版本：**0.5.4**
+版本：**0.5.5**
 
 ## 方式 A：插件商店安装（推荐）
 
@@ -139,9 +139,19 @@ plugins:
       management_auth_failure_cooldown_seconds: 600
 ```
 
+### 禁用为什么「备注变了但开关还是启用」？
+
+CPA 凭证管理里的 **启用/停用开关** 读的是账号状态字段（Management API / Auth.Disabled），  
+不是凭证 JSON 里的 `note`。
+
+- 仅 `host.auth.save` 写 JSON：常会出现 **备注=xai-autoban:...，开关仍显示启用**
+- 真正关掉开关需要：`PATCH /v0/management/auth-files/status`
+
+**0.5.5 起：** 只要配置了 `management_key`（或环境变量密钥），`禁用/启用` 会 **优先走 Management API**，并顺带写 JSON 备注。
+
 ### disable_via=management_api
 
-启用后，`disable` / `reenable` 会调用 CPA Management API：
+强制只走 CPA Management API（失败不回退）：
 
 ```http
 PATCH /v0/management/auth-files/status
@@ -150,6 +160,22 @@ PATCH /v0/management/auth-files/status
 
 需配置 `management_key` 或 `management_key_env`（默认读 `CPA_MANAGEMENT_KEY`）。  
 管理接口返回 401/403 时会进入冷却，避免连续错误触发 CPA 管理口 IP 封禁。
+
+**推荐最小配置（让运维台「禁用」真正生效）：**
+
+```yaml
+plugins:
+  configs:
+    xai-autoban:
+      # 可选：强制 management_api；不配也行——有密钥时会自动优先用管理接口
+      disable_via: management_api
+      management_url: http://127.0.0.1:8317
+      management_key_env: CPA_MANAGEMENT_KEY
+```
+
+```bash
+export CPA_MANAGEMENT_KEY='你的 CPA remote-management 密钥'
+```
 
 ## 管理 API
 

@@ -122,6 +122,12 @@ func dispatchManagement(req pluginapi.ManagementRequest) pluginapi.ManagementRes
 			entry.Reason = "manual_reenable"
 			entry.ResetAt = time.Time{}
 		}
+		if action == actionDisable {
+			entry.Reason = "manual_disable"
+		}
+		if action == actionBan {
+			entry.Reason = "manual_ban"
+		}
 		if err := engine.applyAction(body.AuthID, action, "manual", entry, body.Force); err != nil {
 			return jsonResponse(http.StatusBadRequest, map[string]any{"error": err.Error()})
 		}
