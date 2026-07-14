@@ -11,7 +11,7 @@ import (
 
 const (
 	pluginName    = "xai-autoban"
-	pluginVersion = "0.5.0"
+	pluginVersion = "0.5.2"
 	providerXAI   = "xai"
 )
 

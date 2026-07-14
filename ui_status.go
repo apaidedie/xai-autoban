@@ -48,6 +48,8 @@ h1{margin:8px 0 0;font-size:26px;font-weight:800;letter-spacing:-.03em}
 .more-menu button,.more-menu label{height:34px;justify-content:flex-start;text-align:left;background:transparent;border:0;width:100%;border-radius:8px;padding:0 10px}
 .more-menu button:hover{background:rgba(51,65,85,.8)}
 .auth-row{border-top:0!important;padding-top:4px!important}
+.auth-row.auth-ok{padding:8px 14px!important;opacity:.85}
+.auth-row.auth-ok input{display:none}
 .qcard.s401{border-color:rgba(59,130,246,.22)}.qcard.s402{border-color:rgba(251,191,36,.22)}.qcard.s403{border-color:rgba(251,113,133,.22)}.qcard.s429{border-color:rgba(167,139,250,.22)}
 .qcard.active,.qcard.on{border-color:rgba(34,211,238,.5);box-shadow:0 0 0 1px rgba(34,211,238,.18) inset}
 .hist-wrap{max-height:0;overflow:hidden;opacity:0;transition:max-height .18s ease,opacity .15s ease,padding .15s ease}
@@ -68,14 +70,8 @@ h1{margin:8px 0 0;font-size:26px;font-weight:800;letter-spacing:-.03em}
 .schip.disabled.active{border-color:rgba(148,163,184,.45)}
 .schip:focus-visible{outline:2px solid rgba(34,211,238,.65);outline-offset:2px}
 @media (prefers-reduced-motion:reduce){.schip{transition:none}}
-.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;padding:0 14px 14px}
-.metric{position:relative;background:rgba(7,12,22,.45);border:1px solid var(--line);border-radius:14px;padding:14px}
-.metric:before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;border-radius:14px 0 0 14px;background:linear-gradient(180deg,var(--cyan),var(--blue))}
-.metric.m402:before{background:linear-gradient(180deg,var(--amber),#f59e0b)}
-.metric.m403:before{background:linear-gradient(180deg,var(--red),#e11d48)}
-.metric.m429:before{background:linear-gradient(180deg,var(--violet),#7c3aed)}
-.metric .l{color:var(--muted);font-size:11px;font-weight:800}
-.metric .n{margin-top:8px;font-size:30px;font-weight:850;font-variant-numeric:tabular-nums}
+[hidden]{display:none!important}
+.metrics{display:none!important}
 .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 14px;border-top:1px solid rgba(148,163,184,.08)}
 input[type=search],input[type=password],input[type=text],input[type=number],select{height:38px;min-width:160px;flex:1;border:1px solid rgba(148,163,184,.28);border-radius:11px;background:rgba(7,12,22,.85);color:var(--text);padding:0 12px;font:inherit;outline:none}
 input:focus,select:focus{border-color:rgba(96,165,250,.7);box-shadow:0 0 0 3px rgba(59,130,246,.16)}
@@ -151,17 +147,37 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
 .hist{display:flex;flex-wrap:wrap;gap:8px;padding:12px 14px}
 .hist button{height:auto;min-width:150px;padding:10px;text-align:left}
 .hist b{display:block}.hist small{display:block;color:#93a4c3;margin-top:2px}
-.qcards{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:12px}
+.qcards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:0 0 12px}
+@media(max-width:1000px){.qcards{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:640px){.qcards{grid-template-columns:1fr 1fr}}
 .qcard{
-  text-align:left;height:auto;min-height:88px;padding:14px 14px 12px;border-radius:16px;
-  border:1px solid var(--line);background:linear-gradient(180deg,rgba(18,28,46,.96),rgba(12,20,34,.98));
-  box-shadow:0 10px 28px rgba(0,0,0,.28);transition:border-color .12s ease,transform .12s ease,background .12s ease
+  text-align:left;height:auto;min-height:84px;padding:14px;border-radius:14px;
+  border:1px solid var(--line);background:rgba(12,20,34,.92);
+  box-shadow:none;transition:border-color .12s ease,background .12s ease
+}
+.fchip.ghost{opacity:.75}
+.list-head{display:flex;align-items:center;padding:8px 14px;border-bottom:1px solid rgba(148,163,184,.08)}
+.card-list{display:flex;flex-direction:column;gap:8px;padding:10px 12px 12px;max-height:58vh;overflow:auto}
+.rcard{
+  display:grid;grid-template-columns:28px minmax(180px,1.4fr) 100px 90px minmax(100px,.9fr) 90px 120px auto;
+  gap:10px;align-items:center;padding:12px 14px;border-radius:14px;border:1px solid var(--line);
+  background:rgba(8,14,26,.72)
+}
+.rcard:hover{border-color:rgba(96,165,250,.28);background:rgba(15,23,42,.88)}
+.rcard .acc .t{font-weight:750;color:#fff;font-size:13px;line-height:1.3}
+.rcard .acc .id{margin-top:4px;font-family:var(--mono);font-size:11px;color:#93a4c3;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rcard .muted{color:var(--muted);font-size:12px}
+@media(max-width:1100px){
+  .rcard{grid-template-columns:28px 1fr auto;grid-template-areas:"ck acc ops" "ck meta ops";row-gap:8px}
+  .rcard .ck{grid-area:ck}.rcard .acc{grid-area:acc}.rcard .ops{grid-area:ops}
+  .rcard .meta{grid-area:meta;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .rcard .hide-sm{display:none}
 }
 .qcard:hover{border-color:rgba(34,211,238,.35);background:rgba(15,23,42,.95)}
 .qcard:focus-visible{outline:2px solid rgba(34,211,238,.65);outline-offset:2px}
 .qcard .ql{color:var(--muted);font-size:11px;font-weight:800;letter-spacing:.06em}
-.qcard .qn{margin-top:8px;font-size:26px;font-weight:850;font-variant-numeric:tabular-nums;line-height:1}
-.qcard .qs{margin-top:8px;color:var(--muted);font-size:11px;font-weight:650;line-height:1.35}
+.qcard .qn{margin-top:6px;font-size:22px;font-weight:850;font-variant-numeric:tabular-nums;line-height:1}
+.qcard .qs{margin-top:6px;color:var(--muted);font-size:11px;font-weight:650;line-height:1.3}
 .qcard.ok .qn{color:var(--green)}.qcard.warn .qn{color:var(--amber)}.qcard.bad .qn{color:var(--red)}.qcard.info .qn{color:var(--cyan)}
 @media(max-width:900px){.qcards{grid-template-columns:1fr 1fr}}
 @media(max-width:700px){h1{font-size:22px}.qcards{grid-template-columns:1fr 1fr}}
@@ -188,7 +204,7 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
   <section class="panel">
     <div class="phd">
       <h2>当前巡检配置</h2>
-      <button class="bg" type="button" id="openConfigBtn2" onclick="document.getElementById('openConfigBtn').click()">编辑配置</button>
+      <div class="hint">点右上角「编辑配置」修改</div>
     </div>
     <div class="cfg-grid" id="cfgPills">
       <div class="cfg-card"><div class="l">定时巡检</div><div class="v" id="sumProbeEnabled">-</div></div>
@@ -210,18 +226,6 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
     <button type="button" class="qcard warn" data-jump="banned" data-filter="banned">
       <div class="ql">当前隔离</div><div class="qn" id="ov_banned">-</div><div class="qs" id="ov_banned_sub">含 401/402/403/429</div>
     </button>
-    <button type="button" class="qcard s401" data-jump="401" data-filter="401">
-      <div class="ql">401</div><div class="qn" id="c_401">-</div><div class="qs">未授权</div>
-    </button>
-    <button type="button" class="qcard s402" data-jump="402" data-filter="402">
-      <div class="ql">402</div><div class="qn" id="c_402">-</div><div class="qs">额度不足</div>
-    </button>
-    <button type="button" class="qcard s403" data-jump="403" data-filter="403">
-      <div class="ql">403</div><div class="qn" id="c_403">-</div><div class="qs">禁止访问</div>
-    </button>
-    <button type="button" class="qcard s429" data-jump="429" data-filter="429">
-      <div class="ql">429</div><div class="qn" id="c_429">-</div><div class="qs">限流</div>
-    </button>
     <button type="button" class="qcard" data-jump="disabled" data-filter="disabled">
       <div class="ql">已禁用</div><div class="qn" id="c_disabled">-</div><div class="qs">凭证停用</div>
     </button>
@@ -233,33 +237,29 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
     <button type="button" data-filter="all"><b id="c_all">-</b></button>
     <button type="button" data-filter="healthy"><b id="c_healthy">-</b></button>
     <button type="button" data-filter="banned"><b id="c_banned">-</b></button>
+    <b id="c_401">-</b><b id="c_402">-</b><b id="c_403">-</b><b id="c_429">-</b>
   </div>
-  <div class="metrics" hidden>
-    <div class="metric"><div class="l">当前隔离</div><div class="n" id="total">-</div></div>
-    <div class="metric m402"><div class="l">402</div><div class="n" id="count402">-</div></div>
-    <div class="metric m403"><div class="l">403</div><div class="n" id="count403">-</div></div>
-    <div class="metric m429"><div class="l">429</div><div class="n" id="count429">-</div></div>
-  </div>
+  <span id="total" hidden>0</span>
+  <span id="count402" hidden>0</span>
+  <span id="count403" hidden>0</span>
+  <span id="count429" hidden>0</span>
 
   <section class="panel">
     <div class="phd">
       <div>
         <h2>巡检结果</h2>
-        <div class="hint">汇总凭证状态，支持筛选后批量操作或逐条处理</div>
+        <div class="hint">点上方指标卡筛选；401–429 用下方状态标签细化</div>
       </div>
       <div class="hint" id="resultCount">0 条</div>
     </div>
 
     <div class="toolbar">
-      <div class="filters" id="listFilters" role="toolbar" aria-label="状态筛选">
-        <button type="button" class="fchip on" data-filter="all">全部</button>
-        <button type="button" class="fchip" data-filter="healthy">健康</button>
-        <button type="button" class="fchip" data-filter="banned">隔离</button>
-        <button type="button" class="fchip" data-filter="401">401</button>
-        <button type="button" class="fchip" data-filter="402">402</button>
-        <button type="button" class="fchip" data-filter="403">403</button>
-        <button type="button" class="fchip" data-filter="429">429</button>
-        <button type="button" class="fchip" data-filter="disabled">已禁用</button>
+      <div class="filters" id="listFilters" role="toolbar" aria-label="状态细化">
+        <button type="button" class="fchip" data-filter="401">401 <span id="f_401">0</span></button>
+        <button type="button" class="fchip" data-filter="402">402 <span id="f_402">0</span></button>
+        <button type="button" class="fchip" data-filter="403">403 <span id="f_403">0</span></button>
+        <button type="button" class="fchip" data-filter="429">429 <span id="f_429">0</span></button>
+        <button type="button" class="fchip ghost" id="clearFilterBtn" data-filter="all">清除筛选</button>
       </div>
       <div class="tools">
         <input id="search" type="search" placeholder="搜索账号 / Auth ID / 原因" autocomplete="off">
@@ -276,7 +276,6 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
             <button type="button" id="unbanAll" onclick="unbanAll()" disabled>全部解禁</button>
             <button type="button" id="btnBackup" onclick="exportBackup()" disabled>导出备份</button>
             <button type="button" id="btnImport" onclick="importBackup()" disabled>导入备份</button>
-            <button type="button" id="clearFilterBtn">清除筛选</button>
             <label class="chk"><input id="autoRefresh" type="checkbox" checked> 30 秒刷新</label>
           </div>
         </details>
@@ -293,16 +292,11 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
     <div class="row"><div id="message" class="msg">系统待命</div></div>
     <div class="progress" id="progress"><i id="progressBar"></i></div>
 
-    <div class="table-wrap">
-      <table>
-        <thead><tr>
-          <th style="width:40px"><input id="selectPage" type="checkbox"></th>
-          <th>账号</th><th>状态</th><th>动作</th><th>原因</th><th>剩余</th><th>最近巡检</th><th>操作</th>
-        </tr></thead>
-        <tbody id="rows"></tbody>
-      </table>
-      <div id="empty" class="empty" hidden>没有匹配的凭证</div>
+    <div class="list-head">
+      <label class="chk"><input id="selectPage" type="checkbox"> 本页全选</label>
     </div>
+    <div class="card-list" id="rows"></div>
+    <div id="empty" class="empty" hidden>没有匹配的凭证</div>
     <div class="pager" id="pager">
       <div class="pinfo" id="pageInfo">第 1 / 1 页</div>
       <div class="pbtns">
@@ -435,25 +429,36 @@ function setActionEnabled(ok){
 function setAuthUI(){
   state.mgmtKey=readManagementKey();
   const ok=!!state.mgmtKey;
-  const b=$('authBanner'); b.className='banner'+(ok?'':' warn');
-  b.textContent=ok?'已授权：可执行解禁 / 隔离 / 禁用 / 启用 / 巡检 / 配置。':'只读模式：请先保存管理密钥再执行写操作。';
+  const b=$('authBanner');
+  if(b){
+    if(ok){
+      b.hidden=true;
+    }else{
+      b.hidden=false;
+      b.className='banner warn';
+      b.textContent='只读模式：粘贴并保存管理密钥后，才能解禁 / 隔离 / 禁用 / 巡检 / 改配置。';
+    }
+  }
   const keyRow=$('keyRow');
   const input=$('mgmtKeyInput');
   const saveBtn=$('saveKeyBtn');
   const clearBtn=$('clearKeyBtn');
   const toggle=$('toggleKeyBtn');
   if(ok){
-    if(input){ input.hidden=true; input.placeholder='已保存管理密钥'; }
+    // authorized: collapse key form into compact controls
+    if(input) input.hidden=true;
     if(saveBtn) saveBtn.hidden=true;
     if(clearBtn) clearBtn.hidden=false;
     if(toggle){ toggle.hidden=false; toggle.textContent='更换密钥'; }
     if($('authHint')) $('authHint').textContent='已授权 · 密钥仅保存在本机浏览器';
+    if(keyRow) keyRow.classList.add('auth-ok');
   }else{
     if(input){ input.hidden=false; input.placeholder='粘贴 CPA 管理密钥'; }
     if(saveBtn) saveBtn.hidden=false;
     if(clearBtn) clearBtn.hidden=true;
     if(toggle) toggle.hidden=true;
     if($('authHint')) $('authHint').textContent='写操作需要管理密钥';
+    if(keyRow) keyRow.classList.remove('auth-ok');
   }
   setActionEnabled(ok); return ok;
 }
@@ -505,6 +510,7 @@ function paintChips(){
   const set=(id,v)=>{const el=$(id); if(el) el.textContent=String(v??0)};
   set('c_all',c.all); set('c_healthy',c.healthy); set('c_banned',c.banned);
   set('c_401',c['401']); set('c_402',c['402']); set('c_403',c['403']); set('c_429',c['429']); set('c_disabled',c.disabled);
+  set('f_401',c['401']); set('f_402',c['402']); set('f_403',c['403']); set('f_429',c['429']);
   set('ov_all',c.all); set('ov_healthy',c.healthy); set('ov_banned',c.banned);
   const sub=$('ov_banned_sub');
   if(sub){
@@ -717,17 +723,20 @@ function render(){
   $('rows').innerHTML=list.map(c=>{
     const name=c.name||c.label||'-';
     const email=c.email||'';
+    const title=email||name;
     const remain=c.banned?formatRemaining(c.remaining_seconds):'-';
     const actLabel=labelAction(c.action||(c.banned?'ban':'-'));
-    return '<tr>'+
-      '<td><input type="checkbox" data-id="'+esc(c.auth_id)+'" '+(state.selected.has(c.auth_id)?'checked':'')+'></td>'+
-      '<td><div style="font-weight:700;color:#fff">'+esc(email||name)+'</div><code title="'+esc(c.auth_id)+'" style="margin-top:4px">'+esc(c.auth_id)+'</code></td>'+
-      '<td>'+statusBadge(c)+'</td>'+
-      '<td><span class="pill">'+esc(actLabel)+'</span></td>'+
-      '<td>'+esc(reasonLabel(c.reason)||'-')+'</td>'+
-      '<td class="remain">'+esc(remain)+'</td>'+
-      '<td>'+probeCell(c)+'</td>'+
-      '<td>'+rowActions(c)+'</td></tr>';
+    const reason=reasonLabel(c.reason)||'-';
+    return '<div class="rcard">'+
+      '<div class="ck"><input type="checkbox" data-id="'+esc(c.auth_id)+'" '+(state.selected.has(c.auth_id)?'checked':'')+'></div>'+
+      '<div class="acc"><div class="t" title="'+esc(title)+'">'+esc(title)+'</div><div class="id" title="'+esc(c.auth_id)+'">'+esc(c.auth_id)+'</div></div>'+
+      '<div class="meta">'+statusBadge(c)+'</div>'+
+      '<div class="meta hide-sm"><span class="pill">'+esc(actLabel)+'</span></div>'+
+      '<div class="meta muted hide-sm">'+esc(reason)+'</div>'+
+      '<div class="meta remain hide-sm">'+esc(remain)+'</div>'+
+      '<div class="meta hide-sm">'+probeCell(c)+'</div>'+
+      '<div class="ops">'+rowActions(c)+'</div>'+
+    '</div>';
   }).join('');
   const empty=$('empty');
   empty.hidden=list.length>0;
@@ -896,6 +905,7 @@ if($('toggleKeyBtn')) $('toggleKeyBtn').onclick=()=>{
   if(!input.hidden) input.focus();
 };
 if($('clearFilterBtn')) $('clearFilterBtn').onclick=()=>{state.filter='all'; state.query=''; state.page.page=1; if($('search')) $('search').value=''; paintChips(); loadData(true); setMessage('已清除筛选');};
+// clearFilterBtn also has data-filter=all; ensure listFilters handler works
 $('search').oninput=e=>{
   state.query=e.target.value.trim();
   state.page.page=1;

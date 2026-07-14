@@ -151,6 +151,8 @@ func TestStatusPageUsesManagementKeyFlow(t *testing.T) {
 		"jumpOverview",
 		"recheck-selected",
 		"复检所选",
+		"card-list",
+		"rcard",
 	} {
 		if !strings.Contains(page, required) {
 			t.Fatalf("page missing %q", required)
