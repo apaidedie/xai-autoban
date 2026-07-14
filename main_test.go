@@ -201,9 +201,11 @@ func TestImportSnapshot(t *testing.T) {
 func TestDisableViaManagementAPI(t *testing.T) {
 	bans.clearAll()
 	var patched []string
+	var fieldPatches []string
 	stub := &stubHost{
 		files: []pluginapi.HostAuthFileEntry{
-			{ID: "m1", AuthIndex: "3", Name: "xai-m1.json", Provider: "xai"},
+			// After management disable, host list should report Disabled=true (no AuthSave re-enable).
+			{ID: "m1", AuthIndex: "3", Name: "xai-m1.json", Provider: "xai", Disabled: true},
 		},
 		jsonBy: map[string]json.RawMessage{
 			"3": json.RawMessage(`{"access_token":"tok","disabled":false}`),
@@ -211,6 +213,10 @@ func TestDisableViaManagementAPI(t *testing.T) {
 		httpFn: func(req pluginapi.HTTPRequest) (pluginapi.HTTPResponse, error) {
 			if req.Method == http.MethodPatch && strings.Contains(req.URL, "/auth-files/status") {
 				patched = append(patched, string(req.Body))
+				return pluginapi.HTTPResponse{StatusCode: 200, Body: []byte(`{"ok":true}`)}, nil
+			}
+			if req.Method == http.MethodPatch && strings.Contains(req.URL, "/auth-files/fields") {
+				fieldPatches = append(fieldPatches, string(req.Body))
 				return pluginapi.HTTPResponse{StatusCode: 200, Body: []byte(`{"ok":true}`)}, nil
 			}
 			if req.Method == http.MethodGet && strings.Contains(req.URL, "/auth-files") {
@@ -235,6 +241,13 @@ func TestDisableViaManagementAPI(t *testing.T) {
 	if !strings.Contains(patched[0], `"disabled":true`) {
 		t.Fatalf("patch body=%s", patched[0])
 	}
+	// Must NOT AuthSave after management success (would re-enable CPA toggle).
+	if len(stub.saves) != 0 {
+		t.Fatalf("host.auth.save after management disable re-enables CPA toggle; saves=%d", len(stub.saves))
+	}
+	if len(fieldPatches) < 1 || !strings.Contains(fieldPatches[0], "xai-autoban:test") {
+		t.Fatalf("expected note via fields patch, got %#v", fieldPatches)
+	}
 }
 
 func TestDisableUsesRequestBearerKey(t *testing.T) {
@@ -242,7 +255,7 @@ func TestDisableUsesRequestBearerKey(t *testing.T) {
 	var authHeader string
 	stub := &stubHost{
 		files: []pluginapi.HostAuthFileEntry{
-			{ID: "m2", AuthIndex: "4", Name: "xai-m2.json", Provider: "xai"},
+			{ID: "m2", AuthIndex: "4", Name: "xai-m2.json", Provider: "xai", Disabled: true},
 		},
 		jsonBy: map[string]json.RawMessage{
 			"4": json.RawMessage(`{"access_token":"tok"}`),
@@ -250,6 +263,9 @@ func TestDisableUsesRequestBearerKey(t *testing.T) {
 		httpFn: func(req pluginapi.HTTPRequest) (pluginapi.HTTPResponse, error) {
 			if req.Method == http.MethodPatch && strings.Contains(req.URL, "/auth-files/status") {
 				authHeader = req.Headers.Get("Authorization")
+				return pluginapi.HTTPResponse{StatusCode: 200, Body: []byte(`{"ok":true}`)}, nil
+			}
+			if req.Method == http.MethodPatch && strings.Contains(req.URL, "/auth-files/fields") {
 				return pluginapi.HTTPResponse{StatusCode: 200, Body: []byte(`{"ok":true}`)}, nil
 			}
 			return pluginapi.HTTPResponse{StatusCode: 200, Body: []byte(`{"files":[]}`)}, nil
@@ -265,6 +281,46 @@ func TestDisableUsesRequestBearerKey(t *testing.T) {
 	}
 	if authHeader != "Bearer ops-console-key" {
 		t.Fatalf("expected request bearer, got %q", authHeader)
+	}
+	if len(stub.saves) != 0 {
+		t.Fatalf("must not AuthSave after management disable; saves=%d", len(stub.saves))
+	}
+}
+
+func TestManagementDisableDoesNotAuthSave(t *testing.T) {
+	// Regression: post-success AuthSave rewrote Auth as StatusActive → CPA toggle 启用.
+	bans.clearAll()
+	var statusCalls int
+	stub := &stubHost{
+		files: []pluginapi.HostAuthFileEntry{
+			{ID: "rx", AuthIndex: "9", Name: "xai-rx.json", Provider: "xai", Disabled: true},
+		},
+		jsonBy: map[string]json.RawMessage{
+			"9": json.RawMessage(`{"access_token":"t"}`),
+		},
+		httpFn: func(req pluginapi.HTTPRequest) (pluginapi.HTTPResponse, error) {
+			if req.Method == http.MethodPatch && strings.Contains(req.URL, "/auth-files/status") {
+				statusCalls++
+				return pluginapi.HTTPResponse{StatusCode: 200, Body: []byte(`{"status":"ok","disabled":true}`)}, nil
+			}
+			if req.Method == http.MethodPatch && strings.Contains(req.URL, "/auth-files/fields") {
+				return pluginapi.HTTPResponse{StatusCode: 200, Body: []byte(`{"status":"ok"}`)}, nil
+			}
+			return pluginapi.HTTPResponse{StatusCode: 200, Body: []byte(`{}`)}, nil
+		},
+	}
+	cfg := defaultConfig()
+	cfg.ManagementKey = "k"
+	eng := newActionEngine(cfg, &bans, newAuditLog(10), stub, nil)
+	eng.mgmt.httpDo = hostHTTPDoer(stub)
+	if err := eng.setDisabled("rx", true, "xai-autoban:manual_disable"); err != nil {
+		t.Fatal(err)
+	}
+	if statusCalls < 1 {
+		t.Fatal("expected status patch")
+	}
+	if len(stub.saves) != 0 {
+		t.Fatalf("AuthSave after management success is forbidden (re-enables toggle); got %d saves", len(stub.saves))
 	}
 }
 
@@ -462,19 +518,46 @@ func TestDisableActionWritesAuth(t *testing.T) {
 			"0": json.RawMessage(`{"access_token":"tok","disabled":false}`),
 		},
 	}
+	// Without management key, host_auth JSON write is not enough to flip CPA toggle → error.
 	eng := newActionEngine(defaultConfig(), &bans, newAuditLog(20), stub, nil)
+	now := time.Now()
+	entry := banEntry{StatusCode: 403, Reason: "forbidden", BannedAt: now, ResetAt: now.Add(time.Hour), Action: actionDisable}
+	if err := eng.applyAction("auth-1", actionDisable, "manual", entry, true); err == nil {
+		t.Fatal("expected error when disabling without management key")
+	}
+	if len(stub.saves) != 1 {
+		t.Fatalf("expected note/json save attempt, got %d", len(stub.saves))
+	}
+}
+
+func TestDisableActionViaManagementNoAuthSave(t *testing.T) {
+	bans.clearAll()
+	stub := &stubHost{
+		files: []pluginapi.HostAuthFileEntry{{ID: "auth-1", AuthIndex: "0", Name: "xai-1.json", Provider: "xai", Disabled: true}},
+		jsonBy: map[string]json.RawMessage{
+			"0": json.RawMessage(`{"access_token":"tok","disabled":false}`),
+		},
+		httpFn: func(req pluginapi.HTTPRequest) (pluginapi.HTTPResponse, error) {
+			if req.Method == http.MethodPatch {
+				return pluginapi.HTTPResponse{StatusCode: 200, Body: []byte(`{"ok":true}`)}, nil
+			}
+			return pluginapi.HTTPResponse{StatusCode: 200, Body: []byte(`{}`)}, nil
+		},
+	}
+	cfg := defaultConfig()
+	cfg.ManagementKey = "k"
+	eng := newActionEngine(cfg, &bans, newAuditLog(20), stub, nil)
+	eng.mgmt.httpDo = hostHTTPDoer(stub)
 	now := time.Now()
 	entry := banEntry{StatusCode: 403, Reason: "forbidden", BannedAt: now, ResetAt: now.Add(time.Hour), Action: actionDisable}
 	if err := eng.applyAction("auth-1", actionDisable, "manual", entry, true); err != nil {
 		t.Fatal(err)
 	}
-	if len(stub.saves) != 1 {
-		t.Fatalf("expected save, got %d", len(stub.saves))
+	if len(stub.saves) != 0 {
+		t.Fatalf("management disable must not AuthSave; saves=%d", len(stub.saves))
 	}
-	var obj map[string]any
-	_ = json.Unmarshal(stub.saves[0].JSON, &obj)
-	if obj["disabled"] != true {
-		t.Fatalf("expected disabled true: %#v", obj)
+	if !bans.active("auth-1", now) {
+		t.Fatal("expected ban ledger entry after disable action")
 	}
 }
 

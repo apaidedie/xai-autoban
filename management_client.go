@@ -265,6 +265,92 @@ func (m *managementDisabler) patchAuthStatus(do managementHTTPDoer, cfg PluginCo
 	return nil
 }
 
+// patchAuthNoteWithKey writes note via PATCH /auth-files/fields (keeps Auth.Disabled).
+// Unlike host.auth.save, fields patch does not rebuild Auth as StatusActive.
+func (m *managementDisabler) patchAuthNoteWithKey(authID, authIndex, note, key string) error {
+	note = strings.TrimSpace(note)
+	if note == "" {
+		return nil
+	}
+	m.mu.Lock()
+	cfg := m.cfg
+	do := m.httpDo
+	m.mu.Unlock()
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return errManagementKeyMissing
+	}
+	if do == nil {
+		do = directManagementHTTP
+	}
+	candidates := []string{authID}
+	if !strings.HasSuffix(strings.ToLower(authID), ".json") {
+		candidates = append(candidates, authID+".json")
+	} else {
+		candidates = append(candidates, strings.TrimSuffix(authID, filepath.Ext(authID)))
+	}
+	var last error
+	for _, name := range candidates {
+		if err := m.patchAuthFields(do, cfg, key, name, map[string]any{"note": note}); err != nil {
+			last = err
+			continue
+		}
+		return nil
+	}
+	if strings.TrimSpace(authIndex) != "" {
+		if file, found, listErr := m.findAuthFile(do, cfg, key, authID, authIndex); listErr == nil && found {
+			name := strings.TrimSpace(file.Name)
+			if name == "" {
+				name = file.ID
+			}
+			if name != "" {
+				if err := m.patchAuthFields(do, cfg, key, name, map[string]any{"note": note}); err == nil {
+					return nil
+				} else {
+					last = err
+				}
+			}
+		}
+	}
+	if last == nil {
+		last = fmt.Errorf("note patch failed")
+	}
+	return last
+}
+
+func (m *managementDisabler) patchAuthFields(do managementHTTPDoer, cfg PluginConfig, key, name string, fields map[string]any) error {
+	payload := map[string]any{"name": name}
+	for k, v := range fields {
+		payload[k] = v
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	timeout := cfg.ManagementTimeoutSeconds
+	if timeout <= 0 {
+		timeout = defaultMgmtTimeoutSec
+	}
+	resp, err := do(pluginapi.HTTPRequest{
+		Method: http.MethodPatch,
+		URL:    m.baseURL(cfg) + "/auth-files/fields",
+		Headers: http.Header{
+			"Authorization":    {"Bearer " + key},
+			"X-Management-Key": {key},
+			"Content-Type":     {"application/json"},
+			"Accept":           {"application/json"},
+		},
+		Body: body,
+	}, timeout)
+	if err != nil {
+		return fmt.Errorf("management fields patch failed: %w", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return &managementHTTPError{StatusCode: resp.StatusCode, Body: strings.TrimSpace(string(resp.Body))}
+	}
+	return nil
+}
+
 func (m *managementDisabler) findAuthFile(do managementHTTPDoer, cfg PluginConfig, key, authID, authIndex string) (managementAuthFile, bool, error) {
 	timeout := cfg.ManagementTimeoutSeconds
 	if timeout <= 0 {

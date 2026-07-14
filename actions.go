@@ -225,8 +225,14 @@ func (e *actionEngine) applyDelete(authID, source string, entry banEntry, force 
 		return nil
 	}
 	if err := e.setDisabled(authID, true, "xai-autoban:pending_delete"); err != nil {
-		e.audit.add(source, authID, actionDelete, "error", err.Error(), entry.StatusCode)
-		return err
+		// Host has no formal delete. Keep isolation even when CPA toggle could not flip
+		// (e.g. missing management key). Probe/auto-delete must not fail hard.
+		e.bans.set(authID, entry)
+		e.markCooldown(authID, actionDelete)
+		e.audit.add(source, authID, actionDelete, "fallback", "delete unavailable; ban only (disable incomplete: "+err.Error()+")", entry.StatusCode)
+		e.notifyChanged()
+		_ = force
+		return nil
 	}
 	e.bans.set(authID, entry)
 	e.markCooldown(authID, actionDelete)
@@ -352,8 +358,11 @@ func (e *actionEngine) setDisabled(authID string, disabled bool, note string) er
 
 	// CPA UI toggle = Auth.Disabled, only reliably flipped via:
 	//   PATCH /v0/management/auth-files/status
-	// host.auth.save writes JSON (note) but buildAuthFromFileData does NOT map
-	// metadata.disabled -> Auth.Disabled, so the switch stays "启用".
+	//
+	// CRITICAL: do NOT host.auth.save after a successful management disable.
+	// CPA pluginhost.buildAuthFromFileData always sets Status=Active and does NOT
+	// map metadata.disabled → Auth.Disabled. AuthSave then manager.Update overwrites
+	// the disabled runtime auth and the CPA switch snaps back to 启用 (only note survives).
 	reqKey := e.requestManagementKey()
 	cfgKey := ""
 	if mgmt != nil {
@@ -373,35 +382,67 @@ func (e *actionEngine) setDisabled(authID string, disabled bool, note string) er
 			slog.Warn("xai-autoban: management_api disable failed",
 				"auth_id", authID, "name", fileName, "disabled", disabled, "error", err)
 			if forceMgmt {
-				// still try host json for note, then return mgmt error
-				_ = e.patchHostAuthJSON(host, index, fileName, disabled, note)
+				// Do not AuthSave here either — it cannot flip Auth.Disabled and confuses ops.
 				return fmt.Errorf("management_api disable failed (CPA 开关未改动): %w；请确认 management_url 可达且密钥正确", err)
 			}
 		} else {
+			// Optional note via fields API (preserves Auth.Disabled). Never AuthSave.
+			if note != "" {
+				if noteErr := mgmt.patchAuthNoteWithKey(fileName, index, note, key); noteErr != nil {
+					slog.Warn("xai-autoban: management note patch failed (disabled state kept)",
+						"auth_id", authID, "name", fileName, "error", noteErr)
+				}
+			}
+			// Verify host list reflects Auth.Disabled when available.
+			if vErr := e.verifyHostDisabled(host, authID, fileName, index, disabled); vErr != nil {
+				slog.Warn("xai-autoban: post-disable verify mismatch",
+					"auth_id", authID, "disabled", disabled, "error", vErr)
+				// Still treat management success as OK — list may lag one tick; do not AuthSave to "fix".
+			}
 			slog.Info("xai-autoban: updated credential via management api",
-				"auth_id", authID, "name", fileName, "disabled", disabled, "key_source", map[bool]string{true: "request", false: "config"}[reqKey != ""])
-			_ = e.patchHostAuthJSON(host, index, fileName, disabled, note)
+				"auth_id", authID, "name", fileName, "disabled", disabled,
+				"key_source", map[bool]string{true: "request", false: "config"}[reqKey != ""],
+				"skipped_host_auth_save", true)
 			return nil
 		}
 	}
 
+	// Fallback: host.auth.save only updates JSON/note. Cannot reliably flip CPA UI toggle.
 	if err := e.patchHostAuthJSON(host, index, fileName, disabled, note); err != nil {
 		if mgmtErr != nil {
 			return fmt.Errorf("management_api: %v; host_auth: %w", mgmtErr, err)
 		}
 		return err
 	}
-	// Management key was available but PATCH failed after host JSON write.
 	if mgmtErr != nil {
 		return fmt.Errorf("已写入备注，但 Management API 失败、CPA 开关可能仍为启用: %w（检查 management_url 与密钥；运维台须用已保存的管理密钥操作）", mgmtErr)
 	}
-	// No management key: host_auth only updates note; CPA UI toggle usually will NOT flip.
 	if key == "" && disabled {
-		slog.Warn("xai-autoban: disabled JSON written without management key — CPA UI toggle may stay 启用. Save management key in ops console (same as remote-management secret).",
-			"auth_id", authID)
+		return fmt.Errorf("已写入备注，但未调用 Management API（无管理密钥）：CPA 开关不会关闭。请在运维台保存与 remote-management 相同的管理密钥后再禁用")
 	}
 	slog.Info("xai-autoban: updated credential disabled flag", "auth_id", authID, "disabled", disabled, "via", "host_auth")
 	return nil
+}
+
+// verifyHostDisabled checks host.auth.list for Auth.Disabled after a management toggle.
+func (e *actionEngine) verifyHostDisabled(host HostClient, authID, fileName, index string, wantDisabled bool) error {
+	if host == nil {
+		return nil
+	}
+	files, err := host.AuthList()
+	if err != nil {
+		return err
+	}
+	for _, f := range files {
+		if f.ID == authID || f.AuthIndex == authID || f.Name == authID ||
+			f.Name == fileName || f.AuthIndex == index || authIDsEqual(authKey(f), authID) {
+			if f.Disabled != wantDisabled {
+				return fmt.Errorf("host list disabled=%v want=%v (name=%s)", f.Disabled, wantDisabled, f.Name)
+			}
+			return nil
+		}
+	}
+	return fmt.Errorf("credential not found in host list after toggle")
 }
 
 func (e *actionEngine) patchHostAuthJSON(host HostClient, index, fileName string, disabled bool, note string) error {

@@ -2,7 +2,7 @@
 
 CLIProxyAPI 原生插件：自动隔离异常 xAI 凭据，支持可配置 ban 时长/动作、定时+手动巡检、disable/delete（best-effort）、管理面板。
 
-版本：**0.5.7**
+版本：**0.5.8**
 
 ## 方式 A：插件商店安装（推荐）
 
@@ -157,6 +157,11 @@ management api HTTP 403: You are forbidden to connect to client_connect_invalid_
 ```
 
 直连后即可对本机 Management API 正常 `PATCH`。
+
+**0.5.8 起：** 禁用成功后 **不再** 调用 `host.auth.save`。  
+CPA 的 `buildAuthFromFileData` 会把凭证重建为 `StatusActive` 且不读 JSON `disabled`，  
+先前「Management 关掉开关 → AuthSave 写备注 → 开关又被打开、只剩备注」的假成功已修复。  
+备注改为 `PATCH /auth-files/fields`。
 
 ### disable_via=management_api
 
