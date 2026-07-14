@@ -21,7 +21,7 @@ func handleSchedulerPick(raw []byte) ([]byte, error) {
 	available := make([]pluginapi.SchedulerAuthCandidate, 0, len(req.Candidates))
 	filtered := 0
 	for _, candidate := range req.Candidates {
-		if isXAICandidate(candidate) && bans.isBannedCandidateID(candidate.ID, now) {
+		if isXAICandidate(candidate) && bans.isBannedCandidate(candidate.ID, candidateEmail(candidate), now) {
 			filtered++
 			continue
 		}
@@ -61,6 +61,34 @@ func isXAICandidate(c pluginapi.SchedulerAuthCandidate) bool {
 	}
 	id := strings.ToLower(c.ID)
 	return strings.Contains(id, "xai") || strings.Contains(id, "grok")
+}
+
+func candidateEmail(c pluginapi.SchedulerAuthCandidate) string {
+	if c.Attributes != nil {
+		for _, k := range []string{"email", "Email", "account_email", "user_email"} {
+			if v := strings.TrimSpace(c.Attributes[k]); v != "" {
+				return strings.ToLower(v)
+			}
+		}
+	}
+	if c.Metadata != nil {
+		for _, k := range []string{"email", "Email", "account_email"} {
+			if v, ok := c.Metadata[k].(string); ok && strings.TrimSpace(v) != "" {
+				return strings.ToLower(strings.TrimSpace(v))
+			}
+		}
+	}
+	// auth id itself may be an email or email.json
+	id := strings.TrimSpace(c.ID)
+	base := filepath.Base(id)
+	base = strings.TrimSuffix(base, filepath.Ext(base))
+	if strings.Contains(base, "@") {
+		return strings.ToLower(base)
+	}
+	if strings.Contains(id, "@") {
+		return strings.ToLower(id)
+	}
+	return ""
 }
 
 func pickFromAvailable(available []pluginapi.SchedulerAuthCandidate, delegate string) string {

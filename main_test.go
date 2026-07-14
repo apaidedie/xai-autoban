@@ -138,6 +138,17 @@ func TestStatusPageUsesManagementKeyFlow(t *testing.T) {
 		"健康",
 		"已禁用",
 		"statusChips",
+		"bans-recheck-429",
+		"复检 429",
+		"toast",
+		"progressBar",
+		"setBusy",
+		"/backup",
+		"exportBackup",
+		"importBackup",
+		"overviewCards",
+		"ov_healthy",
+		"jumpOverview",
 	} {
 		if !strings.Contains(page, required) {
 			t.Fatalf("page missing %q", required)
@@ -181,6 +192,72 @@ func TestImportSnapshot(t *testing.T) {
 	if response.StatusCode != http.StatusOK || currentStatus().Count != 1 {
 		t.Fatalf("snapshot was not restored: response=%d status=%#v", response.StatusCode, currentStatus())
 	}
+}
+
+func TestBanEmailKeyDedup(t *testing.T) {
+	bans.clearAll()
+	now := time.Now()
+	// two auth ids, same email → one ban row under email key
+	bans.set("auth-a", banEntry{
+		StatusCode: 403, Reason: "forbidden", BannedAt: now, ResetAt: now.Add(time.Hour),
+		Email: "user@x.ai", AuthID: "auth-a", Action: actionBan,
+	})
+	bans.set("auth-b", banEntry{
+		StatusCode: 401, Reason: "unauthorized", BannedAt: now, ResetAt: now.Add(2 * time.Hour),
+		Email: "user@x.ai", AuthID: "auth-b", Action: actionBan,
+	})
+	snap := bans.snapshot(now)
+	if len(snap) != 1 {
+		t.Fatalf("expected 1 email-keyed ban, got %d: %#v", len(snap), snap)
+	}
+	if _, ok := snap["user@x.ai"]; !ok {
+		t.Fatalf("expected key user@x.ai, got %#v", snap)
+	}
+	// both auth ids should resolve active
+	if !bans.active("auth-a", now) || !bans.active("auth-b", now) || !bans.active("user@x.ai", now) {
+		t.Fatal("email and auth aliases should all hit the same ban")
+	}
+	// scheduler-style check with email attribute path
+	if !bans.isBannedCandidate("auth-b", "user@x.ai", now) {
+		t.Fatal("isBannedCandidate should match email")
+	}
+	if !bans.clear("auth-a") {
+		t.Fatal("clear by auth alias should work")
+	}
+	if bans.active("user@x.ai", now) {
+		t.Fatal("clear should remove email key")
+	}
+}
+
+func TestBackupAndImportSettings(t *testing.T) {
+	bans.clearAll()
+	now := time.Now()
+	bans.set("bk1", banEntry{StatusCode: 403, Reason: "forbidden", BannedAt: now, ResetAt: now.Add(2 * time.Hour), Action: actionBan})
+	bk := buildBackup()
+	if bk.Format != "xai-autoban-backup" || bk.Count != 1 || len(bk.Bans) != 1 {
+		t.Fatalf("backup=%+v", bk)
+	}
+	if bk.Settings == nil || bk.Settings["probe_action"] == nil {
+		t.Fatalf("settings missing: %#v", bk.Settings)
+	}
+	// mutate settings in backup and re-import
+	bk.Settings["probe_interval_seconds"] = 777
+	raw, _ := json.Marshal(bk)
+	bans.clearAll()
+	resp := importSnapshot(raw)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("import status %d body=%s", resp.StatusCode, string(resp.Body))
+	}
+	if !bans.active("bk1", time.Now()) {
+		t.Fatal("expected ban restored")
+	}
+	if currentConfig().ProbeIntervalSeconds != 777 {
+		t.Fatalf("settings not applied: %d", currentConfig().ProbeIntervalSeconds)
+	}
+	// restore default interval for other tests
+	cfg := currentConfig()
+	cfg.ProbeIntervalSeconds = defaultConfig().ProbeIntervalSeconds
+	setConfig(cfg)
 }
 
 func TestConfigDefaultsAndInvalidAction(t *testing.T) {
@@ -331,6 +408,52 @@ func TestApplyActionReenable(t *testing.T) {
 	// reenable must not create a ban
 	if bans.active("auth-r", time.Now()) {
 		t.Fatal("reenable should not ban")
+	}
+}
+
+func TestRecheck429UnbanAndRelock(t *testing.T) {
+	bans.clearAll()
+	now := time.Now()
+	bans.set("r-ok", banEntry{StatusCode: 429, Reason: "rate_limited", BannedAt: now, ResetAt: now.Add(time.Hour), Action: actionBan, Source: "usage"})
+	bans.set("r-still", banEntry{StatusCode: 429, Reason: "rate_limited", BannedAt: now, ResetAt: now.Add(time.Hour), Action: actionBan, Source: "usage"})
+	stub := &stubHost{
+		files: []pluginapi.HostAuthFileEntry{
+			{ID: "r-ok", AuthIndex: "1", Name: "xai-ok", Provider: "xai"},
+			{ID: "r-still", AuthIndex: "2", Name: "xai-still", Provider: "xai"},
+		},
+		jsonBy: map[string]json.RawMessage{
+			"1": json.RawMessage(`{"access_token":"tok-ok"}`),
+			"2": json.RawMessage(`{"access_token":"tok-still"}`),
+		},
+		httpFn: func(req pluginapi.HTTPRequest) (pluginapi.HTTPResponse, error) {
+			if strings.Contains(req.Headers.Get("Authorization"), "tok-ok") {
+				return pluginapi.HTTPResponse{StatusCode: 200, Body: []byte(`{"data":[]}`)}, nil
+			}
+			return pluginapi.HTTPResponse{StatusCode: 429, Body: []byte(`rate`)}, nil
+		},
+	}
+	prevHost := hostImpl
+	prevProbe := probeSvc
+	hostImpl = stub
+	probeSvc = newProbeService(defaultConfig(), stub, engine)
+	t.Cleanup(func() {
+		hostImpl = prevHost
+		probeSvc = prevProbe
+	})
+
+	resp := dispatchManagement(pluginapi.ManagementRequest{
+		Method: http.MethodPost,
+		Path:   "/v0/management/plugins/xai-autoban/bans-recheck-429",
+		Body:   []byte(`{"force":true}`),
+	})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status %d body=%s", resp.StatusCode, string(resp.Body))
+	}
+	if bans.active("r-ok", time.Now()) {
+		t.Fatal("recovered 429 should be unbanned")
+	}
+	if !bans.active("r-still", time.Now()) {
+		t.Fatal("still-429 should remain banned")
 	}
 }
 

@@ -183,6 +183,7 @@ func (p *probeService) runOnceTrigger(force bool, trigger string) (probeResult, 
 			}
 			status, perr := p.probeOne(cfg, host, f)
 			key := authKey(f)
+			email := strings.ToLower(strings.TrimSpace(f.Email))
 			mu.Lock()
 			defer mu.Unlock()
 			if perr != nil {
@@ -197,6 +198,8 @@ func (p *probeService) runOnceTrigger(force bool, trigger string) (probeResult, 
 						ResetAt:    time.Now().Add(cfg.durationForStatus(statusOrFallback(status, cfg))),
 						Action:     cfg.ProbeAction,
 						Source:     "probe",
+						Email:      email,
+						AuthID:     key,
 					}
 					if entry.ResetAt.Equal(entry.BannedAt) {
 						entry.ResetAt = time.Now().Add(time.Duration(cfg.Ban403Seconds) * time.Second)
@@ -207,6 +210,8 @@ func (p *probeService) runOnceTrigger(force bool, trigger string) (probeResult, 
 						entry.Action = cfg.actionForStatus(status)
 					}
 					entry.Source = "probe"
+					entry.Email = email
+					entry.AuthID = key
 				}
 				if !cfg.AutoExecute {
 					// Codex-style 只输出结果: still mark ban ledger for visibility, but never disable/delete.

@@ -13,6 +13,7 @@ type credentialInfo struct {
 	AuthID           string `json:"auth_id"`
 	Name             string `json:"name,omitempty"`
 	Label            string `json:"label,omitempty"`
+	Email            string `json:"email,omitempty"`
 	Provider         string `json:"provider,omitempty"`
 	Disabled         bool   `json:"disabled"`
 	Banned           bool   `json:"banned"`
@@ -69,6 +70,7 @@ func buildCredentials(files []pluginapi.HostAuthFileEntry, banSnap map[string]ba
 			AuthID:   id,
 			Name:     f.Name,
 			Label:    f.Label,
+			Email:    strings.ToLower(strings.TrimSpace(f.Email)),
 			Provider: f.Provider,
 			Disabled: f.Disabled,
 		}
@@ -83,6 +85,9 @@ func buildCredentials(files []pluginapi.HostAuthFileEntry, banSnap map[string]ba
 			item.Action = entry.Action
 			item.Source = entry.Source
 			item.PendingDelete = entry.PendingDelete
+			if entry.Email != "" && item.Email == "" {
+				item.Email = entry.Email
+			}
 			if !entry.BannedAt.IsZero() {
 				item.BannedAt = entry.BannedAt.Format(time.RFC3339)
 			}
@@ -111,10 +116,18 @@ func buildCredentials(files []pluginapi.HostAuthFileEntry, banSnap map[string]ba
 		if _, ok := seen[id]; ok {
 			continue
 		}
-		// skip if already represented via alias
+		// skip if already represented via alias or email
 		dup := false
 		for sid := range seen {
 			if authIDsEqual(sid, id) {
+				dup = true
+				break
+			}
+			if entry.Email != "" && strings.EqualFold(sid, entry.Email) {
+				dup = true
+				break
+			}
+			if entry.AuthID != "" && authIDsEqual(sid, entry.AuthID) {
 				dup = true
 				break
 			}
@@ -122,10 +135,27 @@ func buildCredentials(files []pluginapi.HostAuthFileEntry, banSnap map[string]ba
 		if dup {
 			continue
 		}
+		// also skip if any built credential already carries this email
+		if entry.Email != "" {
+			for _, it := range items {
+				if strings.EqualFold(it.Email, entry.Email) {
+					dup = true
+					break
+				}
+			}
+		}
+		if dup {
+			continue
+		}
 		seen[id] = struct{}{}
+		displayID := id
+		if entry.AuthID != "" {
+			displayID = entry.AuthID
+		}
 		item := credentialInfo{
-			AuthID:           id,
+			AuthID:           displayID,
 			Name:             id,
+			Email:            entry.Email,
 			Provider:         providerXAI,
 			Banned:           true,
 			StatusCode:       entry.StatusCode,
@@ -233,12 +263,24 @@ func lookupBan(banSnap map[string]banEntry, id string, f pluginapi.HostAuthFileE
 	if entry, ok := banSnap[id]; ok {
 		return entry, true
 	}
-	candidates := []string{f.ID, f.AuthIndex, f.Name, id}
+	email := strings.ToLower(strings.TrimSpace(f.Email))
+	if email != "" {
+		if entry, ok := banSnap[email]; ok {
+			return entry, true
+		}
+	}
+	candidates := []string{f.ID, f.AuthIndex, f.Name, id, email}
 	for key, entry := range banSnap {
 		for _, c := range candidates {
 			if c != "" && authIDsEqual(key, c) {
 				return entry, true
 			}
+		}
+		if email != "" && strings.EqualFold(entry.Email, email) {
+			return entry, true
+		}
+		if entry.AuthID != "" && authIDsEqual(entry.AuthID, id) {
+			return entry, true
 		}
 	}
 	return banEntry{}, false
@@ -288,5 +330,133 @@ func normalizeStatusFilter(v string) string {
 		return v
 	default:
 		return "all"
+	}
+}
+
+const (
+	defaultCredentialPageSize = 50
+	maxCredentialPageSize     = 200
+)
+
+type pageQuery struct {
+	Page     int
+	PageSize int
+	Filter   string
+	Q        string
+}
+
+type pageMeta struct {
+	Page     int    `json:"page"`
+	PageSize int    `json:"page_size"`
+	Total    int    `json:"total"`
+	Pages    int    `json:"pages"`
+	Filter   string `json:"filter"`
+	Q        string `json:"q,omitempty"`
+}
+
+func parsePageQuery(page, pageSize int, filter, q string) pageQuery {
+	out := pageQuery{
+		Page:     page,
+		PageSize: pageSize,
+		Filter:   normalizeStatusFilter(filter),
+		Q:        strings.TrimSpace(q),
+	}
+	if out.Page < 1 {
+		out.Page = 1
+	}
+	if out.PageSize <= 0 {
+		out.PageSize = defaultCredentialPageSize
+	}
+	if out.PageSize > maxCredentialPageSize {
+		out.PageSize = maxCredentialPageSize
+	}
+	return out
+}
+
+func matchCredentialFilter(c credentialInfo, filter string) bool {
+	switch normalizeStatusFilter(filter) {
+	case "all":
+		return true
+	case "healthy":
+		return !c.Disabled && !c.Banned
+	case "banned":
+		return c.Banned
+	case "disabled":
+		return c.Disabled
+	case "401", "402", "403", "429":
+		return c.Banned && strconv.Itoa(c.StatusCode) == filter
+	default:
+		return true
+	}
+}
+
+func matchCredentialQuery(c credentialInfo, q string) bool {
+	q = strings.ToLower(strings.TrimSpace(q))
+	if q == "" {
+		return true
+	}
+	fields := []string{c.AuthID, c.Name, c.Label, c.Email, c.Reason, c.Action, c.Status, c.Source}
+	for _, f := range fields {
+		if strings.Contains(strings.ToLower(f), q) {
+			return true
+		}
+	}
+	return false
+}
+
+func filterCredentials(items []credentialInfo, filter, q string) []credentialInfo {
+	out := make([]credentialInfo, 0, len(items))
+	for _, c := range items {
+		if !matchCredentialFilter(c, filter) {
+			continue
+		}
+		if !matchCredentialQuery(c, q) {
+			continue
+		}
+		out = append(out, c)
+	}
+	return out
+}
+
+func slicePage[T any](all []T, page, pageSize int) (items []T, total, pages, pageOut int) {
+	total = len(all)
+	if pageSize <= 0 {
+		pageSize = defaultCredentialPageSize
+	}
+	pages = total / pageSize
+	if total%pageSize != 0 {
+		pages++
+	}
+	if pages < 1 {
+		pages = 1
+	}
+	pageOut = page
+	if pageOut < 1 {
+		pageOut = 1
+	}
+	if pageOut > pages {
+		pageOut = pages
+	}
+	start := (pageOut - 1) * pageSize
+	if start >= total {
+		return []T{}, total, pages, pageOut
+	}
+	end := start + pageSize
+	if end > total {
+		end = total
+	}
+	return all[start:end], total, pages, pageOut
+}
+
+func pageCredentials(items []credentialInfo, pq pageQuery) ([]credentialInfo, pageMeta) {
+	filtered := filterCredentials(items, pq.Filter, pq.Q)
+	pageItems, total, pages, pageOut := slicePage(filtered, pq.Page, pq.PageSize)
+	return pageItems, pageMeta{
+		Page:     pageOut,
+		PageSize: pq.PageSize,
+		Total:    total,
+		Pages:    pages,
+		Filter:   pq.Filter,
+		Q:        pq.Q,
 	}
 }

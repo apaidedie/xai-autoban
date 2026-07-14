@@ -2,8 +2,11 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,13 +25,15 @@ func managementRegistration() pluginapi.ManagementRegistrationResponse {
 			{Method: http.MethodPost, Path: managementPrefix + "/settings", Description: "Update runtime settings (probe actions, intervals, etc.)."},
 			{Method: http.MethodPost, Path: managementPrefix + "/unban", Description: "Release one xAI credential. Body: {\"auth_id\":\"...\"}."},
 			{Method: http.MethodPost, Path: managementPrefix + "/unban-all", Description: "Release all credentials held by xai-autoban."},
-			{Method: http.MethodPost, Path: managementPrefix + "/import", Description: "Restore a previously exported ban snapshot."},
+			{Method: http.MethodPost, Path: managementPrefix + "/import", Description: "Restore a previously exported ban snapshot or full backup JSON."},
+			{Method: http.MethodGet, Path: managementPrefix + "/backup", Description: "Export bans + settings backup JSON (safe, no secrets)."},
 			{Method: http.MethodPost, Path: managementPrefix + "/probe", Description: "Run credential probe immediately."},
 			{Method: http.MethodPost, Path: managementPrefix + "/apply-action", Description: "Manually apply ban|disable|delete|reenable. Body: {\"auth_id\",\"action\",\"force?\"}."},
+			{Method: http.MethodPost, Path: managementPrefix + "/bans-recheck-429", Description: "Probe currently isolated 429 credentials; unban if recovered, else refresh ban window."},
 		},
 		Resources: []pluginapi.ResourceRoute{
 			{Path: "/status", Menu: "xAI Autoban", Description: "View xAI autoban status; mutations require management key."},
-			{Path: "/data", Description: "Public read-only xAI autoban status data."},
+			{Path: "/data", Description: "Public read-only status data. Query: filter,q,page,page_size."},
 		},
 	}
 }
@@ -47,7 +52,7 @@ func dispatchManagement(req pluginapi.ManagementRequest) pluginapi.ManagementRes
 	path := strings.TrimRight(req.Path, "/")
 	switch {
 	case method == http.MethodGet && strings.HasSuffix(path, managementPrefix+"/bans"):
-		return jsonResponse(http.StatusOK, currentStatus())
+		return jsonResponse(http.StatusOK, currentStatusPaged(req.Query))
 	case method == http.MethodGet && strings.HasSuffix(path, managementPrefix+"/audit"):
 		return jsonResponse(http.StatusOK, map[string]any{"events": audit.list()})
 	case method == http.MethodGet && strings.HasSuffix(path, managementPrefix+"/settings"):
@@ -77,6 +82,8 @@ func dispatchManagement(req pluginapi.ManagementRequest) pluginapi.ManagementRes
 		return jsonResponse(http.StatusOK, map[string]any{"ok": true, "removed": n, "status": currentStatus()})
 	case method == http.MethodPost && strings.HasSuffix(path, managementPrefix+"/import"):
 		return importSnapshot(req.Body)
+	case method == http.MethodGet && strings.HasSuffix(path, managementPrefix+"/backup"):
+		return jsonResponse(http.StatusOK, buildBackup())
 	case method == http.MethodPost && strings.HasSuffix(path, managementPrefix+"/probe"):
 		var body struct {
 			Force bool `json:"force"`
@@ -118,8 +125,19 @@ func dispatchManagement(req pluginapi.ManagementRequest) pluginapi.ManagementRes
 			return jsonResponse(http.StatusBadRequest, map[string]any{"error": err.Error()})
 		}
 		return jsonResponse(http.StatusOK, map[string]any{"ok": true, "status": currentStatus()})
+	case method == http.MethodPost && strings.HasSuffix(path, managementPrefix+"/bans-recheck-429"):
+		var body struct {
+			Force bool `json:"force"`
+		}
+		_ = json.Unmarshal(req.Body, &body)
+		res, err := recheck429Bans(body.Force)
+		if err != nil {
+			return jsonResponse(http.StatusBadGateway, map[string]any{"error": err.Error(), "result": res})
+		}
+		audit.add("manual", "", "recheck429", "ok", fmt.Sprintf("checked=%d unbanned=%d relocked=%d", res.Checked, res.Unbanned, res.Relocked), 0)
+		return jsonResponse(http.StatusOK, map[string]any{"ok": true, "result": res, "status": currentStatus()})
 	case method == http.MethodGet && strings.HasSuffix(path, resourcePrefix+"/data"):
-		return jsonResponse(http.StatusOK, currentStatus())
+		return jsonResponse(http.StatusOK, currentStatusPaged(req.Query))
 	case method == http.MethodGet && (strings.HasSuffix(path, resourcePrefix+"/status") || strings.HasSuffix(path, managementPrefix+"/status")):
 		return pluginapi.ManagementResponse{
 			StatusCode: http.StatusOK,
@@ -151,11 +169,84 @@ func updateSettings(raw []byte) pluginapi.ManagementResponse {
 	})
 }
 
+type backupSnapshot struct {
+	Format        string         `json:"format"`
+	FormatVersion int            `json:"format_version"`
+	Plugin        string         `json:"plugin"`
+	PluginVersion string         `json:"plugin_version"`
+	ExportedAt    string         `json:"exported_at"`
+	Count         int            `json:"count"`
+	Bans          []banInfo      `json:"bans"`
+	Settings      map[string]any `json:"settings,omitempty"`
+	Counts        statusCounts   `json:"counts,omitempty"`
+	Probe         map[string]any `json:"probe,omitempty"`
+	Audit         []auditEvent   `json:"audit,omitempty"`
+	// legacy fields so old statusInfo JSON still unmarshals into backupSnapshot
+	Version string `json:"version,omitempty"`
+}
+
+func buildBackup() backupSnapshot {
+	st := currentStatus()
+	// strip credentials/page from backup payload; keep bans+settings+meta
+	probe := map[string]any{}
+	if st.Probe != nil {
+		// avoid huge history in backup; keep summary fields only
+		for _, k := range []string{"enabled", "running", "last_run", "last_ok", "last_fail", "last_err", "mode", "interval", "auto_execute"} {
+			if v, ok := st.Probe[k]; ok {
+				probe[k] = v
+			}
+		}
+	}
+	// keep a short audit tail
+	events := st.Audit
+	if len(events) > 50 {
+		events = events[:50]
+	}
+	return backupSnapshot{
+		Format:        "xai-autoban-backup",
+		FormatVersion: 1,
+		Plugin:        pluginName,
+		PluginVersion: pluginVersion,
+		ExportedAt:    time.Now().Format(time.RFC3339),
+		Count:         st.Count,
+		Bans:          st.Bans,
+		Settings:      st.Settings,
+		Counts:        st.Counts,
+		Probe:         probe,
+		Audit:         events,
+	}
+}
+
 func importSnapshot(raw []byte) pluginapi.ManagementResponse {
-	var snapshot statusInfo
+	var snapshot backupSnapshot
 	if err := json.Unmarshal(raw, &snapshot); err != nil {
 		return jsonResponse(http.StatusBadRequest, map[string]any{"error": "invalid_snapshot", "message": err.Error()})
 	}
+	// also accept nested {"status":{bans:...}} and plain statusInfo shape
+	if len(snapshot.Bans) == 0 {
+		var legacy statusInfo
+		if err := json.Unmarshal(raw, &legacy); err == nil && len(legacy.Bans) > 0 {
+			snapshot.Bans = legacy.Bans
+			if snapshot.Settings == nil {
+				snapshot.Settings = legacy.Settings
+			}
+		}
+	}
+	if nested := map[string]json.RawMessage{}; json.Unmarshal(raw, &nested) == nil {
+		if body, ok := nested["status"]; ok {
+			var st statusInfo
+			if json.Unmarshal(body, &st) == nil && len(st.Bans) > 0 {
+				snapshot.Bans = st.Bans
+			}
+		}
+		if body, ok := nested["backup"]; ok {
+			var b backupSnapshot
+			if json.Unmarshal(body, &b) == nil && len(b.Bans) > 0 {
+				snapshot = b
+			}
+		}
+	}
+
 	now := time.Now()
 	imported := 0
 	for _, item := range snapshot.Bans {
@@ -167,7 +258,7 @@ func importSnapshot(raw []byte) pluginapi.ManagementResponse {
 		if errBanned != nil {
 			bannedAt = now
 		}
-		bans.set(item.AuthID, banEntry{
+		bans.forceSet(item.AuthID, banEntry{
 			StatusCode:    item.StatusCode,
 			Reason:        item.Reason,
 			BannedAt:      bannedAt,
@@ -175,11 +266,30 @@ func importSnapshot(raw []byte) pluginapi.ManagementResponse {
 			PendingDelete: item.PendingDelete,
 			Source:        "import",
 			Action:        item.Action,
+			Email:         item.Email,
+			AuthID:        item.AuthID,
 		})
 		imported++
 	}
+
+	settingsApplied := false
+	var warnings []string
+	if len(snapshot.Settings) > 0 {
+		cfg, w := mergeConfigPatch(currentConfig(), snapshot.Settings)
+		setConfig(cfg)
+		warnings = w
+		settingsApplied = true
+	}
+
 	persister.scheduleSave()
-	return jsonResponse(http.StatusOK, map[string]any{"ok": true, "imported": imported, "status": currentStatus()})
+	audit.add("manual", "", "import", "ok", fmt.Sprintf("imported=%d settings=%v", imported, settingsApplied), 0)
+	return jsonResponse(http.StatusOK, map[string]any{
+		"ok":               true,
+		"imported":         imported,
+		"settings_applied": settingsApplied,
+		"warnings":         warnings,
+		"status":           currentStatus(),
+	})
 }
 
 type statusInfo struct {
@@ -189,6 +299,7 @@ type statusInfo struct {
 	Bans        []banInfo        `json:"bans"`
 	Credentials []credentialInfo `json:"credentials,omitempty"`
 	Counts      statusCounts     `json:"counts"`
+	Page        pageMeta         `json:"page"`
 	Probe       map[string]any   `json:"probe,omitempty"`
 	Settings    map[string]any   `json:"settings,omitempty"`
 	Audit       []auditEvent     `json:"audit,omitempty"`
@@ -196,6 +307,7 @@ type statusInfo struct {
 
 type banInfo struct {
 	AuthID           string `json:"auth_id"`
+	Email            string `json:"email,omitempty"`
 	StatusCode       int    `json:"status_code"`
 	Reason           string `json:"reason"`
 	BannedAt         string `json:"banned_at"`
@@ -207,12 +319,21 @@ type banInfo struct {
 }
 
 func currentStatus() statusInfo {
+	return currentStatusPaged(nil)
+}
+
+func currentStatusPaged(query url.Values) statusInfo {
 	now := time.Now()
 	snapshot := bans.snapshot(now)
 	items := make([]banInfo, 0, len(snapshot))
 	for id, entry := range snapshot {
+		authID := id
+		if entry.AuthID != "" {
+			authID = entry.AuthID
+		}
 		items = append(items, banInfo{
-			AuthID:           id,
+			AuthID:           authID,
+			Email:            entry.Email,
 			StatusCode:       entry.StatusCode,
 			Reason:           entry.Reason,
 			BannedAt:         entry.BannedAt.Format(time.RFC3339),
@@ -228,18 +349,42 @@ func currentStatus() statusInfo {
 	files, _ := collectXAIAuthFiles(hostImpl)
 	creds, counts := buildCredentials(files, snapshot, probeSvc.lastResults(), now)
 
+	pq := pageQueryFromValues(query)
+	pageCreds, page := pageCredentials(creds, pq)
+
 	st := statusInfo{
 		Plugin:      pluginName,
 		Version:     pluginVersion,
 		Count:       len(items),
 		Bans:        items,
-		Credentials: creds,
+		Credentials: pageCreds,
 		Counts:      counts,
+		Page:        page,
 		Probe:       probeSvc.status(),
 		Settings:    currentConfig().publicView(),
 		Audit:       audit.list(),
 	}
 	return st
+}
+
+func pageQueryFromValues(q url.Values) pageQuery {
+	if q == nil {
+		return parsePageQuery(1, defaultCredentialPageSize, "all", "")
+	}
+	page, _ := strconv.Atoi(strings.TrimSpace(q.Get("page")))
+	pageSize, _ := strconv.Atoi(strings.TrimSpace(firstNonEmpty(q.Get("page_size"), q.Get("limit"))))
+	filter := firstNonEmpty(q.Get("filter"), q.Get("status"))
+	search := firstNonEmpty(q.Get("q"), q.Get("search"))
+	return parsePageQuery(page, pageSize, filter, search)
+}
+
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if strings.TrimSpace(v) != "" {
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
 }
 
 func jsonResponse(status int, value any) pluginapi.ManagementResponse {

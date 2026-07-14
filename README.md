@@ -2,7 +2,7 @@
 
 CLIProxyAPI 原生插件：自动隔离异常 xAI 凭据，支持可配置 ban 时长/动作、定时+手动巡检、disable/delete（best-effort）、管理面板。
 
-版本：**0.4.0**
+版本：**0.4.5**
 
 ## 方式 A：插件商店安装（推荐）
 
@@ -49,12 +49,17 @@ http://YOUR_CPA_HOST:8317/v0/resource/plugins/xai-autoban/status
 
 > 解禁 / 巡检等写操作需要管理密钥；资源页会尝试读取同源管理中心已保存的密钥后调用 Management API。
 
-### 运维台（0.4.0）
+### 运维台（0.4.5）
 
+- 总览卡片：全部 / 健康 / 隔离 / 上次巡检（可点跳转或巡检）
 - 状态芯片：全部 / 健康 / 隔离 / 401 / 402 / 403 / 429 / 已禁用（点击筛选）
 - 列表展示全部 xAI 凭证（不仅是隔离账本）
+- 服务端分页：`/data?filter=&q=&page=&page_size=`
 - 单行与批量：`unban` / `ban` / `disable` / `reenable`
-- `/data` 返回 `credentials[]` 与 `counts`
+- **复检 429**：仅探测当前 429 隔离项，恢复则解禁，仍限流则刷新窗口
+- Toast 反馈 + 批量/巡检进度条 + 忙碌态禁用写操作
+- **导出/导入备份**：bans + settings JSON（无密钥）
+- **Email 主键隔离**：同一邮箱多 token 合并为一条隔离记录；调度按 email 跳过
 
 ---
 
@@ -143,6 +148,9 @@ POST /v0/management/plugins/xai-autoban/unban-all
 POST /v0/management/plugins/xai-autoban/import
 POST /v0/management/plugins/xai-autoban/probe
 POST /v0/management/plugins/xai-autoban/apply-action   # ban|disable|delete|reenable
+POST /v0/management/plugins/xai-autoban/bans-recheck-429
+GET  /v0/management/plugins/xai-autoban/backup
+POST /v0/management/plugins/xai-autoban/import
 PUT  /v0/management/plugins/xai-autoban/settings
 ```
 
@@ -156,7 +164,7 @@ GET /v0/resource/plugins/xai-autoban/data
 ## 发布到插件商店
 
 1. `registry.json` 放在仓库根目录（本仓库已提供）
-2. 推送 tag `v0.4.0`，GitHub Actions 构建多平台 zip + `checksums.txt`
+2. 推送 tag `v0.4.5`，GitHub Actions 构建多平台 zip + `checksums.txt`
 3. CPA 配置 `store-sources` 指向：
 
 ```text

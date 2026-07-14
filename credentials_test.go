@@ -76,3 +76,25 @@ func TestDeriveCredentialStatusPriority(t *testing.T) {
 		t.Fatal("disabled should win")
 	}
 }
+
+func TestPageCredentialsFilterAndSlice(t *testing.T) {
+	items := []credentialInfo{
+		{AuthID: "a", Status: "healthy"},
+		{AuthID: "b", Status: "401", Banned: true, StatusCode: 401, Reason: "unauthorized"},
+		{AuthID: "c", Status: "402", Banned: true, StatusCode: 402},
+		{AuthID: "d", Status: "disabled", Disabled: true, Name: "xai-off"},
+		{AuthID: "e", Status: "healthy", Name: "search-me"},
+	}
+	page, meta := pageCredentials(items, parsePageQuery(1, 2, "401", ""))
+	if meta.Total != 1 || len(page) != 1 || page[0].AuthID != "b" {
+		t.Fatalf("401 page=%+v meta=%+v", page, meta)
+	}
+	page, meta = pageCredentials(items, parsePageQuery(1, 2, "all", "search"))
+	if meta.Total != 1 || page[0].AuthID != "e" {
+		t.Fatalf("search page=%+v meta=%+v", page, meta)
+	}
+	page, meta = pageCredentials(items, parsePageQuery(2, 2, "all", ""))
+	if meta.Pages != 3 || meta.Page != 2 || len(page) != 2 {
+		t.Fatalf("page2=%+v meta=%+v", page, meta)
+	}
+}

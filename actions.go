@@ -131,7 +131,12 @@ func (e *actionEngine) applyAction(authID, action, source string, entry banEntry
 		return fmt.Errorf("missing auth_id")
 	}
 	action = strings.ToLower(strings.TrimSpace(action))
-	if !force && e.inCooldown(authID, action) {
+	// Prefer email as isolation key when available (one mailbox → one ban row).
+	if entry.Email == "" {
+		entry.Email = e.lookupEmail(authID)
+	}
+	cooldownKeyID := banStorageKey(entry.Email, authID)
+	if !force && e.inCooldown(cooldownKeyID, action) {
 		e.audit.add(source, authID, action, "skipped_cooldown", "action skipped due to cooldown", entry.StatusCode)
 		return nil
 	}
@@ -140,8 +145,9 @@ func (e *actionEngine) applyAction(authID, action, source string, entry banEntry
 	case actionBan:
 		entry.Action = actionBan
 		entry.Source = source
+		entry.AuthID = authID
 		e.bans.set(authID, entry)
-		e.markCooldown(authID, action)
+		e.markCooldown(cooldownKeyID, action)
 		e.audit.add(source, authID, actionBan, "ok", entry.Reason, entry.StatusCode)
 		e.notifyChanged()
 		return nil
@@ -152,8 +158,9 @@ func (e *actionEngine) applyAction(authID, action, source string, entry banEntry
 		}
 		entry.Action = actionDisable
 		entry.Source = source
+		entry.AuthID = authID
 		e.bans.set(authID, entry)
-		e.markCooldown(authID, action)
+		e.markCooldown(cooldownKeyID, action)
 		e.audit.add(source, authID, actionDisable, "ok", entry.Reason, entry.StatusCode)
 		e.notifyChanged()
 		return nil
@@ -254,6 +261,29 @@ func (e *actionEngine) applySuccess(authID, source string, force bool) error {
 	default:
 		return fmt.Errorf("unknown probe_on_success %q", mode)
 	}
+}
+
+func (e *actionEngine) lookupEmail(authID string) string {
+	if e.host == nil || strings.TrimSpace(authID) == "" {
+		return ""
+	}
+	files, err := e.host.AuthList()
+	if err != nil {
+		return ""
+	}
+	for _, f := range files {
+		if f.ID == authID || f.AuthIndex == authID || f.Name == authID || authIDsEqual(authKey(f), authID) {
+			return strings.ToLower(strings.TrimSpace(f.Email))
+		}
+	}
+	// also match by email itself
+	want := strings.ToLower(strings.TrimSpace(authID))
+	for _, f := range files {
+		if f.Email != "" && strings.EqualFold(f.Email, want) {
+			return want
+		}
+	}
+	return ""
 }
 
 func (e *actionEngine) setDisabled(authID string, disabled bool, note string) error {

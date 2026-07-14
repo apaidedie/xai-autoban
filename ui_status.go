@@ -67,10 +67,29 @@ button:hover{background:rgba(51,65,85,.95)}button:disabled{opacity:.35;cursor:no
 .bg{background:transparent}.bs{background:rgba(15,23,42,.7)}
 .msg{min-height:18px;color:var(--muted);font-size:12.5px;font-weight:700}
 .msg.err{color:#fda4af}
+.progress{display:none;height:4px;margin:0 14px 10px;border-radius:999px;background:rgba(148,163,184,.12);overflow:hidden}
+.progress.on{display:block}
+.progress>i{display:block;height:100%;width:0;border-radius:999px;background:linear-gradient(90deg,var(--cyan),var(--blue));transition:width .15s ease}
+.toast{
+  position:fixed;right:18px;bottom:18px;z-index:80;max-width:min(420px,92vw);
+  padding:12px 14px;border-radius:12px;border:1px solid var(--line);
+  background:rgba(15,23,42,.96);color:var(--text);font-size:13px;font-weight:700;
+  box-shadow:0 16px 40px rgba(0,0,0,.4);transform:translateY(12px);opacity:0;
+  transition:transform .16s ease,opacity .16s ease;pointer-events:none
+}
+.toast.show{transform:none;opacity:1}
+.toast.ok{border-color:rgba(52,211,153,.4);background:rgba(6,78,59,.92);color:#bbf7d0}
+.toast.err{border-color:rgba(251,113,133,.45);background:rgba(127,29,29,.92);color:#fecdd3}
+.live.busy{color:var(--amber)}
+.live.err{color:var(--red)}
+@media (prefers-reduced-motion:reduce){.progress>i,.toast{transition:none}}
 .table-wrap{overflow:auto;max-height:56vh}
 .table-wrap.fade{opacity:.45}
 table{width:100%;border-collapse:separate;border-spacing:0;min-width:1040px;transition:opacity .12s ease}
 @media (prefers-reduced-motion:reduce){table{transition:none}}
+.pager{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;border-top:1px solid rgba(148,163,184,.08)}
+.pager .pinfo{color:var(--muted);font-size:12px;font-weight:700}
+.pager .pbtns{display:flex;gap:8px}
 th{position:sticky;top:0;z-index:1;background:rgba(15,23,42,.96);color:#c7d4ea;font-size:11px;font-weight:800;letter-spacing:.07em;padding:11px 12px;border-bottom:1px solid var(--line);text-align:left}
 td{padding:12px;border-bottom:1px solid rgba(148,163,184,.08);color:#dbe4f3;vertical-align:middle}
 tr:hover td{background:rgba(56,189,248,.05)}
@@ -112,7 +131,21 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
 .hist{display:flex;flex-wrap:wrap;gap:8px;padding:12px 14px}
 .hist button{height:auto;min-width:150px;padding:10px;text-align:left}
 .hist b{display:block}.hist small{display:block;color:#93a4c3;margin-top:2px}
-@media(max-width:700px){h1{font-size:22px}}
+.qcards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px}
+.qcard{
+  text-align:left;height:auto;min-height:88px;padding:14px 14px 12px;border-radius:16px;
+  border:1px solid var(--line);background:linear-gradient(180deg,rgba(18,28,46,.96),rgba(12,20,34,.98));
+  box-shadow:0 10px 28px rgba(0,0,0,.28);transition:border-color .12s ease,transform .12s ease,background .12s ease
+}
+.qcard:hover{border-color:rgba(34,211,238,.35);background:rgba(15,23,42,.95)}
+.qcard:focus-visible{outline:2px solid rgba(34,211,238,.65);outline-offset:2px}
+.qcard .ql{color:var(--muted);font-size:11px;font-weight:800;letter-spacing:.06em}
+.qcard .qn{margin-top:8px;font-size:26px;font-weight:850;font-variant-numeric:tabular-nums;line-height:1}
+.qcard .qs{margin-top:8px;color:var(--muted);font-size:11px;font-weight:650;line-height:1.35}
+.qcard.ok .qn{color:var(--green)}.qcard.warn .qn{color:var(--amber)}.qcard.bad .qn{color:var(--red)}.qcard.info .qn{color:var(--cyan)}
+@media(max-width:900px){.qcards{grid-template-columns:1fr 1fr}}
+@media(max-width:700px){h1{font-size:22px}.qcards{grid-template-columns:1fr 1fr}}
+@media (prefers-reduced-motion:reduce){.qcard{transition:none}}
 </style>
 </head>
 <body>
@@ -130,6 +163,29 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
   </div>
 
   <div id="authBanner" class="banner warn">正在检测管理密钥…</div>
+
+  <div class="qcards" id="overviewCards">
+    <button type="button" class="qcard info" data-jump="all">
+      <div class="ql">全部凭证</div>
+      <div class="qn" id="ov_all">-</div>
+      <div class="qs">点击查看全部</div>
+    </button>
+    <button type="button" class="qcard ok" data-jump="healthy">
+      <div class="ql">健康</div>
+      <div class="qn" id="ov_healthy">-</div>
+      <div class="qs">可调度使用</div>
+    </button>
+    <button type="button" class="qcard warn" data-jump="banned">
+      <div class="ql">当前隔离</div>
+      <div class="qn" id="ov_banned">-</div>
+      <div class="qs" id="ov_banned_sub">含 401/402/403/429</div>
+    </button>
+    <button type="button" class="qcard" data-jump="probe" id="ov_probe_card">
+      <div class="ql">上次巡检</div>
+      <div class="qn" id="ov_probe">-</div>
+      <div class="qs" id="ov_probe_sub">点击立即巡检</div>
+    </button>
+  </div>
 
   <section class="panel">
     <div class="phd"><h2>凭证健康度</h2><div class="hint">点击芯片筛选 · 右上角可编辑巡检配置</div></div>
@@ -187,6 +243,10 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
       <input id="search" type="search" placeholder="搜索 Auth ID / 名称 / 原因" autocomplete="off">
       <button class="bp" type="button" onclick="loadData()">刷新</button>
       <button id="btnProbe" class="bs" type="button" onclick="runProbe()" disabled>立即巡检</button>
+      <button id="btnRecheck429" class="bs" type="button" onclick="recheck429()" disabled title="仅探测当前 429 隔离项">复检 429</button>
+      <button id="btnBackup" class="bs" type="button" onclick="exportBackup()" disabled title="导出 bans + settings JSON">导出备份</button>
+      <button id="btnImport" class="bs" type="button" onclick="importBackup()" disabled title="导入备份 JSON">导入备份</button>
+      <input id="importFile" type="file" accept="application/json,.json" hidden>
       <button id="clearFilterBtn" class="bg" type="button">清除筛选</button>
       <label class="chk"><input id="autoRefresh" type="checkbox" checked> 30 秒自动刷新</label>
     </div>
@@ -198,6 +258,7 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
       <button id="unbanAll" class="bd" type="button" onclick="unbanAll()" disabled>全部解禁</button>
     </div>
     <div class="row"><div id="message" class="msg">系统待命</div></div>
+    <div class="progress" id="progress"><i id="progressBar"></i></div>
   </section>
 
   <section class="panel">
@@ -212,6 +273,13 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
       </table>
       <div id="empty" class="empty" hidden>没有匹配的凭证</div>
     </div>
+    <div class="pager" id="pager">
+      <div class="pinfo" id="pageInfo">第 1 / 1 页</div>
+      <div class="pbtns">
+        <button class="bg" id="prevPageBtn" type="button">上一页</button>
+        <button class="bg" id="nextPageBtn" type="button">下一页</button>
+      </div>
+    </div>
   </section>
   <p class="foot">
     点状态芯片筛选 · 有密钥后可单行/批量操作。
@@ -219,6 +287,7 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
     配置改动立即生效，进程重启后回落 config.yaml。
   </p>
 </div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <div class="drawer-mask" id="drawerMask"></div>
 <aside class="drawer" id="drawer" aria-hidden="true">
@@ -285,7 +354,7 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
 const resourceBase='/v0/resource/plugins/xai-autoban';
 const mgmtBase='/v0/management/plugins/xai-autoban';
 const KEY_STORE='xai_autoban_management_key';
-const state={bans:[],credentials:[],counts:{},filter:'all',query:'',selected:new Set(),timer:null,mgmtKey:'',settings:{},success:'unban',fail:'ban',autoExecute:true,history:[]};
+const state={bans:[],credentials:[],counts:{},page:{page:1,page_size:50,total:0,pages:1,filter:'all',q:''},filter:'all',query:'',selected:new Set(),timer:null,searchTimer:null,toastTimer:null,busy:false,mgmtKey:'',settings:{},success:'unban',fail:'ban',autoExecute:true,history:[]};
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
@@ -313,10 +382,11 @@ function readManagementKey(){
   return '';
 }
 function setActionEnabled(ok){
-  const ids=['btnProbe','unbanSelected','banSelected','disableSelected','reenableSelected','unbanAll','saveConfigBtn'];
-  ids.forEach(id=>{const el=$(id); if(el) el.disabled=!ok;});
+  const can=!!ok && !state.busy;
+  const ids=['btnProbe','btnRecheck429','btnBackup','btnImport','unbanSelected','banSelected','disableSelected','reenableSelected','unbanAll','saveConfigBtn'];
+  ids.forEach(id=>{const el=$(id); if(el) el.disabled=!can;});
   const n=state.selected.size;
-  if(ok){
+  if(can){
     ['unbanSelected','banSelected','disableSelected','reenableSelected'].forEach(id=>{const el=$(id); if(el) el.disabled=n===0;});
   }
   if($('unbanSelected')) $('unbanSelected').textContent='解禁所选 ('+n+')';
@@ -360,44 +430,107 @@ async function apiMgmt(method,path,body){
   const t=await r.text(); let d; try{d=JSON.parse(t)}catch(_){throw new Error(t||('HTTP '+r.status))}
   if(!r.ok) throw new Error(d.error||d.message||('HTTP '+r.status)); return d;
 }
-function setMessage(text,err=false){$('message').textContent=text;$('message').className='msg'+(err?' err':'')}
+function setMessage(text,err=false){
+  const m=$('message'); if(m){ m.textContent=text; m.className='msg'+(err?' err':''); }
+}
+function toast(text, kind=''){
+  const el=$('toast'); if(!el) return;
+  el.textContent=text||'';
+  el.className='toast show'+(kind?' '+kind:'');
+  if(state.toastTimer) clearTimeout(state.toastTimer);
+  state.toastTimer=setTimeout(()=>{ el.className='toast'; }, 2800);
+}
+function setBusy(on, label){
+  state.busy=!!on;
+  const live=$('syncState');
+  if(live){
+    if(on){ live.textContent=label||'处理中'; live.className='live busy'; }
+    else if(live.classList.contains('busy')){ live.textContent='在线'; live.className='live'; }
+  }
+  setActionEnabled(!!state.mgmtKey && !on);
+}
+function setProgress(cur, total){
+  const wrap=$('progress'), bar=$('progressBar');
+  if(!wrap||!bar) return;
+  if(!total || total<=0){ wrap.classList.remove('on'); bar.style.width='0%'; return; }
+  wrap.classList.add('on');
+  const pct=Math.max(2, Math.min(100, Math.round(cur/total*100)));
+  bar.style.width=pct+'%';
+  if(cur>=total){ setTimeout(()=>{ wrap.classList.remove('on'); bar.style.width='0%'; }, 350); }
+}
 function counts(){const o={401:0,402:0,403:0,429:0}; for(const b of state.bans) if(o[b.status_code]!==undefined) o[b.status_code]++; return o}
 function paintChips(){
   const c=state.counts||{};
   const set=(id,v)=>{const el=$(id); if(el) el.textContent=String(v??0)};
   set('c_all',c.all); set('c_healthy',c.healthy); set('c_banned',c.banned);
   set('c_401',c['401']); set('c_402',c['402']); set('c_403',c['403']); set('c_429',c['429']); set('c_disabled',c.disabled);
+  set('ov_all',c.all); set('ov_healthy',c.healthy); set('ov_banned',c.banned);
+  const sub=$('ov_banned_sub');
+  if(sub){
+    const parts=[];
+    if(c['401']) parts.push('401:'+c['401']);
+    if(c['402']) parts.push('402:'+c['402']);
+    if(c['403']) parts.push('403:'+c['403']);
+    if(c['429']) parts.push('429:'+c['429']);
+    if(c.disabled) parts.push('禁用:'+c.disabled);
+    sub.textContent=parts.length?parts.join(' · '):'点击查看隔离列表';
+  }
   document.querySelectorAll('#statusChips [data-filter]').forEach(btn=>{
     btn.classList.toggle('active', btn.dataset.filter===state.filter);
   });
 }
+function paintOverviewProbe(probe){
+  const n=$('ov_probe'), sub=$('ov_probe_sub'), card=$('ov_probe_card');
+  if(!n) return;
+  probe=probe||{};
+  const ok=probe.last_ok, fail=probe.last_fail, err=probe.last_err;
+  if(probe.last_run && probe.last_run.indexOf('0001')!==0){
+    n.textContent=String((ok||0))+'/'+String((ok||0)+(fail||0));
+    let line=(probe.last_run?formatDate(probe.last_run):'')+(err?(' · '+err):'');
+    if(probe.auto_execute===false) line=(line?line+' · ':'')+'只输出';
+    sub.textContent=line||'点击立即巡检';
+    if(card){ card.className='qcard'+(fail>0?' bad':(ok>0?' ok':' info')); }
+  }else{
+    n.textContent='—';
+    sub.textContent=probe.enabled?'定时已开 · 尚未执行':'定时关闭 · 点击立即巡检';
+    if(card) card.className='qcard info';
+  }
+}
+function jumpOverview(kind){
+  if(kind==='probe'){
+    if(state.mgmtKey) runProbe();
+    else { setMessage('请先保存管理密钥再巡检',true); toast('请先保存管理密钥','err'); }
+    return;
+  }
+  state.filter=kind||'all';
+  state.page.page=1;
+  paintChips();
+  loadData(true);
+  const table=document.querySelector('.table-wrap');
+  if(table) table.scrollIntoView({behavior:'smooth',block:'start'});
+}
 function setFilter(f){
   if(state.filter===f) state.filter='all'; else state.filter=f||'all';
-  const wrap=document.querySelector('.table-wrap');
-  if(wrap){ wrap.classList.add('fade'); setTimeout(()=>{paintChips(); render(); wrap.classList.remove('fade');},90); }
-  else { paintChips(); render(); }
+  state.page.page=1;
+  paintChips();
+  loadData(true);
 }
-function matchFilter(c){
-  const f=state.filter||'all';
-  if(f==='all') return true;
-  if(f==='healthy') return !c.disabled && !c.banned;
-  if(f==='banned') return !!c.banned;
-  if(f==='disabled') return !!c.disabled;
-  if(f==='401'||f==='402'||f==='403'||f==='429') return !!c.banned && String(c.status_code)===f;
-  return true;
+function filtered(){ return state.credentials||[]; }
+function pageQueryString(){
+  const p=new URLSearchParams();
+  p.set('filter', state.filter||'all');
+  p.set('page', String(state.page.page||1));
+  p.set('page_size', String(state.page.page_size||50));
+  if(state.query) p.set('q', state.query);
+  return p.toString();
 }
-function filtered(){
-  const q=state.query.toLowerCase();
-  const list=(state.credentials&&state.credentials.length)?state.credentials:state.bans.map(b=>({
-    auth_id:b.auth_id, status_code:b.status_code, reason:b.reason, action:b.action,
-    banned:true, disabled:false, status:String(b.status_code||'banned'),
-    banned_at:b.banned_at, reset_at:b.reset_at, remaining_seconds:b.remaining_seconds, source:b.source
-  }));
-  return list.filter(c=>{
-    if(!matchFilter(c)) return false;
-    if(!q) return true;
-    return [c.auth_id,c.name,c.label,c.reason,c.action,c.status].some(x=>String(x||'').toLowerCase().includes(q));
-  });
+function paintPager(){
+  const p=state.page||{page:1,pages:1,total:0,page_size:50};
+  const info=$('pageInfo');
+  if(info) info.textContent='第 '+(p.page||1)+' / '+(p.pages||1)+' 页 · 共 '+(p.total||0)+' 条 · 每页 '+(p.page_size||50);
+  const prev=$('prevPageBtn'), next=$('nextPageBtn');
+  if(prev) prev.disabled=!(p.page>1);
+  if(next) next.disabled=!(p.page<p.pages);
 }
 function formatDate(v){const d=new Date(v); return Number.isNaN(d.getTime())?v:d.toLocaleString('zh-CN',{hour12:false})}
 function formatRemaining(s){s=Math.max(0,Number(s||0)); const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60); if(d)return d+'天 '+h+'小时'; if(h)return h+'小时 '+m+'分'; return m+'分钟'}
@@ -490,24 +623,25 @@ async function saveSettings(){
 }
 async function loadData(silent=false){
   try{
-    if(!silent){ $('syncState').textContent='同步中'; setMessage('正在加载…'); }
-    const data=await apiResource('/data');
+    if(!silent){ $('syncState').textContent='同步中'; $('syncState').className='live busy'; setMessage('正在加载…'); }
+    const data=await apiResource('/data?'+pageQueryString());
     state.bans=data.bans||[];
     state.credentials=data.credentials||[];
     state.counts=data.counts||{};
+    if(data.page) state.page=Object.assign({page:1,page_size:50,total:0,pages:1}, data.page);
     if(data.settings) renderSettingsSummary(data.settings);
-    if(data.probe&&data.probe.history) renderHistory(data.probe.history);
+    if(data.probe){ paintOverviewProbe(data.probe); if(data.probe.history) renderHistory(data.probe.history); }
     for(const id of [...state.selected]) if(!state.credentials.some(x=>x.auth_id===id)&&!state.bans.some(x=>x.auth_id===id)) state.selected.delete(id);
     const c=counts();
     if($('total')) $('total').textContent=String(data.count||0);
     if($('count402')) $('count402').textContent=String(c[402]||0);
     if($('count403')) $('count403').textContent=String(c[403]||0);
     if($('count429')) $('count429').textContent=String(c[429]||0);
-    paintChips();
-    $('syncState').textContent='在线';
+    paintChips(); paintPager();
+    if(!state.busy){ $('syncState').textContent='在线'; $('syncState').className='live'; }
     setMessage('已更新 · '+new Date().toLocaleTimeString('zh-CN',{hour12:false}));
     render();
-  }catch(e){ $('syncState').textContent='异常'; setMessage(e.message,true); }
+  }catch(e){ $('syncState').textContent='异常'; $('syncState').className='live err'; setMessage(e.message,true); toast(e.message,'err'); }
 }
 function statusBadge(c){
   const st=c.status||(c.disabled?'disabled':(c.banned?String(c.status_code||'banned'):'healthy'));
@@ -537,7 +671,9 @@ function probeCell(c){
 function render(){
   const list=filtered();
   const filterLabel={all:'全部',healthy:'健康',banned:'隔离',disabled:'已禁用','401':'401','402':'402','403':'403','429':'429'}[state.filter]||state.filter;
-  $('resultCount').textContent=list.length+' 条 · 筛选 '+filterLabel;
+  const p=state.page||{};
+  $('resultCount').textContent=(p.total!=null?p.total:list.length)+' 条 · 筛选 '+filterLabel+(p.pages>1?(' · 第 '+(p.page||1)+'/'+p.pages+' 页'):'');
+  paintPager();
   $('rows').innerHTML=list.map(c=>{
     const name=c.name||c.label||'-';
     const remain=c.banned?formatRemaining(c.remaining_seconds):'-';
@@ -563,44 +699,135 @@ function render(){
   setActionEnabled(!!state.mgmtKey);
 }
 async function runRowAction(act,id){
-  if(!id) return;
+  if(!id||state.busy) return;
   const labels={unban:'解禁',ban:'ban 隔离',disable:'禁用',reenable:'重新启用'};
   if(!confirm('确认对凭证执行「'+(labels[act]||act)+'」？\n'+id)) return;
   try{
-    setMessage('正在执行 '+ (labels[act]||act) +'…');
-    if(act==='unban'){
-      await apiMgmt('POST','/unban',{auth_id:id});
-    }else{
-      await apiMgmt('POST','/apply-action',{auth_id:id,action:act,force:true});
-    }
+    setBusy(true, labels[act]||act);
+    setProgress(0,1);
+    setMessage('正在执行 '+(labels[act]||act)+'…');
+    if(act==='unban') await apiMgmt('POST','/unban',{auth_id:id});
+    else await apiMgmt('POST','/apply-action',{auth_id:id,action:act,force:true});
+    setProgress(1,1);
     state.selected.delete(id);
     setMessage('已完成 · '+(labels[act]||act));
+    toast('已完成 · '+(labels[act]||act),'ok');
     await loadData(true);
-  }catch(e){ setMessage(e.message,true); }
+  }catch(e){ setMessage(e.message,true); toast(e.message,'err'); }
+  finally{ setBusy(false); }
 }
 async function unbanOne(id){ return runRowAction('unban',id); }
 async function bulkAct(act){
+  if(state.busy) return;
   const ids=[...state.selected];
-  if(!ids.length){ setMessage('请先勾选凭证',true); return; }
+  if(!ids.length){ setMessage('请先勾选凭证',true); toast('请先勾选凭证','err'); return; }
   const labels={unban:'解禁',ban:'ban',disable:'disable',reenable:'reenable'};
   if(!confirm('确认对所选 '+ids.length+' 条执行「'+(labels[act]||act)+'」？')) return;
   try{
+    setBusy(true,'批量中');
     let i=0;
     for(const id of ids){
-      i++; setMessage('正在处理 '+i+'/'+ids.length+' …');
+      i++; setProgress(i-1, ids.length); setMessage('正在处理 '+i+'/'+ids.length+' …');
       if(act==='unban') await apiMgmt('POST','/unban',{auth_id:id});
       else await apiMgmt('POST','/apply-action',{auth_id:id,action:act,force:true});
+      setProgress(i, ids.length);
     }
     state.selected.clear();
     setMessage('批量完成 · '+(labels[act]||act)+' × '+ids.length);
+    toast('批量完成 · '+(labels[act]||act)+' × '+ids.length,'ok');
     await loadData(true);
-  }catch(e){ setMessage(e.message,true); }
+  }catch(e){ setMessage(e.message,true); toast(e.message,'err'); }
+  finally{ setBusy(false); setProgress(0,0); }
 }
 async function unbanSelected(){ return bulkAct('unban'); }
-async function unbanAll(){ if(!confirm('确认解禁全部隔离？')) return; try{ await apiMgmt('POST','/unban-all',{}); state.selected.clear(); setMessage('已全部解禁'); await loadData(true);}catch(e){setMessage(e.message,true)} }
-async function runProbe(){ if(!confirm('立即巡检全部 xAI 凭据？')) return; try{ setMessage('巡检中…'); const res=await apiMgmt('POST','/probe',{force:false}); setMessage('巡检完成 成功='+(res.result&&res.result.ok)+' 失败='+(res.result&&res.result.failed)+(res.result&&res.result.report_only?'（只输出结果）':'')); await loadData(true);}catch(e){setMessage(e.message,true)} }
+async function unbanAll(){
+  if(state.busy||!confirm('确认解禁全部隔离？')) return;
+  try{
+    setBusy(true,'解禁全部'); setProgress(0,1);
+    await apiMgmt('POST','/unban-all',{});
+    setProgress(1,1); state.selected.clear();
+    setMessage('已全部解禁'); toast('已全部解禁','ok');
+    await loadData(true);
+  }catch(e){ setMessage(e.message,true); toast(e.message,'err'); }
+  finally{ setBusy(false); }
+}
+async function runProbe(){
+  if(state.busy||!confirm('立即巡检全部 xAI 凭据？')) return;
+  try{
+    setBusy(true,'巡检中'); setProgress(30,100);
+    setMessage('巡检中…');
+    const res=await apiMgmt('POST','/probe',{force:false});
+    setProgress(100,100);
+    const msg='巡检完成 成功='+(res.result&&res.result.ok)+' 失败='+(res.result&&res.result.failed)+(res.result&&res.result.report_only?'（只输出结果）':'');
+    setMessage(msg); toast(msg,'ok');
+    await loadData(true);
+  }catch(e){ setMessage(e.message,true); toast(e.message,'err'); }
+  finally{ setBusy(false); setProgress(0,0); }
+}
+async function recheck429(){
+  if(state.busy||!confirm('仅复检当前 429 隔离凭证？\n恢复则解禁，仍限流则刷新隔离窗口。')) return;
+  try{
+    setBusy(true,'429 复检'); setProgress(40,100);
+    setMessage('429 复检中…');
+    const res=await apiMgmt('POST','/bans-recheck-429',{force:true});
+    setProgress(100,100);
+    const r=res.result||{};
+    const msg='429 复检完成 · 检'+(r.checked||0)+' 解禁'+(r.unbanned||0)+' 续锁'+(r.relocked||0)+' 跳过'+(r.skipped||0)+' 失败'+(r.failed||0);
+    setMessage(msg); toast(msg,'ok');
+    state.filter='429'; state.page.page=1; paintChips();
+    await loadData(true);
+  }catch(e){ setMessage(e.message,true); toast(e.message,'err'); }
+  finally{ setBusy(false); setProgress(0,0); }
+}
+async function exportBackup(){
+  if(state.busy) return;
+  try{
+    setBusy(true,'导出中'); setProgress(40,100);
+    setMessage('正在导出备份…');
+    const data=await apiMgmt('GET','/backup');
+    setProgress(100,100);
+    const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    const ts=new Date().toISOString().replace(/[:.]/g,'-');
+    a.href=url; a.download='xai-autoban-backup-'+ts+'.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    const n=(data.bans&&data.bans.length)||data.count||0;
+    setMessage('备份已下载 · bans='+n);
+    toast('备份已下载 · bans='+n,'ok');
+  }catch(e){ setMessage(e.message,true); toast(e.message,'err'); }
+  finally{ setBusy(false); setProgress(0,0); }
+}
+function importBackup(){
+  if(state.busy) return;
+  const f=$('importFile'); if(!f) return;
+  f.value=''; f.click();
+}
+async function handleImportFile(file){
+  if(!file||state.busy) return;
+  try{
+    setBusy(true,'导入中'); setProgress(20,100);
+    setMessage('正在读取备份…');
+    const text=await file.text();
+    let obj; try{ obj=JSON.parse(text); }catch(_){ throw new Error('JSON 解析失败'); }
+    const bansN=(obj.bans&&obj.bans.length)||(obj.status&&obj.status.bans&&obj.status.bans.length)||0;
+    const hasSettings=!!(obj.settings||(obj.status&&obj.status.settings));
+    if(!confirm('确认导入备份？\n隔离项约 '+bansN+' 条'+(hasSettings?'\n将同时应用 settings（运行时）':'')+'\n仅导入尚未过期的 bans。')) {
+      setBusy(false); setProgress(0,0); return;
+    }
+    setProgress(60,100); setMessage('正在导入…');
+    const res=await apiMgmt('POST','/import', obj);
+    setProgress(100,100);
+    const msg='导入完成 · bans='+(res.imported||0)+(res.settings_applied?' · 已应用 settings':'');
+    setMessage(msg); toast(msg,'ok');
+    await loadData(true);
+  }catch(e){ setMessage(e.message,true); toast(e.message,'err'); }
+  finally{ setBusy(false); setProgress(0,0); }
+}
 
-$('saveKeyBtn').onclick=()=>{const v=$('mgmtKeyInput').value.trim(); if(!v){setMessage('请先粘贴管理密钥',true);return;} localStorage.setItem(KEY_STORE,v); $('mgmtKeyInput').value=''; setAuthUI(); setMessage('密钥已保存');};
+if($('importFile')) $('importFile').onchange=e=>{ const f=e.target.files&&e.target.files[0]; if(f) handleImportFile(f); };
+$('saveKeyBtn').onclick=()=>{const v=$('mgmtKeyInput').value.trim(); if(!v){setMessage('请先粘贴管理密钥',true);return;} localStorage.setItem(KEY_STORE,v); $('mgmtKeyInput').value=''; setAuthUI(); setMessage('密钥已保存'); toast('密钥已保存','ok');};
 $('clearKeyBtn').onclick=()=>{localStorage.removeItem(KEY_STORE); $('mgmtKeyInput').value=''; setAuthUI(); setMessage('已清除密钥');};
 if($('toggleKeyBtn')) $('toggleKeyBtn').onclick=()=>{
   const input=$('mgmtKeyInput'); const saveBtn=$('saveKeyBtn');
@@ -609,11 +836,19 @@ if($('toggleKeyBtn')) $('toggleKeyBtn').onclick=()=>{
   if(saveBtn) saveBtn.hidden=input.hidden;
   if(!input.hidden) input.focus();
 };
-if($('clearFilterBtn')) $('clearFilterBtn').onclick=()=>{state.filter='all'; state.query=''; if($('search')) $('search').value=''; paintChips(); render(); setMessage('已清除筛选');};
-$('search').oninput=e=>{state.query=e.target.value.trim(); render();};
+if($('clearFilterBtn')) $('clearFilterBtn').onclick=()=>{state.filter='all'; state.query=''; state.page.page=1; if($('search')) $('search').value=''; paintChips(); loadData(true); setMessage('已清除筛选');};
+$('search').oninput=e=>{
+  state.query=e.target.value.trim();
+  state.page.page=1;
+  if(state.searchTimer) clearTimeout(state.searchTimer);
+  state.searchTimer=setTimeout(()=>loadData(true),280);
+};
 $('selectPage').onchange=e=>{for(const c of filtered()) e.target.checked?state.selected.add(c.auth_id):state.selected.delete(c.auth_id); render();};
+if($('prevPageBtn')) $('prevPageBtn').onclick=()=>{ if((state.page.page||1)>1){ state.page.page--; loadData(true);} };
+if($('nextPageBtn')) $('nextPageBtn').onclick=()=>{ if((state.page.page||1)<(state.page.pages||1)){ state.page.page++; loadData(true);} };
 $('autoRefresh').onchange=()=>{if(state.timer) clearInterval(state.timer); state.timer=$('autoRefresh').checked?setInterval(()=>loadData(true),30000):null;};
 document.querySelectorAll('#statusChips [data-filter]').forEach(btn=>btn.onclick=()=>setFilter(btn.dataset.filter));
+document.querySelectorAll('#overviewCards [data-jump]').forEach(btn=>btn.onclick=()=>jumpOverview(btn.dataset.jump));
 if($('toggleHistBtn')) $('toggleHistBtn').onclick=()=>{
   const wrap=$('histWrap'); const btn=$('toggleHistBtn'); if(!wrap||!btn) return;
   const open=wrap.classList.toggle('open');
