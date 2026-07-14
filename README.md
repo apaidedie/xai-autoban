@@ -2,7 +2,7 @@
 
 CLIProxyAPI 原生插件：自动隔离异常 xAI 凭据，支持可配置 ban 时长/动作、定时+手动巡检、disable/delete（best-effort）、管理面板。
 
-版本：**0.5.6**
+版本：**0.5.7**
 
 ## 方式 A：插件商店安装（推荐）
 
@@ -149,6 +149,15 @@ CPA 凭证管理里的 **启用/停用开关** 读的是账号状态字段（Man
 
 **0.5.5 起：** 只要配置了 `management_key`（或环境变量密钥），`禁用/启用` 会 **优先走 Management API**，并顺带写 JSON 备注。
 
+**0.5.7 起：** Management API 调用改为插件内 **直连 HTTP（不走 CPA 全局代理 / host.HTTPDo）**。  
+若 CPA 配置了 `proxy-url`（住宅代理等），经 `host.HTTPDo` 访问 `127.0.0.1` 会被代理拒绝，常见报错：
+
+```text
+management api HTTP 403: You are forbidden to connect to client_connect_invalid_ip
+```
+
+直连后即可对本机 Management API 正常 `PATCH`。
+
 ### disable_via=management_api
 
 强制只走 CPA Management API（失败不回退）：
@@ -159,7 +168,8 @@ PATCH /v0/management/auth-files/status
 ```
 
 需配置 `management_key` 或 `management_key_env`（默认读 `CPA_MANAGEMENT_KEY`）。  
-管理接口返回 401/403 时会进入冷却，避免连续错误触发 CPA 管理口 IP 封禁。
+管理接口返回 **鉴权类** 401/403 时会进入冷却，避免连续错误触发 CPA 管理口 IP 封禁。  
+代理类 403（`client_connect_invalid_ip`）**不会**进入鉴权冷却。
 
 **推荐最小配置（让运维台「禁用」真正生效）：**
 
@@ -176,6 +186,8 @@ plugins:
 ```bash
 export CPA_MANAGEMENT_KEY='你的 CPA remote-management 密钥'
 ```
+
+运维台也可在浏览器里保存与 CPA 相同的管理密钥；请求会带 `Authorization: Bearer`，插件优先用该密钥直连 Management API。
 
 ## 管理 API
 

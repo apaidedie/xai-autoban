@@ -224,6 +224,8 @@ func TestDisableViaManagementAPI(t *testing.T) {
 	cfg.ManagementURL = "http://127.0.0.1:8317"
 	cfg.ManagementKey = "test-mgmt-key"
 	eng := newActionEngine(cfg, &bans, newAuditLog(20), stub, nil)
+	// Tests inject host.HTTPDo; production uses direct no-proxy net/http.
+	eng.mgmt.httpDo = hostHTTPDoer(stub)
 	if err := eng.setDisabled("m1", true, "xai-autoban:test"); err != nil {
 		t.Fatal(err)
 	}
@@ -255,6 +257,7 @@ func TestDisableUsesRequestBearerKey(t *testing.T) {
 	}
 	// no management_key in config — only request bearer
 	eng := newActionEngine(defaultConfig(), &bans, newAuditLog(20), stub, nil)
+	eng.mgmt.httpDo = hostHTTPDoer(stub)
 	eng.setRequestManagementKey("ops-console-key")
 	defer eng.clearRequestManagementKey()
 	if err := eng.setDisabled("m2", true, "xai-autoban:manual_disable"); err != nil {
@@ -262,6 +265,29 @@ func TestDisableUsesRequestBearerKey(t *testing.T) {
 	}
 	if authHeader != "Bearer ops-console-key" {
 		t.Fatalf("expected request bearer, got %q", authHeader)
+	}
+}
+
+func TestDirectManagementHTTPBypassesProxySemantics(t *testing.T) {
+	// Ensure production path is wired and Proxy is nil on the shared transport.
+	if directMgmtTransport == nil || directMgmtTransport.Proxy != nil {
+		// Proxy == nil means "do not use proxy" (not ProxyFromEnvironment).
+		// A non-nil Proxy func would be wrong for localhost management.
+		if directMgmtTransport != nil && directMgmtTransport.Proxy != nil {
+			t.Fatal("directMgmtTransport must not set Proxy (would reintroduce client_connect_invalid_ip)")
+		}
+	}
+	// Proxy-style 403 must not start auth cooldown.
+	err := &managementHTTPError{StatusCode: 403, Body: "You are forbidden to connect to client_connect_invalid_ip"}
+	if isManagementAuthError(err) {
+		t.Fatal("proxy invalid_ip 403 must not be treated as management auth failure")
+	}
+	if !isManagementAuthError(&managementHTTPError{StatusCode: 403, Body: `{"error":"remote management disabled"}`}) {
+		t.Fatal("true management forbidden should cool down")
+	}
+	annotated := annotateManagementError(err)
+	if annotated == nil || !strings.Contains(annotated.Error(), "直连") {
+		t.Fatalf("expected proxy hint, got %v", annotated)
 	}
 }
 

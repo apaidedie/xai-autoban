@@ -11,7 +11,7 @@ import (
 
 const (
 	pluginName    = "xai-autoban"
-	pluginVersion = "0.5.6"
+	pluginVersion = "0.5.7"
 	providerXAI   = "xai"
 )
 
@@ -19,7 +19,7 @@ var (
 	bans      banState
 	audit     = newAuditLog(200)
 	cfgMu     sync.RWMutex
-	activeCfg = defaultConfig()
+	activeCfg            = defaultConfig()
 	hostImpl  HostClient = realHostClient{}
 	persister            = newStatePersister("", &bans)
 	engine               = newActionEngine(defaultConfig(), &bans, audit, hostImpl, func() {
