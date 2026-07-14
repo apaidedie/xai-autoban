@@ -149,6 +149,8 @@ func TestStatusPageUsesManagementKeyFlow(t *testing.T) {
 		"overviewCards",
 		"ov_healthy",
 		"jumpOverview",
+		"recheck-selected",
+		"复检所选",
 	} {
 		if !strings.Contains(page, required) {
 			t.Fatalf("page missing %q", required)
@@ -191,6 +193,63 @@ func TestImportSnapshot(t *testing.T) {
 	response := importSnapshot(raw)
 	if response.StatusCode != http.StatusOK || currentStatus().Count != 1 {
 		t.Fatalf("snapshot was not restored: response=%d status=%#v", response.StatusCode, currentStatus())
+	}
+}
+
+func TestRecheckSelectedIncludesDisabled(t *testing.T) {
+	bans.clearAll()
+	stub := &stubHost{
+		files: []pluginapi.HostAuthFileEntry{
+			{ID: "dis-ok", AuthIndex: "10", Name: "xai-dis-ok", Provider: "xai", Disabled: true, Email: "a@x.ai"},
+			{ID: "dis-bad", AuthIndex: "11", Name: "xai-dis-bad", Provider: "xai", Disabled: true, Email: "b@x.ai"},
+		},
+		jsonBy: map[string]json.RawMessage{
+			"10": json.RawMessage(`{"access_token":"tok-ok","disabled":true}`),
+			"11": json.RawMessage(`{"access_token":"tok-bad","disabled":true}`),
+		},
+		httpFn: func(req pluginapi.HTTPRequest) (pluginapi.HTTPResponse, error) {
+			if strings.Contains(req.Headers.Get("Authorization"), "tok-ok") {
+				return pluginapi.HTTPResponse{StatusCode: 200, Body: []byte(`{"data":[]}`)}, nil
+			}
+			return pluginapi.HTTPResponse{StatusCode: 401, Body: []byte(`no`)}, nil
+		},
+	}
+	prevHost := hostImpl
+	prevProbe := probeSvc
+	prevEngine := engine
+	hostImpl = stub
+	engine = newActionEngine(defaultConfig(), &bans, audit, stub, nil)
+	probeSvc = newProbeService(defaultConfig(), stub, engine)
+	t.Cleanup(func() {
+		hostImpl = prevHost
+		probeSvc = prevProbe
+		engine = prevEngine
+	})
+
+	resp := dispatchManagement(pluginapi.ManagementRequest{
+		Method: http.MethodPost,
+		Path:   "/v0/management/plugins/xai-autoban/recheck-selected",
+		Body:   []byte(`{"auth_ids":["dis-ok","dis-bad"],"reenable_on_ok":true}`),
+	})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status %d body=%s", resp.StatusCode, string(resp.Body))
+	}
+	var payload map[string]any
+	_ = json.Unmarshal(resp.Body, &payload)
+	result, _ := payload["result"].(map[string]any)
+	if int(result["checked"].(float64)) != 2 {
+		t.Fatalf("result=%#v", result)
+	}
+	if int(result["ok"].(float64)) != 1 || int(result["failed"].(float64)) != 1 {
+		t.Fatalf("ok/failed: %#v", result)
+	}
+	// recovered disabled should reenable (save with disabled=false)
+	if len(stub.saves) < 1 {
+		t.Fatal("expected reenable save for recovered disabled cred")
+	}
+	// failed should be banned
+	if !bans.active("dis-bad", time.Now()) && !bans.active("b@x.ai", time.Now()) {
+		t.Fatal("failed selected recheck should ban")
 	}
 }
 

@@ -30,6 +30,7 @@ func managementRegistration() pluginapi.ManagementRegistrationResponse {
 			{Method: http.MethodPost, Path: managementPrefix + "/probe", Description: "Run credential probe immediately."},
 			{Method: http.MethodPost, Path: managementPrefix + "/apply-action", Description: "Manually apply ban|disable|delete|reenable. Body: {\"auth_id\",\"action\",\"force?\"}."},
 			{Method: http.MethodPost, Path: managementPrefix + "/bans-recheck-429", Description: "Probe currently isolated 429 credentials; unban if recovered, else refresh ban window."},
+			{Method: http.MethodPost, Path: managementPrefix + "/recheck-selected", Description: "Concurrently probe selected credentials (includes disabled). Body: {\"auth_ids\":[],\"reenable_on_ok?\":true}."},
 		},
 		Resources: []pluginapi.ResourceRoute{
 			{Path: "/status", Menu: "xAI Autoban", Description: "View xAI autoban status; mutations require management key."},
@@ -135,6 +136,26 @@ func dispatchManagement(req pluginapi.ManagementRequest) pluginapi.ManagementRes
 			return jsonResponse(http.StatusBadGateway, map[string]any{"error": err.Error(), "result": res})
 		}
 		audit.add("manual", "", "recheck429", "ok", fmt.Sprintf("checked=%d unbanned=%d relocked=%d", res.Checked, res.Unbanned, res.Relocked), 0)
+		return jsonResponse(http.StatusOK, map[string]any{"ok": true, "result": res, "status": currentStatus()})
+	case method == http.MethodPost && strings.HasSuffix(path, managementPrefix+"/recheck-selected"):
+		var body struct {
+			AuthIDs      []string `json:"auth_ids"`
+			ReenableOnOK *bool    `json:"reenable_on_ok"`
+		}
+		_ = json.Unmarshal(req.Body, &body)
+		reenable := true
+		if body.ReenableOnOK != nil {
+			reenable = *body.ReenableOnOK
+		}
+		res, err := recheckSelectedCredentials(body.AuthIDs, reenable)
+		if err != nil {
+			code := http.StatusBadGateway
+			if strings.Contains(err.Error(), "missing_auth_ids") {
+				code = http.StatusBadRequest
+			}
+			return jsonResponse(code, map[string]any{"error": err.Error(), "result": res})
+		}
+		audit.add("manual", "", "recheck_selected", "ok", fmt.Sprintf("checked=%d ok=%d failed=%d reenabled=%d", res.Checked, res.OK, res.Failed, res.Reenabled), 0)
 		return jsonResponse(http.StatusOK, map[string]any{"ok": true, "result": res, "status": currentStatus()})
 	case method == http.MethodGet && strings.HasSuffix(path, resourcePrefix+"/data"):
 		return jsonResponse(http.StatusOK, currentStatusPaged(req.Query))

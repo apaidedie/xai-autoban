@@ -255,6 +255,7 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
       <button id="banSelected" class="bs" type="button" onclick="bulkAct('ban')" disabled>ban 所选</button>
       <button id="disableSelected" class="bs" type="button" onclick="bulkAct('disable')" disabled>disable 所选</button>
       <button id="reenableSelected" class="bs" type="button" onclick="bulkAct('reenable')" disabled>reenable 所选</button>
+      <button id="recheckSelected" class="bp" type="button" onclick="recheckSelected()" disabled title="并发探测勾选凭证（含已禁用）；成功可自动 reenable">复检所选</button>
       <button id="unbanAll" class="bd" type="button" onclick="unbanAll()" disabled>全部解禁</button>
     </div>
     <div class="row"><div id="message" class="msg">系统待命</div></div>
@@ -383,13 +384,14 @@ function readManagementKey(){
 }
 function setActionEnabled(ok){
   const can=!!ok && !state.busy;
-  const ids=['btnProbe','btnRecheck429','btnBackup','btnImport','unbanSelected','banSelected','disableSelected','reenableSelected','unbanAll','saveConfigBtn'];
+  const ids=['btnProbe','btnRecheck429','btnBackup','btnImport','unbanSelected','banSelected','disableSelected','reenableSelected','recheckSelected','unbanAll','saveConfigBtn'];
   ids.forEach(id=>{const el=$(id); if(el) el.disabled=!can;});
   const n=state.selected.size;
   if(can){
-    ['unbanSelected','banSelected','disableSelected','reenableSelected'].forEach(id=>{const el=$(id); if(el) el.disabled=n===0;});
+    ['unbanSelected','banSelected','disableSelected','reenableSelected','recheckSelected'].forEach(id=>{const el=$(id); if(el) el.disabled=n===0;});
   }
   if($('unbanSelected')) $('unbanSelected').textContent='解禁所选 ('+n+')';
+  if($('recheckSelected')) $('recheckSelected').textContent='复检所选 ('+n+')';
 }
 function setAuthUI(){
   state.mgmtKey=readManagementKey();
@@ -775,6 +777,24 @@ async function recheck429(){
     const msg='429 复检完成 · 检'+(r.checked||0)+' 解禁'+(r.unbanned||0)+' 续锁'+(r.relocked||0)+' 跳过'+(r.skipped||0)+' 失败'+(r.failed||0);
     setMessage(msg); toast(msg,'ok');
     state.filter='429'; state.page.page=1; paintChips();
+    await loadData(true);
+  }catch(e){ setMessage(e.message,true); toast(e.message,'err'); }
+  finally{ setBusy(false); setProgress(0,0); }
+}
+async function recheckSelected(){
+  if(state.busy) return;
+  const ids=[...state.selected];
+  if(!ids.length){ setMessage('请先勾选凭证',true); toast('请先勾选凭证','err'); return; }
+  if(!confirm('并发复检所选 '+ids.length+' 条？\n· 含已禁用凭证（全量巡检会跳过它们）\n· 成功：解禁 + 自动 reenable\n· 失败：写入/刷新隔离记录')) return;
+  try{
+    setBusy(true,'复检所选'); setProgress(20,100);
+    setMessage('并发复检 '+ids.length+' 条…');
+    const res=await apiMgmt('POST','/recheck-selected',{auth_ids:ids,reenable_on_ok:true});
+    setProgress(100,100);
+    const r=res.result||{};
+    const msg='复检完成 · 检'+(r.checked||0)+' 成功'+(r.ok||0)+' 失败'+(r.failed||0)+' 解禁'+(r.unbanned||0)+' 启用'+(r.reenabled||0)+' 跳过'+(r.skipped||0);
+    setMessage(msg); toast(msg, (r.failed||0)>0?'err':'ok');
+    state.selected.clear();
     await loadData(true);
   }catch(e){ setMessage(e.message,true); toast(e.message,'err'); }
   finally{ setBusy(false); setProgress(0,0); }
