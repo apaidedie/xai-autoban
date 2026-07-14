@@ -131,7 +131,13 @@ func TestStatusPageUsesManagementKeyFlow(t *testing.T) {
 		"只输出结果",
 		"自动执行",
 		"巡检历史",
-		"当前巡检配置",
+		"data-filter",
+		"credentials",
+		"apply-action",
+		"reenable",
+		"健康",
+		"已禁用",
+		"statusChips",
 	} {
 		if !strings.Contains(page, required) {
 			t.Fatalf("page missing %q", required)
@@ -287,5 +293,65 @@ func TestManagementUnban(t *testing.T) {
 	}
 	if currentStatus().Count != 0 {
 		t.Fatal("expected unban")
+	}
+}
+
+func TestApplyActionReenable(t *testing.T) {
+	bans.clearAll()
+	stub := &stubHost{
+		files: []pluginapi.HostAuthFileEntry{{ID: "auth-r", AuthIndex: "9", Name: "xai-r", Provider: "xai", Disabled: true}},
+		jsonBy: map[string]json.RawMessage{
+			"9": json.RawMessage(`{"access_token":"tok","disabled":true,"note":"xai-autoban:forbidden"}`),
+		},
+	}
+	prev := hostImpl
+	hostImpl = stub
+	engine = newActionEngine(defaultConfig(), &bans, audit, stub, nil)
+	t.Cleanup(func() {
+		hostImpl = prev
+		engine = newActionEngine(defaultConfig(), &bans, audit, hostImpl, func() { persister.scheduleSave() })
+	})
+
+	resp := dispatchManagement(pluginapi.ManagementRequest{
+		Method: http.MethodPost,
+		Path:   "/v0/management/plugins/xai-autoban/apply-action",
+		Body:   []byte(`{"auth_id":"auth-r","action":"reenable","force":true}`),
+	})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status %d body=%s", resp.StatusCode, string(resp.Body))
+	}
+	if len(stub.saves) != 1 {
+		t.Fatalf("expected reenable save, got %d", len(stub.saves))
+	}
+	var obj map[string]any
+	_ = json.Unmarshal(stub.saves[0].JSON, &obj)
+	if obj["disabled"] != false {
+		t.Fatalf("expected disabled false: %#v", obj)
+	}
+	// reenable must not create a ban
+	if bans.active("auth-r", time.Now()) {
+		t.Fatal("reenable should not ban")
+	}
+}
+
+func TestCurrentStatusIncludesCredentials(t *testing.T) {
+	bans.clearAll()
+	stub := &stubHost{
+		files: []pluginapi.HostAuthFileEntry{
+			{ID: "c1", Name: "xai-c1", Provider: "xai"},
+			{ID: "c2", Name: "xai-c2", Provider: "xai"},
+		},
+	}
+	prev := hostImpl
+	hostImpl = stub
+	t.Cleanup(func() { hostImpl = prev })
+	now := time.Now()
+	bans.set("c2", banEntry{StatusCode: 402, Reason: "payment_required", BannedAt: now, ResetAt: now.Add(time.Hour)})
+	st := currentStatus()
+	if len(st.Credentials) != 2 {
+		t.Fatalf("credentials=%d", len(st.Credentials))
+	}
+	if st.Counts.All != 2 || st.Counts.Banned != 1 || st.Counts.Code402 != 1 || st.Counts.Healthy != 1 {
+		t.Fatalf("counts=%+v", st.Counts)
 	}
 }

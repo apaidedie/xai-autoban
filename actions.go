@@ -159,6 +159,15 @@ func (e *actionEngine) applyAction(authID, action, source string, entry banEntry
 		return nil
 	case actionDelete:
 		return e.applyDelete(authID, source, entry, force)
+	case successReenable:
+		if err := e.setDisabled(authID, false, ""); err != nil {
+			e.audit.add(source, authID, successReenable, "error", err.Error(), entry.StatusCode)
+			return err
+		}
+		e.markCooldown(authID, successReenable)
+		e.audit.add(source, authID, successReenable, "ok", "manual reenable", entry.StatusCode)
+		e.notifyChanged()
+		return nil
 	default:
 		return fmt.Errorf("unknown action %q", action)
 	}

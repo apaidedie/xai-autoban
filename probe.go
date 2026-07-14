@@ -27,6 +27,7 @@ type probeService struct {
 	lastFail int
 	runSeq   int64
 	history  []probeRun
+	lastByAuth map[string]probeCredentialResult
 }
 
 func newProbeService(cfg PluginConfig, host HostClient, engine *actionEngine) *probeService {
@@ -181,10 +182,12 @@ func (p *probeService) runOnceTrigger(force bool, trigger string) (probeResult, 
 				mu.Unlock()
 			}
 			status, perr := p.probeOne(cfg, host, f)
+			key := authKey(f)
 			mu.Lock()
 			defer mu.Unlock()
 			if perr != nil {
 				res.Failed++
+				p.rememberProbeResult(key, false, status, perr.Error())
 				entry, ok := p.engine.classifyFailure(status, nil, time.Now())
 				if !ok {
 					entry = banEntry{
@@ -208,12 +211,12 @@ func (p *probeService) runOnceTrigger(force bool, trigger string) (probeResult, 
 				if !cfg.AutoExecute {
 					// Codex-style 只输出结果: still mark ban ledger for visibility, but never disable/delete.
 					entry.Action = actionBan
-					_ = p.engine.applyAction(authKey(f), actionBan, "probe-report", entry, force)
+					_ = p.engine.applyAction(key, actionBan, "probe-report", entry, force)
 					res.Banned++
 					return
 				}
 				action := entry.Action
-				_ = p.engine.applyFailure(authKey(f), "probe", entry, force)
+				_ = p.engine.applyFailure(key, "probe", entry, force)
 				switch action {
 				case actionDisable:
 					res.Disabled++
@@ -227,10 +230,11 @@ func (p *probeService) runOnceTrigger(force bool, trigger string) (probeResult, 
 				return
 			}
 			res.OK++
+			p.rememberProbeResult(key, true, status, "")
 			if !cfg.AutoExecute {
 				return
 			}
-			_ = p.engine.applySuccess(authKey(f), "probe", force)
+			_ = p.engine.applySuccess(key, "probe", force)
 			switch cfg.ProbeOnSuccess {
 			case successUnban:
 				res.Unbanned++
@@ -351,6 +355,33 @@ func authKey(f pluginapi.HostAuthFileEntry) string {
 		return f.AuthIndex
 	}
 	return f.Name
+}
+
+func (p *probeService) rememberProbeResult(authID string, ok bool, status int, errMsg string) {
+	if strings.TrimSpace(authID) == "" {
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.lastByAuth == nil {
+		p.lastByAuth = make(map[string]probeCredentialResult)
+	}
+	p.lastByAuth[authID] = probeCredentialResult{
+		At:     time.Now(),
+		OK:     ok,
+		Status: status,
+		Error:  errMsg,
+	}
+}
+
+func (p *probeService) lastResults() map[string]probeCredentialResult {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out := make(map[string]probeCredentialResult, len(p.lastByAuth))
+	for k, v := range p.lastByAuth {
+		out[k] = v
+	}
+	return out
 }
 
 func (p *probeService) recordRun(res probeResult, errMsg string) {

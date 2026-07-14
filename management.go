@@ -24,7 +24,7 @@ func managementRegistration() pluginapi.ManagementRegistrationResponse {
 			{Method: http.MethodPost, Path: managementPrefix + "/unban-all", Description: "Release all credentials held by xai-autoban."},
 			{Method: http.MethodPost, Path: managementPrefix + "/import", Description: "Restore a previously exported ban snapshot."},
 			{Method: http.MethodPost, Path: managementPrefix + "/probe", Description: "Run credential probe immediately."},
-			{Method: http.MethodPost, Path: managementPrefix + "/apply-action", Description: "Manually apply ban|disable|delete. Body: {\"auth_id\",\"action\",\"force?\"}."},
+			{Method: http.MethodPost, Path: managementPrefix + "/apply-action", Description: "Manually apply ban|disable|delete|reenable. Body: {\"auth_id\",\"action\",\"force?\"}."},
 		},
 		Resources: []pluginapi.ResourceRoute{
 			{Path: "/status", Menu: "xAI Autoban", Description: "View xAI autoban status; mutations require management key."},
@@ -99,15 +99,22 @@ func dispatchManagement(req pluginapi.ManagementRequest) pluginapi.ManagementRes
 			return jsonResponse(http.StatusBadRequest, map[string]any{"error": "missing_auth_id_or_action"})
 		}
 		now := time.Now()
+		action := strings.ToLower(strings.TrimSpace(body.Action))
 		entry := banEntry{
 			StatusCode: 403,
 			Reason:     "manual",
 			BannedAt:   now,
 			ResetAt:    now.Add(currentConfig().durationForStatus(403)),
-			Action:     body.Action,
+			Action:     action,
 			Source:     "manual",
 		}
-		if err := engine.applyAction(body.AuthID, body.Action, "manual", entry, body.Force); err != nil {
+		// reenable does not create a ban ledger entry; still uses applyAction path.
+		if action == successReenable {
+			entry.StatusCode = 0
+			entry.Reason = "manual_reenable"
+			entry.ResetAt = time.Time{}
+		}
+		if err := engine.applyAction(body.AuthID, action, "manual", entry, body.Force); err != nil {
 			return jsonResponse(http.StatusBadRequest, map[string]any{"error": err.Error()})
 		}
 		return jsonResponse(http.StatusOK, map[string]any{"ok": true, "status": currentStatus()})
@@ -176,13 +183,15 @@ func importSnapshot(raw []byte) pluginapi.ManagementResponse {
 }
 
 type statusInfo struct {
-	Plugin   string         `json:"plugin"`
-	Version  string         `json:"version"`
-	Count    int            `json:"count"`
-	Bans     []banInfo      `json:"bans"`
-	Probe    map[string]any `json:"probe,omitempty"`
-	Settings map[string]any `json:"settings,omitempty"`
-	Audit    []auditEvent   `json:"audit,omitempty"`
+	Plugin      string           `json:"plugin"`
+	Version     string           `json:"version"`
+	Count       int              `json:"count"`
+	Bans        []banInfo        `json:"bans"`
+	Credentials []credentialInfo `json:"credentials,omitempty"`
+	Counts      statusCounts     `json:"counts"`
+	Probe       map[string]any   `json:"probe,omitempty"`
+	Settings    map[string]any   `json:"settings,omitempty"`
+	Audit       []auditEvent     `json:"audit,omitempty"`
 }
 
 type banInfo struct {
@@ -215,14 +224,20 @@ func currentStatus() statusInfo {
 		})
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].ResetAt < items[j].ResetAt })
+
+	files, _ := collectXAIAuthFiles(hostImpl)
+	creds, counts := buildCredentials(files, snapshot, probeSvc.lastResults(), now)
+
 	st := statusInfo{
-		Plugin:   pluginName,
-		Version:  pluginVersion,
-		Count:    len(items),
-		Bans:     items,
-		Probe:    probeSvc.status(),
-		Settings: currentConfig().publicView(),
-		Audit:    audit.list(),
+		Plugin:      pluginName,
+		Version:     pluginVersion,
+		Count:       len(items),
+		Bans:        items,
+		Credentials: creds,
+		Counts:      counts,
+		Probe:       probeSvc.status(),
+		Settings:    currentConfig().publicView(),
+		Audit:       audit.list(),
 	}
 	return st
 }
