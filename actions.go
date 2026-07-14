@@ -38,6 +38,26 @@ type actionEngine struct {
 	host      HostClient
 	mgmt      *managementDisabler
 	onChanged func()
+	// requestMgmtKey is set per Management API request (Bearer from ops console).
+	requestMgmtKey string
+}
+
+func (e *actionEngine) setRequestManagementKey(key string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.requestMgmtKey = strings.TrimSpace(key)
+}
+
+func (e *actionEngine) clearRequestManagementKey() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.requestMgmtKey = ""
+}
+
+func (e *actionEngine) requestManagementKey() string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.requestMgmtKey
 }
 
 func newActionEngine(cfg PluginConfig, bans *banState, audit *auditLog, host HostClient, onChanged func()) *actionEngine {
@@ -330,23 +350,36 @@ func (e *actionEngine) setDisabled(authID string, disabled bool, note string) er
 		fileName = authID
 	}
 
-	// CPA UI "启用/停用" is controlled by Auth.Disabled (Management API),
-	// not merely a "disabled" field inside credential JSON.
-	// Prefer Management API whenever a key is available; host_auth alone often only updates note.
+	// CPA UI toggle = Auth.Disabled, only reliably flipped via:
+	//   PATCH /v0/management/auth-files/status
+	// host.auth.save writes JSON (note) but buildAuthFromFileData does NOT map
+	// metadata.disabled -> Auth.Disabled, so the switch stays "启用".
+	reqKey := e.requestManagementKey()
+	cfgKey := ""
+	if mgmt != nil {
+		cfgKey = mgmt.resolveKey()
+	}
+	key := reqKey
+	if key == "" {
+		key = cfgKey
+	}
 	forceMgmt := strings.EqualFold(cfg.DisableVia, disableViaManagementAPI)
-	hasMgmtKey := mgmt != nil && mgmt.resolveKey() != ""
+
+	// Always try Management API first when we have any key (request Bearer or plugin config).
 	var mgmtErr error
-	if mgmt != nil && (forceMgmt || hasMgmtKey) {
-		if err := mgmt.setAuthDisabled(fileName, index, disabled); err != nil {
+	if mgmt != nil && key != "" {
+		if err := mgmt.setAuthDisabledWithKey(fileName, index, disabled, key); err != nil {
 			mgmtErr = err
+			slog.Warn("xai-autoban: management_api disable failed",
+				"auth_id", authID, "name", fileName, "disabled", disabled, "error", err)
 			if forceMgmt {
-				return fmt.Errorf("management_api disable failed: %w", err)
+				// still try host json for note, then return mgmt error
+				_ = e.patchHostAuthJSON(host, index, fileName, disabled, note)
+				return fmt.Errorf("management_api disable failed (CPA 开关未改动): %w；请确认 management_url 可达且密钥正确", err)
 			}
-			slog.Warn("xai-autoban: management_api disable failed, falling back to host_auth",
-				"auth_id", authID, "disabled", disabled, "error", err)
 		} else {
-			slog.Info("xai-autoban: updated credential via management api", "auth_id", authID, "name", fileName, "disabled", disabled)
-			// Still patch JSON note for operator visibility when possible.
+			slog.Info("xai-autoban: updated credential via management api",
+				"auth_id", authID, "name", fileName, "disabled", disabled, "key_source", map[bool]string{true: "request", false: "config"}[reqKey != ""])
 			_ = e.patchHostAuthJSON(host, index, fileName, disabled, note)
 			return nil
 		}
@@ -358,9 +391,14 @@ func (e *actionEngine) setDisabled(authID string, disabled bool, note string) er
 		}
 		return err
 	}
-	if !forceMgmt && !hasMgmtKey {
-		slog.Warn("xai-autoban: wrote disabled into auth JSON only; CPA UI toggle may stay enabled without management_key. Set disable_via=management_api and management_key/CPA_MANAGEMENT_KEY for real disable.",
-			"auth_id", authID, "disabled", disabled)
+	// Management key was available but PATCH failed after host JSON write.
+	if mgmtErr != nil {
+		return fmt.Errorf("已写入备注，但 Management API 失败、CPA 开关可能仍为启用: %w（检查 management_url 与密钥；运维台须用已保存的管理密钥操作）", mgmtErr)
+	}
+	// No management key: host_auth only updates note; CPA UI toggle usually will NOT flip.
+	if key == "" && disabled {
+		slog.Warn("xai-autoban: disabled JSON written without management key — CPA UI toggle may stay 启用. Save management key in ops console (same as remote-management secret).",
+			"auth_id", authID)
 	}
 	slog.Info("xai-autoban: updated credential disabled flag", "auth_id", authID, "disabled", disabled, "via", "host_auth")
 	return nil

@@ -106,6 +106,11 @@ func dispatchManagement(req pluginapi.ManagementRequest) pluginapi.ManagementRes
 		if strings.TrimSpace(body.AuthID) == "" || strings.TrimSpace(body.Action) == "" {
 			return jsonResponse(http.StatusBadRequest, map[string]any{"error": "missing_auth_id_or_action"})
 		}
+		// Reuse ops-console Bearer so disable hits CPA Management API without separate plugin key config.
+		if k := extractBearer(req.Headers); k != "" {
+			engine.setRequestManagementKey(k)
+			defer engine.clearRequestManagementKey()
+		}
 		now := time.Now()
 		action := strings.ToLower(strings.TrimSpace(body.Action))
 		entry := banEntry{
@@ -152,6 +157,10 @@ func dispatchManagement(req pluginapi.ManagementRequest) pluginapi.ManagementRes
 		reenable := true
 		if body.ReenableOnOK != nil {
 			reenable = *body.ReenableOnOK
+		}
+		if k := extractBearer(req.Headers); k != "" {
+			engine.setRequestManagementKey(k)
+			defer engine.clearRequestManagementKey()
 		}
 		res, err := recheckSelectedCredentials(body.AuthIDs, reenable)
 		if err != nil {
@@ -416,6 +425,23 @@ func firstNonEmpty(vals ...string) string {
 		if strings.TrimSpace(v) != "" {
 			return strings.TrimSpace(v)
 		}
+	}
+	return ""
+}
+
+func extractBearer(h http.Header) string {
+	if h == nil {
+		return ""
+	}
+	for _, key := range []string{"Authorization", "authorization", "X-Management-Key", "X-Api-Key"} {
+		v := strings.TrimSpace(h.Get(key))
+		if v == "" {
+			continue
+		}
+		if strings.HasPrefix(strings.ToLower(v), "bearer ") {
+			return strings.TrimSpace(v[7:])
+		}
+		return v
 	}
 	return ""
 }

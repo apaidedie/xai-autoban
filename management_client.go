@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -95,6 +96,10 @@ func (m *managementDisabler) resolveKeyLocked() string {
 }
 
 func (m *managementDisabler) setAuthDisabled(authID, authIndex string, disabled bool) error {
+	return m.setAuthDisabledWithKey(authID, authIndex, disabled, m.resolveKey())
+}
+
+func (m *managementDisabler) setAuthDisabledWithKey(authID, authIndex string, disabled bool, key string) error {
 	m.mu.Lock()
 	cfg := m.cfg
 	blocked := m.blockedUntil
@@ -107,12 +112,31 @@ func (m *managementDisabler) setAuthDisabled(authID, authIndex string, disabled 
 	if host == nil {
 		return fmt.Errorf("host unavailable")
 	}
-	key := m.resolveKey()
+	key = strings.TrimSpace(key)
 	if key == "" {
 		return errManagementKeyMissing
 	}
 
-	err := m.patchAuthStatus(host, cfg, key, authID, disabled)
+	// Try common name forms: as-is, with/without .json
+	candidates := []string{authID}
+	if !strings.HasSuffix(strings.ToLower(authID), ".json") {
+		candidates = append(candidates, authID+".json")
+	} else {
+		candidates = append(candidates, strings.TrimSuffix(authID, filepath.Ext(authID)))
+	}
+
+	var err error
+	for _, name := range candidates {
+		err = m.patchAuthStatus(host, cfg, key, name, disabled)
+		if err == nil {
+			m.mu.Lock()
+			m.lastError = ""
+			m.mu.Unlock()
+			return nil
+		}
+	}
+	// keep last err and continue with index/list fallback below
+	_ = candidates
 	if err == nil {
 		m.mu.Lock()
 		m.lastError = ""

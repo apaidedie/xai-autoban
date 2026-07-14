@@ -227,13 +227,42 @@ func TestDisableViaManagementAPI(t *testing.T) {
 	if err := eng.setDisabled("m1", true, "xai-autoban:test"); err != nil {
 		t.Fatal(err)
 	}
-	if len(patched) != 1 {
-		t.Fatalf("expected management patch, got %d saves=%d", len(patched), len(stub.saves))
+	if len(patched) < 1 {
+		t.Fatalf("expected management patch, got %d", len(patched))
 	}
 	if !strings.Contains(patched[0], `"disabled":true`) {
 		t.Fatalf("patch body=%s", patched[0])
 	}
-	// host_auth JSON may also be patched for note visibility; management patch is what flips CPA UI.
+}
+
+func TestDisableUsesRequestBearerKey(t *testing.T) {
+	bans.clearAll()
+	var authHeader string
+	stub := &stubHost{
+		files: []pluginapi.HostAuthFileEntry{
+			{ID: "m2", AuthIndex: "4", Name: "xai-m2.json", Provider: "xai"},
+		},
+		jsonBy: map[string]json.RawMessage{
+			"4": json.RawMessage(`{"access_token":"tok"}`),
+		},
+		httpFn: func(req pluginapi.HTTPRequest) (pluginapi.HTTPResponse, error) {
+			if req.Method == http.MethodPatch && strings.Contains(req.URL, "/auth-files/status") {
+				authHeader = req.Headers.Get("Authorization")
+				return pluginapi.HTTPResponse{StatusCode: 200, Body: []byte(`{"ok":true}`)}, nil
+			}
+			return pluginapi.HTTPResponse{StatusCode: 200, Body: []byte(`{"files":[]}`)}, nil
+		},
+	}
+	// no management_key in config — only request bearer
+	eng := newActionEngine(defaultConfig(), &bans, newAuditLog(20), stub, nil)
+	eng.setRequestManagementKey("ops-console-key")
+	defer eng.clearRequestManagementKey()
+	if err := eng.setDisabled("m2", true, "xai-autoban:manual_disable"); err != nil {
+		t.Fatal(err)
+	}
+	if authHeader != "Bearer ops-console-key" {
+		t.Fatalf("expected request bearer, got %q", authHeader)
+	}
 }
 
 func TestRecheckSelectedIncludesDisabled(t *testing.T) {
