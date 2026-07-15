@@ -35,6 +35,8 @@ type Engine struct {
 	mu        sync.Mutex
 	cooldown  map[cooldownKey]time.Time
 	streaks   map[string]failStreak
+	// lastOK: last real usage success time (ground truth). Probe/recheck false positives skipped while fresh.
+	lastOK    map[string]time.Time
 	cfg       config.PluginConfig
 	bans      *ban.State
 	audit     *audit.Log
@@ -67,6 +69,7 @@ func NewEngine(cfg config.PluginConfig, bans *ban.State, audit *audit.Log, host 
 	return &Engine{
 		cooldown:  make(map[cooldownKey]time.Time),
 		streaks:   make(map[string]failStreak),
+		lastOK:    make(map[string]time.Time),
 		cfg:       cfg,
 		bans:      bans,
 		audit:     audit,
@@ -74,6 +77,41 @@ func NewEngine(cfg config.PluginConfig, bans *ban.State, audit *audit.Log, host 
 		mgmt:      newManagementDisabler(cfg, host),
 		onChanged: onChanged,
 	}
+}
+
+// usageSuccessGrace is how long real traffic success protects against probe/recheck false isolates.
+const usageSuccessGrace = 30 * time.Minute
+
+func (e *Engine) markUsageOK(authID string) {
+	authID = strings.TrimSpace(authID)
+	if authID == "" {
+		return
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.lastOK == nil {
+		e.lastOK = make(map[string]time.Time)
+	}
+	e.lastOK[authID] = time.Now()
+}
+
+func (e *Engine) recentUsageOK(authID string) bool {
+	authID = strings.TrimSpace(authID)
+	if authID == "" {
+		return false
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	t, ok := e.lastOK[authID]
+	if !ok {
+		return false
+	}
+	return time.Since(t) < usageSuccessGrace
+}
+
+func probeLikeSource(source string) bool {
+	s := strings.ToLower(strings.TrimSpace(source))
+	return strings.HasPrefix(s, "probe") || strings.HasPrefix(s, "recheck")
 }
 
 func (e *Engine) UpdateConfig(cfg config.PluginConfig) {
@@ -231,6 +269,13 @@ func (e *Engine) ApplyFailure(authID, source string, entry ban.Entry, force bool
 	action := entry.Action
 	if action == "" {
 		action = cfg.ActionForStatus(entry.StatusCode)
+	}
+	// Real chat success is ground truth: do not re-isolate from probe/recheck false 403s.
+	if !force && probeLikeSource(source) && e.recentUsageOK(authID) {
+		e.audit.Add(source, authID, action, "skipped_usage_ok",
+			fmt.Sprintf("recent real traffic success within %s; probe path may differ from chat", usageSuccessGrace),
+			entry.StatusCode)
+		return nil
 	}
 	// Soft 403 / permission-denied: require consecutive failures (xAI often recovers next try).
 	if !force && soft403NeedsStreak(entry) {
@@ -536,6 +581,7 @@ func (e *Engine) ApplyUsageSuccess(authID string) error {
 	if authID == "" {
 		return nil
 	}
+	e.markUsageOK(authID)
 	now := time.Now()
 	email := e.lookupEmail(authID)
 	banned := e.bans.Active(authID, now) || (email != "" && e.bans.Active(email, now)) ||
@@ -545,7 +591,7 @@ func (e *Engine) ApplyUsageSuccess(authID string) error {
 	cfg := e.cfg
 	e.mu.Unlock()
 
-		// Real success resets soft-403 streak even if not currently banned.
+	// Real success resets soft-403 streak even if not currently banned.
 	e.clearStreak(authID)
 	if email != "" {
 		e.clearStreak(email)

@@ -257,15 +257,24 @@ func (p *Service) RecheckSelected(authIDs []string, reenableOnOK bool) (RecheckS
 				}
 				return
 			}
+			// Recheck only isolates (ban). Never ForceSet — soft 403 needs streak;
+			// recent real traffic success also blocks probe false positives.
 			entry.Source = "recheck-selected"
 			entry.Action = action.Ban
 			entry.Email = strings.ToLower(strings.TrimSpace(f.Email))
 			entry.AuthID = key
-			p.bans.ForceSet(key, entry)
-			res.Banned++
-			p.audit.Add("recheck-selected", key, "ban", "ok", msg, entry.StatusCode)
+			wasBanned := p.bans.Active(key, time.Now()) || p.bans.IsBannedCandidate(key, entry.Email, time.Now())
+			_ = p.engine.ApplyFailure(key, "recheck-selected", entry, false)
+			nowBanned := p.bans.Active(key, time.Now()) || p.bans.IsBannedCandidate(key, entry.Email, time.Now())
+			if nowBanned && !wasBanned {
+				res.Banned++
+			}
 			if len(res.Errors) < 30 {
-				res.Errors = append(res.Errors, key+": "+msg)
+				if nowBanned && !wasBanned {
+					res.Errors = append(res.Errors, key+": "+msg)
+				} else {
+					res.Errors = append(res.Errors, key+": "+msg+" (streak/grace, not isolated yet)")
+				}
 			}
 		}(id)
 	}

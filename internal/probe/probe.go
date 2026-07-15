@@ -396,14 +396,19 @@ func (p *Service) runOnceBody(force bool, trigger string) (Result, error) {
 					}
 				}
 				if !cfg.AutoExecute {
-					// Codex-style 只输出结果: still mark ban ledger for visibility, but never disable/delete.
+					// 只输出结果: only isolate via ban ledger; never disable/delete; respect soft-403 streak.
 					entry.Action = action.Ban
-					_ = p.engine.ApplyAction(key, action.Ban, "probe-report", entry, force)
-					res.Banned++
+					was := p.engine != nil && (p.bans.Active(key, time.Now()) || p.bans.IsBannedCandidate(key, email, time.Now()))
+					_ = p.engine.ApplyFailure(key, "probe-report", entry, false)
+					nowBan := p.bans.Active(key, time.Now()) || p.bans.IsBannedCandidate(key, email, time.Now())
+					if nowBan && !was {
+						res.Banned++
+					}
 					return
 				}
 				act := entry.Action
-				_ = p.engine.ApplyFailure(key, "probe", entry, force)
+				// force flag is for job unlock only — never force-isolate soft 403s from probe.
+				_ = p.engine.ApplyFailure(key, "probe", entry, false)
 				switch act {
 				case action.Disable:
 					res.Disabled++
@@ -630,32 +635,28 @@ func (p *Service) ProbeOneWithJSON(cfg config.PluginConfig, host host.Client, au
 		return modelsStatus, modelsBody, fmt.Errorf("probe status %d", modelsStatus)
 	}
 
-	// responses_mini: responses → 429 retry → chat/completions (grok traffic often uses completions)
-	st, body, err := runResponses()
-	st, body, err = with429Retry(st, body, err, runResponses)
+	// responses_mini: prefer chat/completions first (matches real grok traffic), then responses.
+	st, body, err := runCompletions()
+	st, body, err = with429Retry(st, body, err, runCompletions)
 	if err == nil && st >= 200 && st < 300 {
 		return st, body, nil
 	}
-	needFallback := err != nil || st == 401 || st == 402 || st == 403 || st == 429
-	if needFallback {
-		st2, body2, err2 := runCompletions()
-		st2, body2, err2 = with429Retry(st2, body2, err2, runCompletions)
-		if err2 == nil && st2 >= 200 && st2 < 300 {
-			return st2, body2, nil
-		}
-		// Prefer primary response for classify when both failed (more specific body).
-		if err == nil && body != "" {
-			return st, body, fmt.Errorf("probe status %d", st)
-		}
-		if err2 == nil {
-			return st2, body2, fmt.Errorf("probe status %d", st2)
-		}
-		if err != nil {
-			return st, body, err
-		}
-		return st2, body2, err2
+	st2, body2, err2 := runResponses()
+	st2, body2, err2 = with429Retry(st2, body2, err2, runResponses)
+	if err2 == nil && st2 >= 200 && st2 < 300 {
+		return st2, body2, nil
 	}
-	return st, body, fmt.Errorf("probe status %d", st)
+	// Prefer completions body for classify (closer to real traffic).
+	if err == nil && body != "" {
+		return st, body, fmt.Errorf("probe status %d", st)
+	}
+	if err2 == nil {
+		return st2, body2, fmt.Errorf("probe status %d", st2)
+	}
+	if err != nil {
+		return st, body, err
+	}
+	return st2, body2, err2
 }
 
 // pickModel chooses a preferred grok model id from /models JSON body.
