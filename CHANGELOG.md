@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.28 - 2026-07-15
+
+### Fix
+- 编辑配置保存：CPAMP 下 POST resource 404，改为 `GET /ops?op=settings&payload=<base64url(json)>`
+- 导入备份同样走 payload GET（体积过大时仍可能失败）
+
 ## 0.5.27 - 2026-07-15
 
 ### Fix

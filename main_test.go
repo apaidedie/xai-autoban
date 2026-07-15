@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -168,6 +169,9 @@ func TestStatusPageUsesManagementKeyFlow(t *testing.T) {
 		"/ops",
 		"X-XAI-Autoban-Op",
 		"isListPayload",
+		"buildGetOpsURL",
+		"b64url",
+		"payload",
 	} {
 		if !strings.Contains(page, required) {
 			t.Fatalf("page missing %q", required)
@@ -297,6 +301,48 @@ func TestResourceOpsGETUnbanAuthIdHeaderOnly(t *testing.T) {
 	}
 	if defaultApp.bans.Active("hh1", now) {
 		t.Fatal("expected unban via Auth-Id header only")
+	}
+}
+
+func TestResourceOpsSettingsViaPayloadGET(t *testing.T) {
+	patch := map[string]any{
+		"probe_interval_seconds": 1234,
+		"auto_execute":           false,
+		"action_on_429":          "ban",
+	}
+	raw, _ := json.Marshal(patch)
+	// base64url no padding
+	enc := strings.TrimRight(base64.RawURLEncoding.EncodeToString(raw), "=")
+	resp := defaultApp.mgmt.Handle(pluginapi.ManagementRequest{
+		Method: http.MethodGet,
+		Path:   "/v0/resource/plugins/xai-autoban/ops",
+		Query:  map[string][]string{"op": {"settings"}, "payload": {enc}},
+	})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status=%d body=%s", resp.StatusCode, string(resp.Body))
+	}
+	var out map[string]any
+	_ = json.Unmarshal(resp.Body, &out)
+	if out["ok"] != true {
+		t.Fatalf("expected ok: %s", string(resp.Body))
+	}
+	settings, _ := out["settings"].(map[string]any)
+	if settings == nil {
+		t.Fatalf("missing settings: %s", string(resp.Body))
+	}
+	// yaml number may be float64
+	iv := settings["probe_interval_seconds"]
+	switch n := iv.(type) {
+	case float64:
+		if int(n) != 1234 {
+			t.Fatalf("probe_interval_seconds=%v", iv)
+		}
+	case int:
+		if n != 1234 {
+			t.Fatalf("probe_interval_seconds=%v", iv)
+		}
+	default:
+		t.Fatalf("probe_interval_seconds type %T=%v", iv, iv)
 	}
 }
 

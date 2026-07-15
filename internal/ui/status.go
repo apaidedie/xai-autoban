@@ -522,40 +522,53 @@ async function apiResource(path, opts){
   const t=await r.text(); let d; try{d=JSON.parse(t)}catch(_){throw new Error(t||('HTTP '+r.status))}
   if(!r.ok) throw new Error(d.error||d.message||('HTTP '+r.status)); return d;
 }
-// 只走 resource。顺序：GET /ops → GET /data(+header) → POST /ops → POST /data(+key)
+function b64url(str){
+  // UTF-8 safe base64url (no padding) for GET payload under CPAMP (POST resource 404)
+  const bytes=unescape(encodeURIComponent(str));
+  let bin='';
+  for(let i=0;i<bytes.length;i++) bin+=String.fromCharCode(bytes.charCodeAt(i)&0xff);
+  return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+function buildGetOpsURL(op, payload){
+  // Flat query for small ops; base64 payload for settings/import or long query.
+  const flat=buildOpsQuery(op, payload);
+  const needPack=op==='settings'||op==='import'||flat.length>1800;
+  if(!needPack) return '/ops?'+flat;
+  const rest=Object.assign({}, payload||{});
+  delete rest.op;
+  const pack=b64url(JSON.stringify(rest));
+  return '/ops?op='+encodeURIComponent(op)+'&payload='+encodeURIComponent(pack);
+}
+// 只走 resource。CPAMP 下 POST resource 常 404，优先 GET（含 settings 的 payload=）。
 async function apiOps(op, extra){
   const payload=Object.assign({}, extra||{}, {op:op});
   const meta=opsMeta(op, payload);
-  const heavy=op==='settings'||op==='import';
-  const q=buildOpsQuery(op, payload);
+  const getPath=buildGetOpsURL(op, payload);
+  const getDataPath=getPath.replace(/^\/ops/,'/data');
   const errs=[];
   async function tryOne(label, fn){
     try{
       const d=await fn();
       if(isListPayload(d)){ errs.push(label+': got_list_not_op'); return null; }
       if(d && d.error && d.ok!==true){ errs.push(label+': '+(d.message||d.error)); return null; }
-      if(!heavy && !isOpsResult(d) && !isListPayload(d)){
-        return d;
-      }
-      if(isOpsResult(d) || heavy) return d;
+      if(isOpsResult(d) || (d && d.settings)) return d;
+      if(d && !isListPayload(d)) return d;
       errs.push(label+': unexpected_payload');
       return null;
     }catch(e){ errs.push(label+': '+(e.message||e)); return null; }
   }
   let d=null;
-  if(!heavy){
-    d=await tryOne('GET /ops', ()=>apiResource('/ops?'+q, meta));
-    if(d) return d;
-    d=await tryOne('GET /data', ()=>apiResource('/data?'+q, meta));
-    if(d) return d;
-  }
+  d=await tryOne('GET /ops', ()=>apiResource(getPath, meta));
+  if(d) return d;
+  d=await tryOne('GET /data', ()=>apiResource(getDataPath, meta));
+  if(d) return d;
   d=await tryOne('POST /ops', ()=>apiResource('/ops',Object.assign({method:'POST',body:payload,withKey:!!SERVER_MGMT_KEY}, meta)));
   if(d) return d;
   d=await tryOne('POST /data key', ()=>apiResource('/data',Object.assign({method:'POST',body:payload,withKey:true}, meta)));
   if(d) return d;
   d=await tryOne('POST /data nokey', ()=>apiResource('/data',Object.assign({method:'POST',body:payload,withKey:false}, meta)));
   if(d) return d;
-  throw new Error('写操作失败：'+errs.join(' | ')+'。请装 0.5.27+ 并强刷。若仍 missing_auth_id(s)，把凭证 id 发开发者。');
+  throw new Error('写操作失败：'+errs.join(' | ')+'。请装 0.5.28+ 并强刷。CPAMP 下配置保存走 GET /ops?payload=。');
 }
 function mapPathToOp(method,path,body){
   const p=String(path||'');

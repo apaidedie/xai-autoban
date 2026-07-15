@@ -1,6 +1,7 @@
 package mgmt
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -456,6 +457,37 @@ func bytesContainsOp(raw []byte) bool {
 	return strings.Contains(s, `"op"`) || strings.Contains(s, `"op":`)
 }
 
+// decodeOpsPayload decodes base64url / std base64 JSON blob used by GET ops under CPAMP.
+func decodeOpsPayload(s string) ([]byte, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil, fmt.Errorf("empty payload")
+	}
+	// raw URL encoding (no padding)
+	if b, err := base64.RawURLEncoding.DecodeString(s); err == nil {
+		return b, nil
+	}
+	// URL encoding with padding
+	if b, err := base64.URLEncoding.DecodeString(s); err == nil {
+		return b, nil
+	}
+	// std base64
+	if b, err := base64.StdEncoding.DecodeString(s); err == nil {
+		return b, nil
+	}
+	// try adding padding
+	if m := len(s) % 4; m != 0 {
+		s2 := s + strings.Repeat("=", 4-m)
+		if b, err := base64.URLEncoding.DecodeString(s2); err == nil {
+			return b, nil
+		}
+		if b, err := base64.StdEncoding.DecodeString(s2); err == nil {
+			return b, nil
+		}
+	}
+	return nil, fmt.Errorf("invalid payload encoding")
+}
+
 // mergeOpsParams folds query + custom headers into body and normalizes types for GET query ops.
 func mergeOpsParams(body map[string]any, req pluginapi.ManagementRequest) map[string]any {
 	if body == nil {
@@ -470,6 +502,18 @@ func mergeOpsParams(body map[string]any, req pluginapi.ManagementRequest) map[st
 				body[k] = vs[0]
 			}
 		}
+	}
+	// Compact GET form: ?op=settings&payload=<base64url(json)>
+	if s, ok := body["payload"].(string); ok && strings.TrimSpace(s) != "" {
+		if raw, err := decodeOpsPayload(s); err == nil {
+			var nested map[string]any
+			if json.Unmarshal(raw, &nested) == nil {
+				for k, v := range nested {
+					body[k] = v
+				}
+			}
+		}
+		delete(body, "payload")
 	}
 	if req.Headers != nil {
 		headerMap := map[string]string{
