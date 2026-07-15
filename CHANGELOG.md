@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.25 - 2026-07-15
+
+### Fix
+- **CPA-Manager-Plus 兼容**：运维台写操作优先 `GET /data?op=`（CPAMP 对 resource GET 用已保存 CPA 密钥代理，无需浏览器密钥）
+- POST resource 时附带 Authorization（CPA secret-key 或 cpamp_ 均可按 CPAMP 规则转发）
+- 不再把 `/v0/management/plugins/*` 当成主要写通道（CPAMP 中 `plugins` 为保留路径，填 CPA 密钥会报 invalid admin key）
+- README 明确：插件 `management_key` = CPA `remote-management.secret-key`，不是 `cpamp_...`
+
 ## 0.5.24 - 2026-07-15
 
 ### Fix

@@ -2,7 +2,7 @@
 
 CLIProxyAPI 原生插件：自动隔离异常 xAI 凭据，支持可配置 ban 时长/动作、定时/手动巡检、disable/delete、refresh 重授权、管理面板。
 
-版本：**0.5.24**
+版本：**0.5.25**
 
 ## 方式 A：插件商店安装（推荐）
 
@@ -109,10 +109,20 @@ plugins/darwin/arm64/xai-autoban.dylib
 
 | 入口 | 用途 |
 |------|------|
-| **运维台 → 编辑配置** | **主用**：巡检、策略、动作等日常配置（写操作依赖已登录 CPA 管理中心） |
+| **运维台 → 编辑配置** | **主用**：巡检、策略、动作等日常配置 |
 | **插件管理** | 仅：**启用**开关 + **服务端管理密钥**（`management_key_env` / `management_key` / `management_url` / `disable_via`） |
 
 插件管理不再展示 ban 时长、probe 等长表单，避免与运维台重复。
+
+### CPA-Manager-Plus（CPAMP）双密钥说明
+
+| 密钥 | 用途 | 是否填进本插件 |
+|------|------|----------------|
+| **CPAMP Admin Key**（`cpamp_...`） | 登录 CPAMP 面板 | **否** |
+| **CPA Management Key**（`remote-management.secret-key`） | CPAMP 连 CPA；本插件禁用/删除凭证 | **是** → `management_key` / `CPA_MANAGEMENT_KEY` |
+
+运维台写操作优先走 `GET /v0/resource/plugins/xai-autoban/data?op=...`（CPAMP 对 resource **GET** 会自动用已保存的 CPA 密钥代理，浏览器无需密钥）。  
+不要把 `cpamp_...` 填进插件 `management_key`。
 
 ### 安装时最小 yaml
 

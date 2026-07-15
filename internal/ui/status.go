@@ -459,13 +459,39 @@ function setAuthUI(){
   setActionEnabled(true);
   return true;
 }
+// CPAMP Manager Server mode:
+// - GET  /v0/resource/plugins/*  → always uses CPAMP-saved CPA Management Key (no browser key)
+// - POST /v0/resource/plugins/*  → needs Authorization = CPAMP Admin Key (uses saved CPA key)
+//                                 OR Authorization = CPA Management Key (forwarded to CPA)
+// - /v0/management/plugins/* is a RESERVED head under CPAMP → CPA key returns "invalid admin key"
+// So ops prefer resource GET?op=..., then resource POST with key. Avoid management path on CPAMP.
+function buildOpsQuery(op, payload){
+  const q=new URLSearchParams();
+  q.set('op', op);
+  Object.keys(payload||{}).forEach(k=>{
+    if(k==='op') return;
+    const v=payload[k];
+    if(v===undefined||v===null) return;
+    if(typeof v==='object') q.set(k, JSON.stringify(v));
+    else q.set(k, String(v));
+  });
+  return q.toString();
+}
 async function apiResource(path, opts){
   const method=(opts&&opts.method)||'GET';
   const body=opts&&opts.body;
+  const withKey=!!(opts&&opts.withKey);
+  const headers={};
+  if(body!==undefined) headers['Content-Type']='application/json';
+  // Mutating resource calls under CPAMP need a key (CPA secret-key or cpamp_ admin key).
+  if((withKey || (method!=='GET' && method!=='HEAD')) && SERVER_MGMT_KEY){
+    headers['Authorization']='Bearer '+SERVER_MGMT_KEY;
+    headers['X-Management-Key']=SERVER_MGMT_KEY;
+  }
   const r=await fetch(resourceBase+path,{
     method,cache:'no-store',credentials:'same-origin',
-    headers:body?{'Content-Type':'application/json'}:undefined,
-    body:body?JSON.stringify(body):undefined
+    headers:Object.keys(headers).length?headers:undefined,
+    body:body!==undefined?JSON.stringify(body):undefined
   });
   const t=await r.text(); let d; try{d=JSON.parse(t)}catch(_){throw new Error(t||('HTTP '+r.status))}
   if(!r.ok) throw new Error(d.error||d.message||('HTTP '+r.status)); return d;
@@ -481,27 +507,20 @@ async function apiMgmtDirect(method,path,body){
   const t=await r.text(); let d; try{d=JSON.parse(t)}catch(_){throw new Error(t||('HTTP '+r.status))}
   if(!r.ok) throw new Error(d.error||d.message||('HTTP '+r.status)); return d;
 }
-// Resource channel: try POST /data then GET /data?op= (CPA often only routes GET on resources).
+// Prefer GET /data?op= (CPAMP-friendly, no browser key), then POST with key.
 async function apiOps(op, extra){
   const payload=Object.assign({op:op}, extra||{});
+  const heavy=op==='settings'||op==='import';
+  let lastErr=null;
+  if(!heavy){
+    try{ return await apiResource('/data?'+buildOpsQuery(op, payload)); }
+    catch(e){ lastErr=e; }
+  }
   try{
-    return await apiResource('/data',{method:'POST',body:payload});
+    return await apiResource('/data',{method:'POST',body:payload,withKey:true});
   }catch(ePost){
-    const msg=String(ePost.message||ePost);
-    if(msg.indexOf('404')<0 && msg.indexOf('405')<0 && msg.toLowerCase().indexOf('method')<0){
-      throw ePost;
-    }
-    // GET fallback for simple ops
-    const q=new URLSearchParams();
-    q.set('op', op);
-    Object.keys(payload).forEach(k=>{
-      if(k==='op') return;
-      const v=payload[k];
-      if(v===undefined||v===null) return;
-      if(typeof v==='object') q.set(k, JSON.stringify(v));
-      else q.set(k, String(v));
-    });
-    return apiResource('/data?'+q.toString());
+    if(lastErr) throw ePost;
+    throw ePost;
   }
 }
 function mapPathToOp(method,path,body){
@@ -522,7 +541,7 @@ function mapPathToOp(method,path,body){
 async function apiMgmt(method,path,body){
   const mapped=mapPathToOp(method,path,body);
   let lastErr=null;
-  // 1) resource channel first (no admin key; list GET already works)
+  // 1) resource channel (CPAMP-compatible)
   if(mapped){
     try{
       if(mapped.op==='probe_status'){
@@ -531,21 +550,21 @@ async function apiMgmt(method,path,body){
       return await apiOps(mapped.op, mapped);
     }catch(e){ lastErr=e; }
   }
-  // 2) management API with plugin-configured key
+  // 2) management API last resort — under CPAMP needs cpamp_ Admin Key, not CPA secret-key
   if(SERVER_MGMT_KEY){
     try{ return await apiMgmtDirect(method,path,body); }
     catch(e){
       const m=String(e.message||e);
-      if(/invalid.*key|admin key/i.test(m)){
-        throw new Error('管理密钥无效：插件管理里的 management_key / 环境变量 与 CPA 管理中心密码不一致');
+      if(/invalid admin key|invalid management key|invalid.*key/i.test(m)){
+        throw new Error('写操作失败（'+m+'）。CPA-Manager-Plus 下：运维台写操作走 /v0/resource（GET?op= 无需密钥）；插件 management_key 请填 CPA 的 remote-management.secret-key（与 CPAMP 设置里的「CPA Management Key」相同），不要填 cpamp_ 面板登录密钥。');
       }
       throw e;
     }
   }
   if(lastErr){
-    throw new Error('写操作失败（'+(lastErr.message||lastErr)+'）。请确认已升级插件；若仍失败，在插件管理填写与 CPA 相同的 management_key，并重载插件。');
+    throw new Error('写操作失败（'+(lastErr.message||lastErr)+'）。请升级到最新插件；CPAMP 场景下取消隔离应走 resource GET，无需浏览器密钥。');
   }
-  throw new Error('请在插件管理配置 management_key 或环境变量 CPA_MANAGEMENT_KEY，然后重载插件');
+  throw new Error('请在插件管理配置 management_key = CPA remote-management.secret-key（禁用/删除凭证用），然后重载插件');
 }
 function setMessage(text,err=false){
   const m=$('message'); if(m){ m.textContent=text; m.className='msg'+(err?' err':''); }

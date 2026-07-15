@@ -164,6 +164,8 @@ func TestStatusPageUsesManagementKeyFlow(t *testing.T) {
 		"rcard",
 		"apiMgmtDirect",
 		"SERVER_MGMT_KEY",
+		"buildOpsQuery",
+		"CPAMP",
 		"/v0/management/plugins/xai-autoban",
 	} {
 		if !strings.Contains(page, required) {
