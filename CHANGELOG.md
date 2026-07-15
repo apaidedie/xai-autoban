@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.26 - 2026-07-15
+
+### Fix
+- **彻底避免**浏览器走 `/v0/management/plugins/*`（CPAMP 下用 CPA 密钥必报 invalid admin key，与密钥对错无关）
+- 新增 resource `/ops` 写通道；支持 Header `X-XAI-Autoban-Op`
+- GET 若误返回列表 payload 会继续尝试其它通道
+- 错误信息展示各通道真实失败原因
+
 ## 0.5.25 - 2026-07-15
 
 ### Fix

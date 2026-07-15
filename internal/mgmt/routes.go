@@ -57,8 +57,10 @@ func (h *Handler) Registration() pluginapi.ManagementRegistrationResponse {
 		},
 		Resources: []pluginapi.ResourceRoute{
 			{Path: "/status", Menu: "xAI Autoban", Description: "xAI 隔离/禁用运维台。"},
-			// GET = 列表；POST = 运维写操作（与读列表同路径，CPA 一定能路由到）
-			{Path: "/data", Description: "GET 只读列表；POST {\"op\":...} 运维写操作。"},
+			// GET = 列表；GET?op= / Header X-XAI-Autoban-Op / POST = 运维写操作
+			{Path: "/data", Description: "GET 只读列表；写操作：GET?op= / Header X-XAI-Autoban-Op / POST {\"op\":...}。"},
+			// 独立写通道，避免与列表 GET /data 混淆（CPAMP 对 resource GET 用已保存 CPA 密钥代理）
+			{Path: "/ops", Description: "运维写操作专用。GET/POST ?op=unban&auth_id= 或 JSON {\"op\":...}。"},
 		},
 	}
 }
@@ -87,17 +89,44 @@ func resourcePathMatch(path, name, suffix string) bool {
 	return strings.HasSuffix(path, "/"+name+"/"+suffix)
 }
 
+func opHintFromRequest(req pluginapi.ManagementRequest) string {
+	if op := strings.TrimSpace(req.Query.Get("op")); op != "" {
+		return op
+	}
+	if req.Headers != nil {
+		for _, k := range []string{"X-XAI-Autoban-Op", "X-Plugin-Op", "X-Op"} {
+			if op := strings.TrimSpace(req.Headers.Get(k)); op != "" {
+				return op
+			}
+		}
+	}
+	if len(req.Body) > 0 && bytesContainsOp(req.Body) {
+		var body map[string]any
+		if json.Unmarshal(req.Body, &body) == nil {
+			if op, _ := body["op"].(string); strings.TrimSpace(op) != "" {
+				return strings.TrimSpace(op)
+			}
+		}
+	}
+	return ""
+}
+
 func (h *Handler) Handle(req pluginapi.ManagementRequest) pluginapi.ManagementResponse {
 	method := strings.ToUpper(strings.TrimSpace(req.Method))
 	path := strings.TrimRight(req.Path, "/")
-	// Mutations on /data: POST body {op:...} or GET ?op=... (some CPA only forward GET on resources).
+	// Dedicated /ops resource: always mutation channel (CPAMP GET uses saved CPA key).
+	if resourcePathMatch(path, h.Name, "ops") {
+		return h.handleResourceAPI(req)
+	}
+	// Mutations on /data: POST body {op:...}, GET ?op=..., or Header X-XAI-Autoban-Op.
 	if resourcePathMatch(path, h.Name, "data") {
+		hint := opHintFromRequest(req)
 		if method == http.MethodPost || method == http.MethodPut {
-			if len(req.Body) > 0 && (bytesContainsOp(req.Body) || req.Query.Get("op") != "") {
+			if hint != "" || (len(req.Body) > 0 && bytesContainsOp(req.Body)) {
 				return h.handleResourceAPI(req)
 			}
 		}
-		if method == http.MethodGet && strings.TrimSpace(req.Query.Get("op")) != "" {
+		if method == http.MethodGet && hint != "" {
 			return h.handleResourceAPI(req)
 		}
 	}
@@ -319,11 +348,17 @@ func (h *Handler) handleResourceAPI(req pluginapi.ManagementRequest) pluginapi.M
 		}
 	}
 	op, _ := body["op"].(string)
-	if op == "" {
-		op = req.Query.Get("op")
+	if strings.TrimSpace(op) == "" {
+		op = opHintFromRequest(req)
 	}
 	op = strings.ToLower(strings.TrimSpace(op))
 	delete(body, "op")
+	if op == "" {
+		return jsonResponse(http.StatusBadRequest, map[string]any{
+			"error":   "missing_op",
+			"message": "需要 op 参数（query/header/body）",
+		})
+	}
 	raw, _ := json.Marshal(body)
 	base := "/v0/management/plugins/" + h.Name
 	switch op {

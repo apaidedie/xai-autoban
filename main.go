@@ -21,7 +21,7 @@ import (
 
 const (
 	pluginName    = "xai-autoban"
-	pluginVersion = "0.5.25"
+	pluginVersion = "0.5.26"
 )
 
 type App struct {

@@ -162,11 +162,12 @@ func TestStatusPageUsesManagementKeyFlow(t *testing.T) {
 		"复检所选",
 		"card-list",
 		"rcard",
-		"apiMgmtDirect",
 		"SERVER_MGMT_KEY",
 		"buildOpsQuery",
 		"CPAMP",
-		"/v0/management/plugins/xai-autoban",
+		"/ops",
+		"X-XAI-Autoban-Op",
+		"isListPayload",
 	} {
 		if !strings.Contains(page, required) {
 			t.Fatalf("page missing %q", required)
@@ -239,6 +240,43 @@ func TestResourceDataGETUnbanQuery(t *testing.T) {
 	}
 	if defaultApp.bans.Active("g1", now) {
 		t.Fatal("expected unban via GET /data?op=unban")
+	}
+}
+
+func TestResourceOpsGETUnban(t *testing.T) {
+	defaultApp.bans.ClearAll()
+	now := time.Now()
+	defaultApp.bans.Set("o1", ban.Entry{StatusCode: 403, ResetAt: now.Add(time.Hour)})
+	resp := defaultApp.mgmt.Handle(pluginapi.ManagementRequest{
+		Method: http.MethodGet,
+		Path:   "/v0/resource/plugins/xai-autoban/ops",
+		Query:  map[string][]string{"op": {"unban"}, "auth_id": {"o1"}},
+	})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status=%d body=%s", resp.StatusCode, string(resp.Body))
+	}
+	if defaultApp.bans.Active("o1", now) {
+		t.Fatal("expected unban via GET /ops?op=unban")
+	}
+}
+
+func TestResourceDataGETUnbanViaHeader(t *testing.T) {
+	defaultApp.bans.ClearAll()
+	now := time.Now()
+	defaultApp.bans.Set("h1", ban.Entry{StatusCode: 403, ResetAt: now.Add(time.Hour)})
+	hdr := make(http.Header)
+	hdr.Set("X-XAI-Autoban-Op", "unban")
+	resp := defaultApp.mgmt.Handle(pluginapi.ManagementRequest{
+		Method:  http.MethodGet,
+		Path:    "/v0/resource/plugins/xai-autoban/data",
+		Query:   map[string][]string{"auth_id": {"h1"}},
+		Headers: hdr,
+	})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status=%d body=%s", resp.StatusCode, string(resp.Body))
+	}
+	if defaultApp.bans.Active("h1", now) {
+		t.Fatal("expected unban via header X-XAI-Autoban-Op")
 	}
 }
 
