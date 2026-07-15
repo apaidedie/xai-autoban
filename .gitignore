@@ -6,3 +6,5 @@
 *.exe
 .DS_Store
 .superpowers/
+xai-autoban-state.json
+*.json.tmp
