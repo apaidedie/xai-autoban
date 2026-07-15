@@ -2,7 +2,7 @@
 
 CLIProxyAPI 原生插件：自动隔离异常 xAI 凭据，支持可配置 ban 时长/动作、定时/手动巡检、disable/delete、refresh 重授权、管理面板。
 
-版本：**0.5.14**
+版本：**0.5.15**
 
 ## 方式 A：插件商店安装（推荐）
 
@@ -109,8 +109,8 @@ plugins/darwin/arm64/xai-autoban.dylib
 
 | 入口 | 用途 |
 |------|------|
-| **运维台 → 编辑配置** | **主用**：巡检、策略、动作等日常配置 |
-| **插件管理** | 仅：**启用**开关 + **管理密钥**相关（`management_key_env` / `management_key` / `management_url` / `disable_via`） |
+| **运维台 → 编辑配置** | **主用**：巡检、策略、动作等日常配置（写操作依赖已登录 CPA 管理中心） |
+| **插件管理** | 仅：**启用**开关 + **服务端管理密钥**（`management_key_env` / `management_key` / `management_url` / `disable_via`） |
 
 插件管理不再展示 ban 时长、probe 等长表单，避免与运维台重复。
 

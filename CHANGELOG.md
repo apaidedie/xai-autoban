@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.15 - 2026-07-15
+
+### Config UX
+- Remove ops-console browser management-key paste UI (no more 保存/清除/更换密钥)
+- Write ops use CPA management session (`credentials: same-origin`) + optional inherited key from management center storage
+- Plugin management remains the place for server-side management key / enable switch
+
 ## 0.5.14 - 2026-07-15
 
 ### Config UX

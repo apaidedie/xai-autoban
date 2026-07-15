@@ -230,7 +230,7 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
     </div>
   </div>
 
-  <div id="authBanner" class="banner warn">正在检测管理密钥…</div>
+  <div id="authBanner" class="banner warn" hidden>写操作需在 CPA 管理中心已登录；密钥在「插件管理」配置。</div>
 
   <section class="panel">
     <div class="phd">
@@ -324,13 +324,6 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
       </div>
     </div>
 
-    <div class="row auth-row" id="keyRow">
-      <span class="hint" id="authHint">写操作需要管理密钥</span>
-      <input id="mgmtKeyInput" type="password" placeholder="粘贴 CPA 管理密钥" autocomplete="off">
-      <button class="bp" id="saveKeyBtn" type="button">保存密钥</button>
-      <button class="bg" id="clearKeyBtn" type="button">清除</button>
-      <button class="bs" id="toggleKeyBtn" type="button" hidden>更换密钥</button>
-    </div>
     <div class="row msg-row"><div id="message" class="msg">系统待命</div></div>
     <div class="progress" id="progress"><i id="progressBar"></i></div>
 
@@ -361,7 +354,7 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
 
   <p class="foot">
     <b>隔离</b>=插件内跳过调度；<b>禁用</b>=关闭凭证；<b>启用</b>=打开凭证。
-    日常策略请在运维台「编辑配置」修改；插件管理只需开关插件与配置管理密钥。运行时配置立即生效，进程重启后可能回落 yaml 默认值。
+    日常策略请在运维台「编辑配置」修改。写操作依赖 CPA 管理中心登录会话；服务端禁用/删除密钥在插件管理配置。运行时配置立即生效，进程重启后可能回落 yaml 默认值。
   </p>
   <input id="importFile" type="file" accept="application/json,.json" hidden>
 </div>
@@ -448,14 +441,13 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
 <script>
 const resourceBase='/v0/resource/plugins/xai-autoban';
 const mgmtBase='/v0/management/plugins/xai-autoban';
-const KEY_STORE='xai_autoban_management_key';
 const state={bans:[],credentials:[],counts:{},page:{page:1,page_size:50,total:0,pages:1,filter:'all',q:''},filter:'all',query:'',selected:new Set(),timer:null,searchTimer:null,toastTimer:null,busy:false,mgmtKey:'',settings:{},success:'unban',fail:'ban',autoExecute:true,history:[]};
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
+// Best-effort: reuse CPA management-center key already in localStorage (no paste UI).
 function readManagementKey(){
-  try{const m=localStorage.getItem(KEY_STORE); if(m&&m.trim()) return m.trim();}catch(_){}
-  const keys=['cliproxyapi_management_key','management_key','cpa_management_key','managementKey','management-password','apiKey','token'];
+  const keys=['cliproxyapi_management_key','management_key','cpa_management_key','managementKey','management-password','apiKey','token','management_password'];
   for(const k of keys){try{const v=localStorage.getItem(k); if(v&&v.trim()&&v.length<512) return v.trim();}catch(_){}}
   try{
     for(let i=0;i<localStorage.length;i++){
@@ -467,7 +459,7 @@ function readManagementKey(){
           const obj=JSON.parse(raw); const st=[obj];
           while(st.length){const cur=st.pop(); if(!cur||typeof cur!=='object') continue;
             for(const [kk,vv] of Object.entries(cur)){
-              if(typeof vv==='string'&&vv.trim()&&vv.length<512&&/management|mgmt|password|apiKey|token/i.test(kk)) return vv.trim();
+              if(typeof vv==='string'&&vv.trim()&&vv.length<512&&/management|mgmt|password|apiKey|token|secret/i.test(kk)) return vv.trim();
               if(vv&&typeof vv==='object') st.push(vv);
             }}
         }catch(_){}
@@ -489,52 +481,35 @@ function setActionEnabled(ok){
 }
 function setAuthUI(){
   state.mgmtKey=readManagementKey();
-  const ok=!!state.mgmtKey;
   const b=$('authBanner');
-  if(b){
-    if(ok){
-      b.hidden=true;
-    }else{
-      b.hidden=false;
-      b.className='banner warn';
-      b.textContent='只读模式：粘贴并保存管理密钥后，才能取消隔离 / 隔离 / 禁用 / 启用 / 巡检 / 改配置。';
-    }
-  }
-  const keyRow=$('keyRow');
-  const input=$('mgmtKeyInput');
-  const saveBtn=$('saveKeyBtn');
-  const clearBtn=$('clearKeyBtn');
-  const toggle=$('toggleKeyBtn');
-  if(ok){
-    // authorized: collapse key form into compact controls
-    if(input) input.hidden=true;
-    if(saveBtn) saveBtn.hidden=true;
-    if(clearBtn) clearBtn.hidden=false;
-    if(toggle){ toggle.hidden=false; toggle.textContent='更换密钥'; }
-    if($('authHint')) $('authHint').textContent='已授权 · 密钥仅保存在本机浏览器';
-    if(keyRow) keyRow.classList.add('auth-ok');
-  }else{
-    if(input){ input.hidden=false; input.placeholder='粘贴 CPA 管理密钥'; }
-    if(saveBtn) saveBtn.hidden=false;
-    if(clearBtn) clearBtn.hidden=true;
-    if(toggle) toggle.hidden=true;
-    if($('authHint')) $('authHint').textContent='写操作需要管理密钥';
-    if(keyRow) keyRow.classList.remove('auth-ok');
-  }
-  setActionEnabled(ok); return ok;
+  if(b) b.hidden=true;
+  // Write ops rely on CPA management session (same-origin cookies) and optional inherited key.
+  setActionEnabled(true);
+  return true;
 }
 async function apiResource(path){
-  const r=await fetch(resourceBase+path,{cache:'no-store'}); const t=await r.text();
+  const r=await fetch(resourceBase+path,{cache:'no-store',credentials:'same-origin'}); const t=await r.text();
   let d; try{d=JSON.parse(t)}catch(_){throw new Error(t||('HTTP '+r.status))}
   if(!r.ok) throw new Error(d.error||('HTTP '+r.status)); return d;
 }
 async function apiMgmt(method,path,body){
-  if(!state.mgmtKey) throw new Error('缺少管理密钥');
-  const r=await fetch(mgmtBase+path,{method,cache:'no-store',headers:{
-    'Authorization':'Bearer '+state.mgmtKey,'Content-Type':'application/json',
-    'X-Management-Key':state.mgmtKey,'X-Api-Key':state.mgmtKey
-  },body:body?JSON.stringify(body):undefined});
+  state.mgmtKey=readManagementKey();
+  const headers={'Content-Type':'application/json'};
+  if(state.mgmtKey){
+    headers['Authorization']='Bearer '+state.mgmtKey;
+    headers['X-Management-Key']=state.mgmtKey;
+    headers['X-Api-Key']=state.mgmtKey;
+  }
+  const r=await fetch(mgmtBase+path,{method,cache:'no-store',credentials:'same-origin',headers,body:body?JSON.stringify(body):undefined});
   const t=await r.text(); let d; try{d=JSON.parse(t)}catch(_){throw new Error(t||('HTTP '+r.status))}
+  if(r.status===401||r.status===403){
+    const b=$('authBanner');
+    if(b){
+      b.hidden=false; b.className='banner warn';
+      b.textContent='写操作未授权：请先在 CPA 管理中心登录；服务端禁用/删除密钥在「插件管理」配置。';
+    }
+    throw new Error(d.error||d.message||'未授权（请登录管理中心）');
+  }
   if(!r.ok) throw new Error(d.error||d.message||('HTTP '+r.status)); return d;
 }
 function setMessage(text,err=false){
@@ -554,7 +529,7 @@ function setBusy(on, label){
     if(on){ live.textContent=label||'处理中'; live.className='live busy'; }
     else if(live.classList.contains('busy')){ live.textContent='在线'; live.className='live'; }
   }
-  setActionEnabled(!!state.mgmtKey && !on);
+  setActionEnabled(!on);
 }
 function setProgress(cur, total){
   const wrap=$('progress'), bar=$('progressBar');
@@ -604,8 +579,7 @@ function paintOverviewProbe(probe){
 }
 function jumpOverview(kind){
   if(kind==='probe'){
-    if(state.mgmtKey) runProbe();
-    else { setMessage('请先保存管理密钥再巡检',true); toast('请先保存管理密钥','err'); }
+    runProbe();
     return;
   }
   setFilter(kind||'all', false);
@@ -696,7 +670,6 @@ function paintChoices(){
   document.querySelectorAll('#autoExecChoices button').forEach(b=>b.classList.toggle('active',(b.dataset.v==='1')===!!state.autoExecute));
 }
 function openDrawer(){
-  if(!state.mgmtKey){ setMessage('请先保存管理密钥再编辑配置',true); return; }
   fillDrawer(state.settings||{});
   $('drawer').classList.add('open'); $('drawerMask').classList.add('open'); $('drawer').setAttribute('aria-hidden','false');
 }
@@ -770,7 +743,7 @@ function needsReauth(c){
 }
 function rowActions(c){
   const id=esc(c.auth_id);
-  const dis=state.mgmtKey?'':'disabled';
+  const dis=state.busy?'disabled':'';
   const btns=[];
   if(needsReauth(c)){
     btns.push('<button class="row-action primary" data-act="reauth" data-id="'+id+'" '+dis+'>重授权</button>');
@@ -835,10 +808,10 @@ function render(){
   empty.textContent=state.filter==='all'&&!state.query?'暂无 xAI 凭证':'没有匹配的凭证 · 可清除筛选';
   document.querySelectorAll('#rows input[type=checkbox]').forEach(input=>input.addEventListener('change',()=>{
     input.checked?state.selected.add(input.dataset.id):state.selected.delete(input.dataset.id);
-    setActionEnabled(!!state.mgmtKey);
+    setActionEnabled(!state.busy);
   }));
   document.querySelectorAll('#rows [data-act]').forEach(btn=>btn.addEventListener('click',()=>runRowAction(btn.dataset.act,btn.dataset.id)));
-  setActionEnabled(!!state.mgmtKey);
+  setActionEnabled(!state.busy);
 }
 async function runRowAction(act,id){
   if(!id||state.busy) return;
@@ -1000,15 +973,6 @@ async function handleImportFile(file){
 }
 
 if($('importFile')) $('importFile').onchange=e=>{ const f=e.target.files&&e.target.files[0]; if(f) handleImportFile(f); };
-$('saveKeyBtn').onclick=()=>{const v=$('mgmtKeyInput').value.trim(); if(!v){setMessage('请先粘贴管理密钥',true);return;} localStorage.setItem(KEY_STORE,v); $('mgmtKeyInput').value=''; setAuthUI(); setMessage('密钥已保存'); toast('密钥已保存','ok');};
-$('clearKeyBtn').onclick=()=>{localStorage.removeItem(KEY_STORE); $('mgmtKeyInput').value=''; setAuthUI(); setMessage('已清除密钥');};
-if($('toggleKeyBtn')) $('toggleKeyBtn').onclick=()=>{
-  const input=$('mgmtKeyInput'); const saveBtn=$('saveKeyBtn');
-  if(!input) return;
-  input.hidden=!input.hidden;
-  if(saveBtn) saveBtn.hidden=input.hidden;
-  if(!input.hidden) input.focus();
-};
 if($('clearFilterBtn')) $('clearFilterBtn').onclick=()=>{state.filter='all'; state.query=''; state.page.page=1; if($('search')) $('search').value=''; paintChips(); loadData(true); setMessage('已清除筛选');};
 $('search').oninput=e=>{
   state.query=e.target.value.trim();
