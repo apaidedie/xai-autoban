@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -172,6 +173,9 @@ func TestStatusPageUsesManagementKeyFlow(t *testing.T) {
 		"buildGetOpsURL",
 		"b64url",
 		"payload",
+		"selectCurrentFilter",
+		"deleteSelected",
+		"全选当前筛选",
 	} {
 		if !strings.Contains(page, required) {
 			t.Fatalf("page missing %q", required)
@@ -301,6 +305,40 @@ func TestResourceOpsGETUnbanAuthIdHeaderOnly(t *testing.T) {
 	}
 	if defaultApp.bans.Active("hh1", now) {
 		t.Fatal("expected unban via Auth-Id header only")
+	}
+}
+
+func TestResourceOpsListIDsFilter403(t *testing.T) {
+	now := time.Now()
+	stub := &host.Stub{Files: []pluginapi.HostAuthFileEntry{
+		{ID: "a403", AuthIndex: "a403", Name: "a403.json", Provider: "xai", Email: "a@x.com"},
+		{ID: "b429", AuthIndex: "b429", Name: "b429.json", Provider: "xai", Email: "b@x.com"},
+	}}
+	app := withStub(t, stub)
+	app.bans.Set("a403", ban.Entry{StatusCode: 403, ResetAt: now.Add(time.Hour), AuthID: "a403"})
+	app.bans.Set("b429", ban.Entry{StatusCode: 429, ResetAt: now.Add(time.Hour), AuthID: "b429"})
+	resp := app.mgmt.Handle(pluginapi.ManagementRequest{
+		Method: http.MethodGet,
+		Path:   "/v0/resource/plugins/xai-autoban/ops",
+		Query:  map[string][]string{"op": {"list_ids"}, "filter": {"403"}},
+	})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status=%d body=%s", resp.StatusCode, string(resp.Body))
+	}
+	var out map[string]any
+	_ = json.Unmarshal(resp.Body, &out)
+	ids, _ := out["auth_ids"].([]any)
+	found := false
+	for _, id := range ids {
+		if fmt.Sprint(id) == "a403" {
+			found = true
+		}
+		if fmt.Sprint(id) == "b429" {
+			t.Fatal("429 id should not be in 403 filter")
+		}
+	}
+	if !found {
+		t.Fatalf("expected a403 in ids: %v body=%s", ids, string(resp.Body))
 	}
 }
 

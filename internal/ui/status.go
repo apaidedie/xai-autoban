@@ -320,10 +320,11 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
         <details class="more">
           <summary class="bs">更多</summary>
           <div class="more-menu">
-            <button type="button" id="unbanSelected" onclick="bulkAct('unban')" disabled>取消隔离所选</button>
+             <button type="button" id="unbanSelected" onclick="bulkAct('unban')" disabled>取消隔离所选</button>
             <button type="button" id="banSelected" onclick="bulkAct('ban')" disabled>隔离所选</button>
             <button type="button" id="disableSelected" onclick="bulkAct('disable')" disabled>禁用所选</button>
             <button type="button" id="reenableSelected" onclick="bulkAct('reenable')" disabled>启用所选</button>
+            <button type="button" id="deleteSelected" onclick="bulkAct('delete')" disabled>删除所选</button>
             <button type="button" id="unbanAll" onclick="unbanAll()" disabled>全部取消隔离</button>
             <button type="button" id="btnBackup" onclick="exportBackup()" disabled>导出备份</button>
             <button type="button" id="btnImport" onclick="importBackup()" disabled>导入备份</button>
@@ -338,7 +339,10 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
 
     <div class="list-head">
       <label class="chk"><input id="selectPage" type="checkbox"> 本页全选</label>
+      <button class="bg" id="selectFilterBtn" type="button" title="勾选当前筛选下的全部凭证（跨页，最多 800）">全选当前筛选</button>
+      <button class="bg" id="clearSelectedBtn" type="button" title="清空勾选">清除选择</button>
       <span class="hint" id="listHint"></span>
+      <span class="hint" id="selectedHint"></span>
     </div>
     <div class="card-list" id="rows"></div>
     <div id="empty" class="empty" hidden>没有匹配的凭证</div>
@@ -446,14 +450,23 @@ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 
 function setActionEnabled(ok){
   const can=!!ok && !state.busy;
-  const ids=['btnProbe','btnRecheck429','btnBackup','btnImport','unbanSelected','banSelected','disableSelected','reenableSelected','recheckSelected','unbanAll','saveConfigBtn'];
+  const ids=['btnProbe','btnRecheck429','btnBackup','btnImport','unbanSelected','banSelected','disableSelected','reenableSelected','deleteSelected','recheckSelected','unbanAll','saveConfigBtn','selectFilterBtn','clearSelectedBtn'];
   ids.forEach(id=>{const el=$(id); if(el) el.disabled=!can;});
   const n=state.selected.size;
   if(can){
-    ['unbanSelected','banSelected','disableSelected','reenableSelected','recheckSelected'].forEach(id=>{const el=$(id); if(el) el.disabled=n===0;});
+    ['unbanSelected','banSelected','disableSelected','reenableSelected','deleteSelected','recheckSelected'].forEach(id=>{const el=$(id); if(el) el.disabled=n===0;});
+    if($('clearSelectedBtn')) $('clearSelectedBtn').disabled=n===0;
   }
   if($('unbanSelected')) $('unbanSelected').textContent='取消隔离所选 ('+n+')';
+  if($('deleteSelected')) $('deleteSelected').textContent='删除所选 ('+n+')';
   if($('recheckSelected')) $('recheckSelected').textContent='复检所选 ('+n+')';
+  const sh=$('selectedHint');
+  if(sh) sh.textContent=n?('已选 '+n+' 条'):'';
+  const sf=$('selectFilterBtn');
+  if(sf){
+    const fl={all:'全部',healthy:'健康',banned:'隔离',disabled:'已禁用','401':'401','402':'402','403':'403','429':'429'}[state.filter]||state.filter;
+    sf.textContent='全选当前筛选'+(state.filter&&state.filter!=='all'?(' · '+fl):'');
+  }
 }
 function setAuthUI(){
   setActionEnabled(true);
@@ -582,6 +595,8 @@ function mapPathToOp(method,path,body){
   if(method==='POST'&&p.indexOf('/reauth')>=0) return Object.assign({op:'reauth'}, body||{});
   if(method==='POST'&&p.indexOf('/bans-recheck-429')>=0) return Object.assign({op:'recheck429'}, body||{});
   if(method==='POST'&&p.indexOf('/recheck-selected')>=0) return Object.assign({op:'recheck_selected'}, body||{});
+  if(method==='POST'&&p.indexOf('/list-ids')>=0) return Object.assign({op:'list_ids'}, body||{});
+  if(method==='GET'&&p.indexOf('/list-ids')>=0) return Object.assign({op:'list_ids'}, body||{});
   if(method==='POST'&&p.indexOf('/import')>=0) return Object.assign({op:'import'}, body||{});
   return null;
 }
@@ -921,24 +936,62 @@ async function bulkAct(act){
   if(state.busy) return;
   const ids=[...state.selected];
   if(!ids.length){ setMessage('请先勾选凭证',true); toast('请先勾选凭证','err'); return; }
-  const labels={unban:'取消隔离',ban:'隔离',disable:'禁用',reenable:'启用',reauth:'重授权'};
-  if(!confirm('确认对所选 '+ids.length+' 条执行「'+(labels[act]||act)+'」？')) return;
+  const labels={unban:'取消隔离',ban:'隔离',disable:'禁用',reenable:'启用',reauth:'重授权',delete:'删除'};
+  const danger=act==='delete'?'\n\n删除将调用 Management 删除凭证；失败则按删除回退策略禁用/隔离。不可轻易撤销。':'';
+  if(!confirm('确认对所选 '+ids.length+' 条执行「'+(labels[act]||act)+'」？'+danger)) return;
+  if(act==='delete' && !confirm('再次确认：删除所选 '+ids.length+' 条凭证？')) return;
   try{
     setBusy(true,'批量中');
-    let i=0;
+    let i=0, okN=0, failN=0;
+    const fails=[];
     for(const id of ids){
       i++; setProgress(i-1, ids.length); setMessage('正在处理 '+i+'/'+ids.length+' …');
-      if(act==='unban') await apiMgmt('POST','/unban',{auth_id:id});
-      else if(act==='reauth') await apiMgmt('POST','/reauth',{auth_id:id,force:true});
-      else await apiMgmt('POST','/apply-action',{auth_id:id,action:act,force:true});
+      try{
+        if(act==='unban') await apiMgmt('POST','/unban',{auth_id:id});
+        else if(act==='reauth') await apiMgmt('POST','/reauth',{auth_id:id,force:true});
+        else await apiMgmt('POST','/apply-action',{auth_id:id,action:act,force:true});
+        okN++;
+        state.selected.delete(id);
+      }catch(one){
+        failN++;
+        if(fails.length<5) fails.push((id||'')+': '+(one.message||one));
+      }
       setProgress(i, ids.length);
     }
-    state.selected.clear();
-    setMessage('批量完成 · '+(labels[act]||act)+' × '+ids.length);
-    toast('批量完成 · '+(labels[act]||act)+' × '+ids.length,'ok');
+    const msg='批量完成 · '+(labels[act]||act)+' 成功 '+okN+(failN?(' · 失败 '+failN):'');
+    setMessage(msg+(fails.length?(' · '+fails.join('；')):''), failN>0);
+    toast(msg, failN>0?'err':'ok');
     await loadData(true);
   }catch(e){ setMessage(e.message,true); toast(e.message,'err'); }
   finally{ setBusy(false); setProgress(0,0); }
+}
+async function selectCurrentFilter(){
+  if(state.busy) return;
+  const fl={all:'全部',healthy:'健康',banned:'隔离',disabled:'已禁用','401':'401','402':'402','403':'403','429':'429'}[state.filter]||state.filter;
+  try{
+    setBusy(true,'拉取筛选 ID');
+    setMessage('正在获取「'+fl+'」全部凭证 ID…');
+    const res=await apiMgmt('POST','/list-ids',{filter:state.filter||'all',q:state.query||'',limit:800});
+    const ids=res.auth_ids||[];
+    if(!ids.length){
+      setMessage('当前筛选下没有可勾选的凭证',true);
+      toast('无匹配凭证','err');
+      return;
+    }
+    // replace selection with filter set
+    state.selected=new Set(ids);
+    render();
+    const note=res.truncated?('（共 '+res.total+'，已截断至 '+ids.length+'）'):'';
+    setMessage('已全选「'+fl+'」'+ids.length+' 条'+note+' · 可在「更多」中批量操作');
+    toast('已选 '+ids.length+' 条 · '+fl,'ok');
+  }catch(e){ setMessage(e.message,true); toast(e.message,'err'); }
+  finally{ setBusy(false); }
+}
+function clearSelection(){
+  state.selected.clear();
+  if($('selectPage')) $('selectPage').checked=false;
+  render();
+  setMessage('已清除选择');
 }
 async function unbanSelected(){ return bulkAct('unban'); }
 async function unbanAll(){
@@ -1065,6 +1118,8 @@ $('search').oninput=e=>{
   state.searchTimer=setTimeout(()=>loadData(true),280);
 };
 $('selectPage').onchange=e=>{for(const c of filtered()) e.target.checked?state.selected.add(c.auth_id):state.selected.delete(c.auth_id); render();};
+if($('selectFilterBtn')) $('selectFilterBtn').onclick=()=>selectCurrentFilter();
+if($('clearSelectedBtn')) $('clearSelectedBtn').onclick=()=>clearSelection();
 if($('prevPageBtn')) $('prevPageBtn').onclick=()=>{ if((state.page.page||1)>1){ state.page.page--; loadData(true);} };
 if($('nextPageBtn')) $('nextPageBtn').onclick=()=>{ if((state.page.page||1)<(state.page.pages||1)){ state.page.page++; loadData(true);} };
 $('autoRefresh').onchange=()=>{if(state.timer) clearInterval(state.timer); state.timer=$('autoRefresh').checked?setInterval(()=>loadData(true),30000):null;};

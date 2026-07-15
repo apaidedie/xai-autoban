@@ -638,9 +638,74 @@ func (h *Handler) handleResourceAPI(req pluginapi.ManagementRequest) pluginapi.M
 			"ok": true, "running": st.Running, "job_id": st.JobID,
 			"done": st.Done, "total": st.Total, "result": st.Result, "error": st.Error,
 		})
+	case "list_ids", "select_ids":
+		return h.listAuthIDs(body, q)
 	default:
 		return jsonResponse(http.StatusBadRequest, map[string]any{"error": "unknown_op", "op": op})
 	}
+}
+
+// listAuthIDs returns auth_id list for current filter/search (for 全选当前筛选).
+const maxListAuthIDs = 800
+
+func (h *Handler) listAuthIDs(body map[string]any, q url.Values) pluginapi.ManagementResponse {
+	filter := strings.TrimSpace(fmt.Sprint(body["filter"]))
+	if filter == "" || filter == "<nil>" {
+		filter = q.Get("filter")
+	}
+	search := strings.TrimSpace(fmt.Sprint(body["q"]))
+	if search == "" || search == "<nil>" {
+		search = firstNonEmpty(q.Get("q"), q.Get("search"))
+	}
+	limit := maxListAuthIDs
+	if v, ok := body["limit"].(string); ok {
+		if n, err := strconv.Atoi(strings.TrimSpace(v)); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	if v, ok := body["limit"].(float64); ok && int(v) > 0 {
+		limit = int(v)
+	}
+	if limit > maxListAuthIDs {
+		limit = maxListAuthIDs
+	}
+	if limit < 1 {
+		limit = maxListAuthIDs
+	}
+
+	now := time.Now()
+	snapshot := h.Bans.Snapshot(now)
+	files, _ := collectXAIAuthFiles(h.Host)
+	probeLast := map[string]creds.ProbeResult{}
+	for k, v := range h.Probe.LastResults() {
+		probeLast[k] = creds.ProbeResult{At: v.At, OK: v.OK, Status: v.Status, Error: v.Error}
+	}
+	// No AuthGet sampling for id listing — status codes come from ban ledger + disabled flags.
+	allCreds, _ := creds.BuildWithJSON(files, snapshot, probeLast, nil, now)
+	matched := creds.Filter(allCreds, filter, search)
+	total := len(matched)
+	truncated := false
+	if total > limit {
+		matched = matched[:limit]
+		truncated = true
+	}
+	ids := make([]string, 0, len(matched))
+	for _, c := range matched {
+		id := strings.TrimSpace(c.AuthID)
+		if id != "" {
+			ids = append(ids, id)
+		}
+	}
+	return jsonResponse(http.StatusOK, map[string]any{
+		"ok":        true,
+		"auth_ids":  ids,
+		"count":     len(ids),
+		"total":     total,
+		"truncated": truncated,
+		"filter":    filter,
+		"q":         search,
+		"limit":     limit,
+	})
 }
 
 func (h *Handler) updateSettings(raw []byte) pluginapi.ManagementResponse {
