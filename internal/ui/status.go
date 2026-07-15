@@ -426,7 +426,6 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
 
 <script>
 const resourceBase='/v0/resource/plugins/xai-autoban';
-const mgmtBase='/v0/management/plugins/xai-autoban';
 const state={bans:[],credentials:[],counts:{},page:{page:1,page_size:50,total:0,pages:1,filter:'all',q:''},filter:'all',query:'',selected:new Set(),timer:null,searchTimer:null,toastTimer:null,busy:false,settings:{},success:'unban',fail:'ban',autoExecute:true,history:[]};
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));

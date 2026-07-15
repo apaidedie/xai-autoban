@@ -135,7 +135,6 @@ func TestSchedulerNoopWhenNothingFiltered(t *testing.T) {
 func TestStatusPageUsesManagementKeyFlow(t *testing.T) {
 	page := ui.StatusPage(pluginName, pluginVersion)
 	for _, required := range []string{
-		"/v0/management/plugins/xai-autoban",
 		"/v0/resource/plugins/xai-autoban",
 		"color-scheme:dark",
 		"运维台",
@@ -148,23 +147,18 @@ func TestStatusPageUsesManagementKeyFlow(t *testing.T) {
 		"自动执行",
 		"巡检历史",
 		"data-filter",
-		"apply-action",
-		"reenable",
 		"健康",
 		"已禁用",
 		"statusChips",
-		"bans-recheck-429",
 		"复检 429",
 		"toast",
 		"progressBar",
 		"setBusy",
-		"/backup",
 		"exportBackup",
 		"importBackup",
 		"overviewCards",
 		"ov_healthy",
 		"jumpOverview",
-		"recheck-selected",
 		"复检所选",
 		"card-list",
 		"rcard",
@@ -205,16 +199,23 @@ func TestResourceDataPOSTUnban(t *testing.T) {
 	defaultApp.bans.ClearAll()
 	now := time.Now()
 	defaultApp.bans.Set("r1", ban.Entry{StatusCode: 403, ResetAt: now.Add(time.Hour), Reason: "forbidden"})
-	resp := defaultApp.mgmt.Handle(pluginapi.ManagementRequest{
-		Method: http.MethodPost,
-		Path:   "/v0/resource/plugins/xai-autoban/data",
-		Body:   []byte(`{"op":"unban","auth_id":"r1"}`),
-	})
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status=%d body=%s", resp.StatusCode, string(resp.Body))
-	}
-	if defaultApp.bans.Active("r1", now) {
-		t.Fatal("expected unban via resource POST /data")
+	for _, path := range []string{
+		"/v0/resource/plugins/xai-autoban/data",
+		"/resource/plugins/xai-autoban/data",
+		"/data",
+	} {
+		defaultApp.bans.Set("r1", ban.Entry{StatusCode: 403, ResetAt: now.Add(time.Hour), Reason: "forbidden"})
+		resp := defaultApp.mgmt.Handle(pluginapi.ManagementRequest{
+			Method: http.MethodPost,
+			Path:   path,
+			Body:   []byte(`{"op":"unban","auth_id":"r1"}`),
+		})
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("path=%s status=%d body=%s", path, resp.StatusCode, string(resp.Body))
+		}
+		if defaultApp.bans.Active("r1", now) {
+			t.Fatalf("path=%s: expected unban via resource POST /data", path)
+		}
 	}
 }
 

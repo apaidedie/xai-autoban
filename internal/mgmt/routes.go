@@ -64,8 +64,15 @@ func (h *Handler) Registration() pluginapi.ManagementRegistrationResponse {
 }
 
 func resourcePathMatch(path, name, suffix string) bool {
-	path = strings.TrimRight(path, "/")
+	path = strings.TrimRight(strings.TrimSpace(path), "/")
 	suffix = strings.TrimPrefix(suffix, "/")
+	if path == "" {
+		return false
+	}
+	// Relative forms CPA may pass after stripping host prefix.
+	if path == "/"+suffix || path == suffix {
+		return true
+	}
 	candidates := []string{
 		"/v0/resource/plugins/" + name + "/" + suffix,
 		"/resource/plugins/" + name + "/" + suffix,
@@ -77,7 +84,6 @@ func resourcePathMatch(path, name, suffix string) bool {
 			return true
 		}
 	}
-	// loose: ends with /xai-autoban/data
 	return strings.HasSuffix(path, "/"+name+"/"+suffix)
 }
 
