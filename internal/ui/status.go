@@ -58,9 +58,15 @@ h1{margin:8px 0 0;font-size:26px;font-weight:800;letter-spacing:-.03em}
 .more{position:relative}
 .more>summary{list-style:none;cursor:pointer;display:inline-flex;align-items:center;height:38px;padding:0 12px;border-radius:11px}
 .more>summary::-webkit-details-marker{display:none}
-.more-menu{position:absolute;right:0;top:42px;z-index:20;min-width:180px;padding:8px;border-radius:12px;border:1px solid var(--line);background:rgba(15,23,42,.98);box-shadow:0 16px 40px rgba(0,0,0,.45);display:flex;flex-direction:column;gap:4px}
-.more-menu button,.more-menu label{height:34px;justify-content:flex-start;text-align:left;background:transparent;border:0;width:100%;border-radius:8px;padding:0 10px}
+.more-menu{position:absolute;right:0;top:42px;z-index:20;min-width:200px;padding:8px;border-radius:12px;border:1px solid var(--line);background:rgba(15,23,42,.98);box-shadow:0 16px 40px rgba(0,0,0,.45);display:flex;flex-direction:column;gap:2px}
+.more-menu .more-sec{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:8px 10px 4px}
+.more-menu .more-sec:first-child{padding-top:2px}
+.more-menu .more-div{height:1px;margin:6px 6px;background:rgba(148,163,184,.12)}
+.more-menu button,.more-menu label{height:34px;justify-content:flex-start;text-align:left;background:transparent;border:0;width:100%;border-radius:8px;padding:0 10px;display:inline-flex;align-items:center;color:var(--text);font-weight:700;font-size:13px;cursor:pointer}
 .more-menu button:hover{background:rgba(51,65,85,.8)}
+.more-menu button.danger{color:#fda4af}
+.more-menu button.danger:hover{background:rgba(244,63,94,.18)}
+.more-menu button:disabled{opacity:.4;cursor:not-allowed}
 .auth-row{border-top:0!important;padding:6px 14px!important}
 .auth-row.auth-ok{padding:6px 14px!important;opacity:.9}
 .auth-row.auth-ok input{display:none}
@@ -239,6 +245,7 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <div class="live" id="syncState">准备中</div>
+      <button class="bs" id="btnRefresh" type="button" onclick="loadData()" title="刷新列表与统计">刷新</button>
       <button class="bp" id="btnProbe" type="button" onclick="runProbe()" disabled>立即巡检</button>
       <button class="bs" id="openConfigBtn" type="button">编辑配置</button>
     </div>
@@ -317,21 +324,23 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
     <div class="toolbar">
       <div class="tools" style="width:100%">
         <input id="search" type="search" placeholder="搜索账号 / Auth ID / 原因" autocomplete="off">
-        <button class="bp" id="recheckSelected" type="button" onclick="recheckSelected()" disabled>复检所选 (0)</button>
-        <button class="bs" id="btnRecheck429" type="button" onclick="recheck429()" disabled>复检 429</button>
-        <button class="bs" type="button" onclick="loadData()">刷新</button>
+        <button class="bp" id="recheckSelected" type="button" onclick="recheckSelected()" disabled title="对勾选的凭证做上游复检（任意状态，含已禁用）">复检所选 (0)</button>
+        <button class="bs" id="btnRecheck429" type="button" onclick="recheck429()" disabled title="只处理当前 429 隔离账本：恢复则释放，仍限流则续隔">复检 429</button>
         <details class="more">
           <summary class="bs">更多</summary>
           <div class="more-menu">
-             <button type="button" id="unbanSelected" onclick="bulkAct('unban')" disabled>取消隔离所选</button>
+            <div class="more-sec">所选批量</div>
+            <button type="button" id="unbanSelected" onclick="bulkAct('unban')" disabled>释放所选</button>
             <button type="button" id="banSelected" onclick="bulkAct('ban')" disabled>隔离所选</button>
             <button type="button" id="disableSelected" onclick="bulkAct('disable')" disabled>禁用所选</button>
             <button type="button" id="reenableSelected" onclick="bulkAct('reenable')" disabled>启用所选</button>
-            <button type="button" id="deleteSelected" onclick="bulkAct('delete')" disabled>删除所选</button>
-            <button type="button" id="unbanAll" onclick="unbanAll()" disabled>全部取消隔离</button>
-            <button type="button" id="btnBackup" onclick="exportBackup()" disabled>导出备份</button>
-            <button type="button" id="btnImport" onclick="importBackup()" disabled>导入备份</button>
-            <label class="chk"><input id="autoRefresh" type="checkbox" checked> 30 秒刷新</label>
+            <div class="more-div"></div>
+            <div class="more-sec">危险操作</div>
+            <button type="button" class="danger" id="deleteSelected" onclick="bulkAct('delete')" disabled>删除所选</button>
+            <div class="more-div"></div>
+            <div class="more-sec">全局</div>
+            <button type="button" id="unbanAll" onclick="unbanAll()" disabled>全部释放</button>
+            <label class="chk"><input id="autoRefresh" type="checkbox" checked> 30 秒自动刷新</label>
           </div>
         </details>
       </div>
@@ -465,14 +474,14 @@ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 
 function setActionEnabled(ok){
   const can=!!ok && !state.busy;
-  const ids=['btnProbe','btnRecheck429','btnBackup','btnImport','unbanSelected','banSelected','disableSelected','reenableSelected','deleteSelected','recheckSelected','unbanAll','saveConfigBtn','selectFilterBtn','clearSelectedBtn'];
+  const ids=['btnProbe','btnRefresh','btnRecheck429','unbanSelected','banSelected','disableSelected','reenableSelected','deleteSelected','recheckSelected','unbanAll','saveConfigBtn','selectFilterBtn','clearSelectedBtn'];
   ids.forEach(id=>{const el=$(id); if(el) el.disabled=!can;});
   const n=state.selected.size;
   if(can){
     ['unbanSelected','banSelected','disableSelected','reenableSelected','deleteSelected','recheckSelected'].forEach(id=>{const el=$(id); if(el) el.disabled=n===0;});
     if($('clearSelectedBtn')) $('clearSelectedBtn').disabled=n===0;
   }
-  if($('unbanSelected')) $('unbanSelected').textContent='取消隔离所选 ('+n+')';
+  if($('unbanSelected')) $('unbanSelected').textContent='释放所选 ('+n+')';
   if($('deleteSelected')) $('deleteSelected').textContent='删除所选 ('+n+')';
   if($('recheckSelected')) $('recheckSelected').textContent='复检所选 ('+n+')';
   const sh=$('selectedHint');
@@ -739,7 +748,7 @@ function formatDate(v){const d=new Date(v); return Number.isNaN(d.getTime())?v:d
 function formatRemaining(s){s=Math.max(0,Number(s||0)); const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60); if(d)return d+'天 '+h+'小时'; if(h)return h+'小时 '+m+'分'; return m+'分钟'}
 function reasonLabel(r){return ({payment_required:'额度不足',forbidden:'禁止访问',unauthorized:'未授权',rate_limited:'限流',rate_limited_fallback:'限流(默认等待)',probe_failed:'巡检失败',manual:'手动',token_expired:'Token 过期',needs_refresh:'待刷新'})[r]||r||'-'}
 function classLabel(c){return ({rate_limited:'限流',quota_exhausted:'额度用尽',reauth:'需重新授权',permission_denied:'权限拒绝',model_unavailable:'模型不可用',probe_error:'巡检错误',healthy:'健康',token_expired:'Token 过期',needs_refresh:'待刷新'})[c]||c||''}
-function labelAction(a){return ({ban:'隔离',disable:'禁用',delete:'删除',none:'不处理',unban:'取消隔离',reenable:'启用',unban_and_reenable:'取消隔离并启用',reauth:'重授权'})[a]||a||'-'}
+function labelAction(a){return ({ban:'隔离',disable:'禁用',delete:'删除',none:'不处理',unban:'释放',reenable:'启用',unban_and_reenable:'释放并启用',reauth:'重授权'})[a]||a||'-'}
 
 function renderSettingsSummary(s){
   state.settings=s||{};
@@ -896,7 +905,7 @@ function rowActions(c){
   if(needsReauth(c)){
     btns.push('<button class="row-action primary" data-act="reauth" data-id="'+id+'" '+dis+'>重授权</button>');
   }
-  if(c.banned) btns.push('<button class="row-action" data-act="unban" data-id="'+id+'" '+dis+'>取消隔离</button>');
+  if(c.banned) btns.push('<button class="row-action" data-act="unban" data-id="'+id+'" '+dis+'>释放</button>');
   else if(!needsReauth(c)) btns.push('<button class="row-action" data-act="ban" data-id="'+id+'" '+dis+'>隔离</button>');
   if(c.disabled) btns.push('<button class="row-action" data-act="reenable" data-id="'+id+'" '+dis+'>启用</button>');
   else btns.push('<button class="row-action danger" data-act="disable" data-id="'+id+'" '+dis+'>禁用</button>');
@@ -969,7 +978,7 @@ function render(){
 }
 async function runRowAction(act,id){
   if(!id||state.busy) return;
-  const labels={unban:'取消隔离',ban:'隔离',disable:'禁用',reenable:'启用',reauth:'重授权'};
+  const labels={unban:'释放',ban:'隔离',disable:'禁用',reenable:'启用',reauth:'重授权'};
   if(!confirm('确认对凭证执行「'+(labels[act]||act)+'」？\n'+id)) return;
   try{
     setBusy(true, labels[act]||act);
@@ -991,7 +1000,7 @@ async function bulkAct(act){
   if(state.busy) return;
   const ids=[...state.selected];
   if(!ids.length){ setMessage('请先勾选凭证',true); toast('请先勾选凭证','err'); return; }
-  const labels={unban:'取消隔离',ban:'隔离',disable:'禁用',reenable:'启用',reauth:'重授权',delete:'删除'};
+  const labels={unban:'释放',ban:'隔离',disable:'禁用',reenable:'启用',reauth:'重授权',delete:'删除'};
   const danger=act==='delete'?'\n\n删除将调用 Management 删除凭证；失败则按删除回退策略禁用/隔离。不可轻易撤销。':'';
   if(!confirm('确认对所选 '+ids.length+' 条执行「'+(labels[act]||act)+'」？'+danger)) return;
   if(act==='delete' && !confirm('再次确认：删除所选 '+ids.length+' 条凭证？')) return;
@@ -1050,12 +1059,12 @@ function clearSelection(){
 }
 async function unbanSelected(){ return bulkAct('unban'); }
 async function unbanAll(){
-  if(state.busy||!confirm('确认取消全部隔离？')) return;
+  if(state.busy||!confirm('确认释放全部隔离？')) return;
   try{
-    setBusy(true,'取消全部隔离'); setProgress(0,1);
+    setBusy(true,'全部释放'); setProgress(0,1);
     await apiMgmt('POST','/unban-all',{});
     setProgress(1,1);
-    setMessage('已全部取消隔离'); toast('已全部取消隔离','ok');
+    setMessage('已全部释放'); toast('已全部释放','ok');
     await loadData(true);
   }catch(e){ setMessage(e.message,true); toast(e.message,'err'); }
   finally{ setBusy(false); }
@@ -1106,14 +1115,14 @@ async function runProbe(){
   finally{ setBusy(false); setProgress(0,0); }
 }
 async function recheck429(){
-  if(state.busy||!confirm('仅复检当前 429 隔离凭证？\n恢复则取消隔离，仍限流则刷新隔离窗口。')) return;
+  if(state.busy||!confirm('仅复检当前 429 隔离凭证？\n恢复则释放隔离，仍限流则续隔窗口。')) return;
   try{
     setBusy(true,'429 复检'); setProgress(40,100);
     setMessage('429 复检中…');
     const res=await apiMgmt('POST','/bans-recheck-429',{force:true});
     setProgress(100,100);
     const r=res.result||{};
-    const msg='429 复检完成 · 检'+(r.checked||0)+' 取消隔离'+(r.unbanned||0)+' 续隔'+(r.relocked||0)+' 跳过'+(r.skipped||0)+' 失败'+(r.failed||0);
+    const msg='429 复检完成 · 检'+(r.checked||0)+' 释放'+(r.unbanned||0)+' 续隔'+(r.relocked||0)+' 跳过'+(r.skipped||0)+' 失败'+(r.failed||0);
     setMessage(msg); toast(msg,'ok');
     state.filter='429'; state.page.page=1; paintChips();
     await loadData(true);
@@ -1124,14 +1133,14 @@ async function recheckSelected(){
   if(state.busy) return;
   const ids=[...state.selected];
   if(!ids.length){ setMessage('请先勾选凭证',true); toast('请先勾选凭证','err'); return; }
-  if(!confirm('并发复检所选 '+ids.length+' 条？\n· 含已禁用凭证（全量巡检会跳过它们）\n· 成功：取消隔离 + 自动启用\n· 失败：写入/刷新隔离记录')) return;
+  if(!confirm('并发复检所选 '+ids.length+' 条？\n· 含已禁用凭证（全量巡检会跳过它们）\n· 成功：释放隔离 + 自动启用\n· 失败：写入/刷新隔离记录')) return;
   try{
     setBusy(true,'复检所选'); setProgress(20,100);
     setMessage('并发复检 '+ids.length+' 条…');
     const res=await apiMgmt('POST','/recheck-selected',{auth_ids:ids,reenable_on_ok:true});
     setProgress(100,100);
     const r=res.result||{};
-    const msg='复检完成 · 检'+(r.checked||0)+' 成功'+(r.ok||0)+' 失败'+(r.failed||0)+' 取消隔离'+(r.unbanned||0)+' 启用'+(r.reenabled||0)+' 跳过'+(r.skipped||0);
+    const msg='复检完成 · 检'+(r.checked||0)+' 成功'+(r.ok||0)+' 失败'+(r.failed||0)+' 释放'+(r.unbanned||0)+' 启用'+(r.reenabled||0)+' 跳过'+(r.skipped||0);
     setMessage(msg); toast(msg, (r.failed||0)>0?'err':'ok');
     state.selected.clear();
     await loadData(true);

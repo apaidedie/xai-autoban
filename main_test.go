@@ -157,8 +157,6 @@ func TestStatusPageUsesManagementKeyFlow(t *testing.T) {
 		"toast",
 		"progressBar",
 		"setBusy",
-		"exportBackup",
-		"importBackup",
 		"overviewCards",
 		"ov_healthy",
 		"jumpOverview",
@@ -177,6 +175,9 @@ func TestStatusPageUsesManagementKeyFlow(t *testing.T) {
 		"全选当前筛选",
 		"resourceBase",
 		"PLUGIN_VERSION",
+		"释放所选",
+		"btnRefresh",
+		"more-sec",
 	} {
 		if !strings.Contains(page, required) {
 			t.Fatalf("page missing %q", required)
