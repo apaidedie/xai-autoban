@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.33 - 2026-07-15
+
+### Fix
+- 写操作优先 `GET /data?op=`（无自定义 Header），再试 /ops；适配反代子路径 `resourceBase`
+- 全 404 时提示完整重启 CPA 并打印 base/version 便于排查
+
 ## 0.5.32 - 2026-07-15
 
 ### Fix

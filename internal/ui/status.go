@@ -14,6 +14,10 @@ func StatusPage(pluginName, pluginVersion, serverMgmtKey string) string {
 	if err != nil {
 		keyJS = []byte(`""`)
 	}
+	verJS, err := json.Marshal(pluginVersion)
+	if err != nil {
+		verJS = []byte(`""`)
+	}
 	return `<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -439,9 +443,22 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
 </aside>
 
 <script>
-const resourceBase='/v0/resource/plugins/xai-autoban';
-// Optional CPA secret-key for resource POST; primary path is GET /ops (CPAMP-friendly).
+// Derive resource base from current page path so subpath reverse-proxy still works.
+const resourceBase=(function(){
+  try{
+    const p=String(location.pathname||'');
+    const marker='/plugins/xai-autoban';
+    const i=p.indexOf(marker);
+    if(i>=0){
+      // .../v0/resource/plugins/xai-autoban/status → .../v0/resource/plugins/xai-autoban
+      return p.slice(0, i+marker.length);
+    }
+  }catch(_){}
+  return '/v0/resource/plugins/xai-autoban';
+})();
+// Optional CPA secret-key for resource POST; primary path is GET /data?op= (CPAMP-friendly).
 const SERVER_MGMT_KEY=` + string(keyJS) + `;
+const PLUGIN_VERSION=` + string(verJS) + `;
 const state={bans:[],credentials:[],counts:{},page:{page:1,page_size:50,total:0,pages:1,filter:'all',q:''},filter:'all',query:'',selected:new Set(),timer:null,searchTimer:null,toastTimer:null,busy:false,settings:{},success:'unban',fail:'ban',autoExecute:true,history:[]};
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -507,20 +524,23 @@ async function apiResource(path, opts){
   const method=(opts&&opts.method)||'GET';
   const body=opts&&opts.body;
   const withKey=!!(opts&&opts.withKey);
+  const useHdr=opts&&opts.headers!==false;
   const opHdr=(opts&&opts.op)||'';
   const authId=(opts&&opts.authId)||'';
   const authIds=opts&&opts.authIds;
   const action=(opts&&opts.action)||'';
   const headers={};
   if(body!==undefined) headers['Content-Type']='application/json';
-  if(opHdr){ headers['X-XAI-Autoban-Op']=String(opHdr); headers['X-Plugin-Op']=String(opHdr); }
-  if(authId){ headers['X-XAI-Autoban-Auth-Id']=String(authId); headers['X-Plugin-Auth-Id']=String(authId); }
-  if(authIds){
-    const s=Array.isArray(authIds)?JSON.stringify(authIds):String(authIds);
-    headers['X-XAI-Autoban-Auth-Ids']=s; headers['X-Plugin-Auth-Ids']=s;
+  // Custom headers first-try optional: some proxies mishandle unknown X-* on resource GET.
+  if(useHdr){
+    if(opHdr){ headers['X-XAI-Autoban-Op']=String(opHdr); headers['X-Plugin-Op']=String(opHdr); }
+    if(authId){ headers['X-XAI-Autoban-Auth-Id']=String(authId); headers['X-Plugin-Auth-Id']=String(authId); }
+    if(authIds){
+      const s=Array.isArray(authIds)?JSON.stringify(authIds):String(authIds);
+      headers['X-XAI-Autoban-Auth-Ids']=s; headers['X-Plugin-Auth-Ids']=s;
+    }
+    if(action){ headers['X-XAI-Autoban-Action']=String(action); headers['X-Plugin-Action']=String(action); }
   }
-  if(action){ headers['X-XAI-Autoban-Action']=String(action); headers['X-Plugin-Action']=String(action); }
-  // POST 在 CPAMP 下需要密钥才会用已保存 CPA 密钥或转发 caller auth
   if((withKey || (method!=='GET' && method!=='HEAD')) && SERVER_MGMT_KEY){
     headers['Authorization']='Bearer '+SERVER_MGMT_KEY;
     headers['X-Management-Key']=SERVER_MGMT_KEY;
@@ -530,57 +550,66 @@ async function apiResource(path, opts){
     headers:Object.keys(headers).length?headers:undefined,
     body:body!==undefined?JSON.stringify(body):undefined
   });
-  const t=await r.text(); let d; try{d=JSON.parse(t)}catch(_){throw new Error(t||('HTTP '+r.status))}
+  const t=await r.text(); let d; try{d=JSON.parse(t)}catch(_){throw new Error((t&&String(t).slice(0,120))||('HTTP '+r.status))}
   if(!r.ok) throw new Error(d.error||d.message||('HTTP '+r.status)); return d;
 }
 function b64url(str){
-  // UTF-8 safe base64url (no padding) for GET payload under CPAMP (POST resource 404)
   const bytes=unescape(encodeURIComponent(str));
   let bin='';
   for(let i=0;i<bytes.length;i++) bin+=String.fromCharCode(bytes.charCodeAt(i)&0xff);
   return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
 }
-function buildGetOpsURL(op, payload){
-  // Prefer flat query (settings ~15 fields). Only pack import / oversized.
-  // settings 用 payload 时部分代理会丢掉长 query → 空 patch 假成功。
+function buildGetOpsURL(base, op, payload){
+  // Prefer flat query. Only pack import / oversized.
   const flat=buildOpsQuery(op, payload);
   const needPack=op==='import'||flat.length>1800;
-  if(!needPack) return '/ops?'+flat;
+  if(!needPack) return base+'?'+flat;
   const rest=Object.assign({}, payload||{});
   delete rest.op;
   const pack=b64url(JSON.stringify(rest));
-  return '/ops?op='+encodeURIComponent(op)+'&payload='+encodeURIComponent(pack);
+  return base+'?op='+encodeURIComponent(op)+'&payload='+encodeURIComponent(pack);
 }
-// 只走 resource。CPAMP 下 POST resource 常 404，优先 GET。
+// Resource-only writes. Prefer GET /data (always registered) before /ops.
 async function apiOps(op, extra){
   const payload=Object.assign({}, extra||{}, {op:op});
+  // Drop noisy false bools from query (defaults server-side)
+  Object.keys(payload).forEach(k=>{
+    if(payload[k]===false && (k==='force'||k==='wait')) delete payload[k];
+  });
   const meta=opsMeta(op, payload);
-  const getPath=buildGetOpsURL(op, payload);
-  const getDataPath=getPath.replace(/^\/ops/,'/data');
   const errs=[];
   async function tryOne(label, fn){
     try{
       const d=await fn();
       if(isListPayload(d)){ errs.push(label+': got_list_not_op'); return null; }
       if(d && d.error && d.ok!==true){ errs.push(label+': '+(d.message||d.error)); return null; }
-      // 严禁用 d.settings 判断成功：列表 /data 也有 settings，会导致假成功
       if(isOpsResult(d)) return d;
       errs.push(label+': unexpected_payload');
       return null;
     }catch(e){ errs.push(label+': '+(e.message||e)); return null; }
   }
   let d=null;
-  d=await tryOne('GET /ops', ()=>apiResource(getPath, meta));
+  // 1) GET /data query only (no custom headers) — most compatible with CPAMP
+  d=await tryOne('GET /data', ()=>apiResource(buildGetOpsURL('/data', op, payload), {headers:false}));
   if(d) return d;
-  d=await tryOne('GET /data', ()=>apiResource(getDataPath, meta));
+  // 2) GET /data + headers
+  d=await tryOne('GET /data+hdr', ()=>apiResource(buildGetOpsURL('/data', op, payload), meta));
+  if(d) return d;
+  // 3) GET /ops query only
+  d=await tryOne('GET /ops', ()=>apiResource(buildGetOpsURL('/ops', op, payload), {headers:false}));
+  if(d) return d;
+  // 4) GET /ops + headers
+  d=await tryOne('GET /ops+hdr', ()=>apiResource(buildGetOpsURL('/ops', op, payload), meta));
+  if(d) return d;
+  // 5) POST body (needs CPA key or CPAMP admin on mutating resource)
+  d=await tryOne('POST /data', ()=>apiResource('/data',Object.assign({method:'POST',body:payload,withKey:!!SERVER_MGMT_KEY}, meta)));
   if(d) return d;
   d=await tryOne('POST /ops', ()=>apiResource('/ops',Object.assign({method:'POST',body:payload,withKey:!!SERVER_MGMT_KEY}, meta)));
   if(d) return d;
-  d=await tryOne('POST /data key', ()=>apiResource('/data',Object.assign({method:'POST',body:payload,withKey:true}, meta)));
-  if(d) return d;
-  d=await tryOne('POST /data nokey', ()=>apiResource('/data',Object.assign({method:'POST',body:payload,withKey:false}, meta)));
-  if(d) return d;
-  throw new Error('写操作失败：'+errs.join(' | ')+'。请装最新版并强刷运维台。');
+  const all404=errs.every(e=>/404|not_found|not found/i.test(e));
+  let hint='请装 0.5.33+ 并强刷；若仍 404：完整重启 CPA（不只重载插件）以重新注册 resource。';
+  if(all404) hint+=' base='+resourceBase+' ver='+PLUGIN_VERSION;
+  throw new Error('写操作失败：'+errs.join(' | ')+'。'+hint);
 }
 function mapPathToOp(method,path,body){
   const p=String(path||'');

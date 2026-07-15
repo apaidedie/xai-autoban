@@ -175,6 +175,8 @@ func TestStatusPageUsesManagementKeyFlow(t *testing.T) {
 		"selectCurrentFilter",
 		"deleteSelected",
 		"全选当前筛选",
+		"resourceBase",
+		"PLUGIN_VERSION",
 	} {
 		if !strings.Contains(page, required) {
 			t.Fatalf("page missing %q", required)
