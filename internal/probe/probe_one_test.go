@@ -163,6 +163,33 @@ func TestProbeOneResponsesRealBody(t *testing.T) {
 	}
 }
 
+func TestParseAuthMaterialOAuth(t *testing.T) {
+	m, err := parseAuthMaterial(json.RawMessage(`{"access_token":"at","refresh_token":"rt","auth_kind":"oauth"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Token != "at" || m.AuthKind != "oauth" {
+		t.Fatalf("%+v", m)
+	}
+	base := resolveProbeBaseURL(m, "")
+	if base != cliChatProxyBaseURL {
+		t.Fatalf("base=%s", base)
+	}
+}
+
+func TestParseAuthMaterialAPIKey(t *testing.T) {
+	m, err := parseAuthMaterial(json.RawMessage(`{"api_key":"k1"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.AuthKind != "api_key" {
+		t.Fatalf("kind=%s", m.AuthKind)
+	}
+	if resolveProbeBaseURL(m, "") != defaultXAIBaseURL {
+		t.Fatalf("base=%s", resolveProbeBaseURL(m, ""))
+	}
+}
+
 func TestProbeOneAPIKeyUsesOfficialAPI(t *testing.T) {
 	var gotURL string
 	stub := &host.Stub{

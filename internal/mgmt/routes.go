@@ -749,7 +749,7 @@ func (h *Handler) updateSettings(raw []byte) pluginapi.ManagementResponse {
 	if len(clean) == 0 {
 		return jsonResponse(http.StatusBadRequest, map[string]any{
 			"error":   "empty_patch",
-			"message": "未收到任何可应用的配置字段（query/payload 可能被代理丢弃）。请升级到 0.5.32+。",
+			"message": "未收到任何可应用的配置字段（query/payload 可能被代理丢弃）。",
 		})
 	}
 	before := h.Cfg()

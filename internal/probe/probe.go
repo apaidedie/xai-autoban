@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	defaultXAIBaseURL      = "https://api.x.ai/v1"
+	defaultXAIBaseURL = "https://api.x.ai/v1"
 	// cliChatProxyBaseURL matches CLIProxyAPI OAuth default for non-media chat (/responses).
 	cliChatProxyBaseURL    = "https://cli-chat-proxy.grok.com/v1"
 	xaiTokenAuthHeader     = "X-XAI-Token-Auth"
@@ -164,15 +164,15 @@ type JobStatus struct {
 }
 
 type Service struct {
-	mu         sync.Mutex
-	cfg        config.PluginConfig
-	host       host.Client
-	engine     *action.Engine
-	bans       *ban.State
-	audit      *audit.Log
-	persist    *persist.Persister
-	stopCh     chan struct{}
-	running    bool // scheduled loop
+	mu      sync.Mutex
+	cfg     config.PluginConfig
+	host    host.Client
+	engine  *action.Engine
+	bans    *ban.State
+	audit   *audit.Log
+	persist *persist.Persister
+	stopCh  chan struct{}
+	running bool // scheduled loop
 	// jobStarted is set when a manual/async job acquires the flight lock.
 	jobStarted time.Time
 	lastRun    time.Time
@@ -711,8 +711,8 @@ func (p *Service) ProbeOneWithJSON(cfg config.PluginConfig, host host.Client, au
 	// Fallback if responses path denied for this credential shape.
 	runCompletions := func() (int, string, error) {
 		body, _ := json.Marshal(map[string]any{
-			"model":  model,
-			"stream": false,
+			"model":      model,
+			"stream":     false,
 			"max_tokens": 16,
 			"messages": []map[string]string{
 				{"role": "user", "content": "Reply with exactly: OK"},
@@ -815,22 +815,13 @@ func pickModel(body string) string {
 	return ""
 }
 
+// ExtractAccessToken returns the bearer token from credential JSON (api_key or access_token).
 func ExtractAccessToken(raw json.RawMessage) (string, error) {
-	var obj map[string]any
-	if err := json.Unmarshal(raw, &obj); err != nil {
+	m, err := parseAuthMaterial(raw)
+	if err != nil {
 		return "", err
 	}
-	for _, key := range []string{"access_token", "accessToken", "token", "api_key", "apiKey"} {
-		if v, ok := obj[key].(string); ok && strings.TrimSpace(v) != "" {
-			return strings.TrimSpace(v), nil
-		}
-	}
-	if nested, ok := obj["token"].(map[string]any); ok {
-		if v, ok := nested["access_token"].(string); ok && v != "" {
-			return v, nil
-		}
-	}
-	return "", fmt.Errorf("access token not found in credential json")
+	return m.Token, nil
 }
 
 func (p *Service) RememberProbeResult(authID string, ok bool, status int, errMsg string) {

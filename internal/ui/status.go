@@ -616,7 +616,7 @@ async function apiOps(op, extra){
   d=await tryOne('POST /ops', ()=>apiResource('/ops',Object.assign({method:'POST',body:payload,withKey:!!SERVER_MGMT_KEY}, meta)));
   if(d) return d;
   const all404=errs.every(e=>/404|not_found|not found/i.test(e));
-  let hint='请装 0.5.33+ 并强刷；若仍 404：完整重启 CPA（不只重载插件）以重新注册 resource。';
+  let hint='请升级插件并强刷；若仍 404：完整重启 CPA 以重新注册 resource。';
   if(all404) hint+=' base='+resourceBase+' ver='+PLUGIN_VERSION;
   throw new Error('写操作失败：'+errs.join(' | ')+'。'+hint);
 }
@@ -850,13 +850,13 @@ async function saveSettings(){
     const draft=collectDraft();
     const res=await apiMgmt('PUT','/settings',draft);
     if(!res || res.ok!==true || !res.settings){
-      throw new Error('保存未确认成功（未返回 ok/settings）。请升级到 0.5.32+ 并强刷。');
+      throw new Error('保存未确认成功（未返回 ok/settings）。请升级插件并强刷。');
     }
     if(res.applied!=null && Number(res.applied)<1){
-      throw new Error('服务端未应用任何字段（applied=0）。请升级到 0.5.32+。');
+      throw new Error('服务端未应用任何字段（applied=0）。请检查代理是否丢弃 query。');
     }
     const bad=settingsMismatch(draft, res.settings);
-    if(bad) throw new Error('保存后校验失败：'+bad+'。请升级到 0.5.32+ 并强刷。');
+    if(bad) throw new Error('保存后校验失败：'+bad);
     renderSettingsSummary(res.settings);
     setMessage('配置已保存'+(res.note?(' · '+res.note):'')+(res.applied!=null?(' · '+res.applied+' 项'):''));
     toast('配置已保存','ok');

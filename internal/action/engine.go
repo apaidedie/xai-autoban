@@ -32,9 +32,9 @@ type failStreak struct {
 }
 
 type Engine struct {
-	mu        sync.Mutex
-	cooldown  map[cooldownKey]time.Time
-	streaks   map[string]failStreak
+	mu       sync.Mutex
+	cooldown map[cooldownKey]time.Time
+	streaks  map[string]failStreak
 	// lastOK: last real usage success time (ground truth). Probe/recheck false positives skipped while fresh.
 	lastOK    map[string]time.Time
 	cfg       config.PluginConfig

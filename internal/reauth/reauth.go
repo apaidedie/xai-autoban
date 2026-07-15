@@ -24,7 +24,7 @@ const defaultClientID = "b1a00492-073a-47ea-816f-4c329264a828"
 const defaultTokenURL = "https://auth.x.ai/oauth/token"
 const discoveryURL = "https://auth.x.ai/.well-known/openid-configuration"
 const defaultProbeBase = "https://api.x.ai/v1"
-const defaultUserAgent = "xai-autoban/0.5.12 (oauth-refresh)"
+const defaultUserAgent = "xai-autoban (oauth-refresh)"
 
 // Direct no-proxy transport (avoid CPA global proxy for OAuth).
 var directTransport = &http.Transport{
