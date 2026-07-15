@@ -55,7 +55,13 @@ type PluginConfig struct {
 	// false = report-only (只输出结果), true = apply probe_action / probe_on_success.
 	AutoExecute           bool   `yaml:"auto_execute"`
 	ActionCooldownSeconds int    `yaml:"action_cooldown_seconds"`
-	DeleteFallback        string `yaml:"delete_fallback"`
+	// FailStreak403: soft 403/permission-denied needs this many consecutive failures
+	// before isolate (xAI often returns transient 403 then succeeds). Hard bans
+	// (suspended/deactivated) still isolate immediately. Default 3.
+	FailStreak403 int `yaml:"fail_streak_403"`
+	// FailStreakWindowSeconds: reset streak if gap between failures exceeds this. Default 1800.
+	FailStreakWindowSeconds int    `yaml:"fail_streak_window_seconds"`
+	DeleteFallback          string `yaml:"delete_fallback"`
 	SchedulerDelegate     string `yaml:"scheduler_delegate"`
 	StateFile             string `yaml:"state_file"`
 	AuditMaxEvents        int    `yaml:"audit_max_events"`
@@ -90,6 +96,8 @@ func Default() PluginConfig {
 		ProbeOnSuccess:                       successUnban,
 		AutoExecute:                          true,
 		ActionCooldownSeconds:                60,
+		FailStreak403:                        3,
+		FailStreakWindowSeconds:              1800,
 		DeleteFallback:                       actionDisable,
 		SchedulerDelegate:                    pluginapi.SchedulerBuiltinRoundRobin,
 		// Default state path: bans + ops-console settings overlay (survives reload).
@@ -148,6 +156,12 @@ func Normalize(cfg PluginConfig) (PluginConfig, []string) {
 	}
 	if cfg.ActionCooldownSeconds < 0 {
 		cfg.ActionCooldownSeconds = def.ActionCooldownSeconds
+	}
+	if cfg.FailStreak403 <= 0 {
+		cfg.FailStreak403 = def.FailStreak403
+	}
+	if cfg.FailStreakWindowSeconds <= 0 {
+		cfg.FailStreakWindowSeconds = def.FailStreakWindowSeconds
 	}
 	if cfg.AuditMaxEvents <= 0 {
 		cfg.AuditMaxEvents = def.AuditMaxEvents
@@ -279,6 +293,8 @@ func (c PluginConfig) PublicView() map[string]any {
 		"probe_only_disabled":                      c.ProbeOnlyDisabled,
 		"auto_execute":                             c.AutoExecute,
 		"action_cooldown_seconds":                  c.ActionCooldownSeconds,
+		"fail_streak_403":                          c.FailStreak403,
+		"fail_streak_window_seconds":               c.FailStreakWindowSeconds,
 		"delete_fallback":                          c.DeleteFallback,
 		"scheduler_delegate":                       c.SchedulerDelegate,
 		"state_file":                               c.StateFile,
@@ -322,8 +338,8 @@ var OpsSettingsKeys = []string{
 	"probe_enabled", "probe_interval_seconds", "probe_timeout_seconds",
 	"probe_concurrency", "probe_qps", "probe_mode", "probe_base_url", "probe_path",
 	"probe_action", "probe_on_success", "probe_include_disabled", "probe_only_disabled",
-	"auto_execute", "action_cooldown_seconds", "delete_fallback",
-	"scheduler_delegate", "audit_max_events",
+	"auto_execute", "action_cooldown_seconds", "fail_streak_403", "fail_streak_window_seconds",
+	"delete_fallback", "scheduler_delegate", "audit_max_events",
 }
 
 // OpsSettingsView returns only ops-console fields suitable for state-file overlay.
@@ -349,7 +365,8 @@ func CoerceOpsPatch(patch map[string]any) map[string]any {
 	intKeys := map[string]struct{}{
 		"ban_401_seconds": {}, "ban_402_seconds": {}, "ban_403_seconds": {}, "ban_429_fallback_seconds": {},
 		"probe_interval_seconds": {}, "probe_timeout_seconds": {}, "probe_concurrency": {},
-		"action_cooldown_seconds": {}, "audit_max_events": {},
+		"action_cooldown_seconds": {}, "fail_streak_403": {}, "fail_streak_window_seconds": {},
+		"audit_max_events": {},
 	}
 	floatKeys := map[string]struct{}{"probe_qps": {}}
 	out := make(map[string]any, len(patch))

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.37 - 2026-07-15
+
+### Fix
+- **软 403 连续失败才隔离**：默认连续 3 次 permission-denied/403 才 ban（中间成功会清零计数）
+- 永久类（suspended/deactivated/banned/token expired）仍立即隔离
+- 可配 `fail_streak_403`（默认 3）、`fail_streak_window_seconds`（默认 1800）
+
 ## 0.5.36 - 2026-07-15
 
 ### Fix

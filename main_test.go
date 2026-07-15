@@ -1201,6 +1201,61 @@ func handleUsageTest(raw []byte) ([]byte, error) {
 	return defaultApp.HandleMethod("usage.handle", raw)
 }
 
+func TestSoft403NeedsStreakBeforeBan(t *testing.T) {
+	defaultApp.bans.ClearAll()
+	cfg := config.Default()
+	cfg.FailStreak403 = 3
+	cfg.FailStreakWindowSeconds = 1800
+	cfg.ActionCooldownSeconds = 0
+	cfg.ActionOn403 = "ban"
+	cfg.AutoExecute = true
+	eng := action.NewEngine(cfg, defaultApp.bans, audit.New(50), &host.Stub{}, nil)
+	now := time.Now()
+	entry := ban.Entry{
+		StatusCode:     403,
+		Reason:         "permission denied (HTTP 403)",
+		Classification: "permission_denied",
+		Action:         "ban",
+		BannedAt:       now,
+		ResetAt:        now.Add(time.Hour),
+	}
+	// first two soft 403s: no ban
+	for i := 0; i < 2; i++ {
+		if err := eng.ApplyFailure("soft403", "usage", entry, false); err != nil {
+			t.Fatal(err)
+		}
+		if defaultApp.bans.Active("soft403", time.Now()) {
+			t.Fatalf("should not ban on failure %d", i+1)
+		}
+	}
+	// third: isolate
+	if err := eng.ApplyFailure("soft403", "usage", entry, false); err != nil {
+		t.Fatal(err)
+	}
+	if !defaultApp.bans.Active("soft403", time.Now()) {
+		t.Fatal("expected ban after streak threshold")
+	}
+}
+
+func TestSoft403StreakResetsOnSuccess(t *testing.T) {
+	defaultApp.bans.ClearAll()
+	cfg := config.Default()
+	cfg.FailStreak403 = 3
+	cfg.ActionCooldownSeconds = 0
+	eng := action.NewEngine(cfg, defaultApp.bans, audit.New(20), &host.Stub{}, nil)
+	now := time.Now()
+	entry := ban.Entry{StatusCode: 403, Reason: "permission denied (HTTP 403)", Classification: "permission_denied", Action: "ban", ResetAt: now.Add(time.Hour)}
+	_ = eng.ApplyFailure("s2", "usage", entry, false)
+	_ = eng.ApplyFailure("s2", "usage", entry, false)
+	_ = eng.ApplyUsageSuccess("s2")
+	// after success, need 3 more
+	_ = eng.ApplyFailure("s2", "usage", entry, false)
+	_ = eng.ApplyFailure("s2", "usage", entry, false)
+	if defaultApp.bans.Active("s2", time.Now()) {
+		t.Fatal("streak should have reset after success")
+	}
+}
+
 func TestUsageSuccessClearsBan(t *testing.T) {
 	defaultApp.bans.ClearAll()
 	now := time.Now()

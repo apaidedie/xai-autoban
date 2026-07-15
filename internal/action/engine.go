@@ -25,9 +25,16 @@ type cooldownKey struct {
 	Action string
 }
 
+type failStreak struct {
+	Count    int
+	LastAt   time.Time
+	LastCode int
+}
+
 type Engine struct {
 	mu        sync.Mutex
 	cooldown  map[cooldownKey]time.Time
+	streaks   map[string]failStreak
 	cfg       config.PluginConfig
 	bans      *ban.State
 	audit     *audit.Log
@@ -59,6 +66,7 @@ func (e *Engine) RequestManagementKey() string {
 func NewEngine(cfg config.PluginConfig, bans *ban.State, audit *audit.Log, host host.Client, onChanged func()) *Engine {
 	return &Engine{
 		cooldown:  make(map[cooldownKey]time.Time),
+		streaks:   make(map[string]failStreak),
 		cfg:       cfg,
 		bans:      bans,
 		audit:     audit,
@@ -224,7 +232,71 @@ func (e *Engine) ApplyFailure(authID, source string, entry ban.Entry, force bool
 	if action == "" {
 		action = cfg.ActionForStatus(entry.StatusCode)
 	}
+	// Soft 403 / permission-denied: require consecutive failures (xAI often recovers next try).
+	if !force && soft403NeedsStreak(entry) {
+		n, need, ok := e.bumpSoft403Streak(authID, entry.StatusCode, cfg.FailStreak403, cfg.FailStreakWindowSeconds)
+		if !ok {
+			e.audit.Add(source, authID, action, "streak", fmt.Sprintf("soft_403 %d/%d (not isolating yet)", n, need), entry.StatusCode)
+			return nil
+		}
+		entry.Reason = fmt.Sprintf("%s · streak %d", entry.Reason, n)
+	} else {
+		e.clearStreak(authID)
+	}
 	return e.ApplyAction(authID, action, source, entry, force)
+}
+
+// soft403NeedsStreak: transient permission denials only (not suspended/banned accounts).
+func soft403NeedsStreak(entry ban.Entry) bool {
+	if entry.StatusCode != http.StatusForbidden && entry.Classification != classify.PermissionDenied {
+		return false
+	}
+	blob := strings.ToLower(entry.Reason + " " + entry.Classification)
+	// Permanent account issues: isolate immediately.
+	for _, hard := range []string{"deactivated", "suspended", "banned", "invalid_grant", "token is expired", "token has been invalidated"} {
+		if strings.Contains(blob, hard) {
+			return false
+		}
+	}
+	return true
+}
+
+func (e *Engine) bumpSoft403Streak(authID string, statusCode, need, windowSec int) (count, threshold int, isolate bool) {
+	if need <= 1 {
+		return 1, 1, true
+	}
+	if windowSec <= 0 {
+		windowSec = 1800
+	}
+	now := time.Now()
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.streaks == nil {
+		e.streaks = make(map[string]failStreak)
+	}
+	key := strings.TrimSpace(authID)
+	st := e.streaks[key]
+	if !st.LastAt.IsZero() && now.Sub(st.LastAt) > time.Duration(windowSec)*time.Second {
+		st = failStreak{}
+	}
+	st.Count++
+	st.LastAt = now
+	st.LastCode = statusCode
+	e.streaks[key] = st
+	if st.Count >= need {
+		delete(e.streaks, key)
+		return st.Count, need, true
+	}
+	return st.Count, need, false
+}
+
+func (e *Engine) clearStreak(authID string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.streaks == nil {
+		return
+	}
+	delete(e.streaks, strings.TrimSpace(authID))
 }
 
 func (e *Engine) ApplyAction(authID, action, source string, entry ban.Entry, force bool) error {
@@ -472,6 +544,12 @@ func (e *Engine) ApplyUsageSuccess(authID string) error {
 	e.mu.Lock()
 	cfg := e.cfg
 	e.mu.Unlock()
+
+		// Real success resets soft-403 streak even if not currently banned.
+	e.clearStreak(authID)
+	if email != "" {
+		e.clearStreak(email)
+	}
 
 	// Always clear isolation on real success (even report-only mode).
 	if banned {
