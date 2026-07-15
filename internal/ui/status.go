@@ -230,12 +230,10 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
     </div>
   </div>
 
-  <div id="authBanner" class="banner warn" hidden>写操作需在 CPA 管理中心已登录；密钥在「插件管理」配置。</div>
-
   <section class="panel">
     <div class="phd">
       <h2>当前巡检配置</h2>
-      <div class="hint">主配置入口 · 点右上角「编辑配置」修改（插件管理仅负责启用/管理密钥）</div>
+      <div class="hint">主配置入口 · 点右上角「编辑配置」修改（插件管理仅负责启用与服务端密钥）</div>
     </div>
     <div class="cfg-grid" id="cfgPills">
       <div class="cfg-card"><div class="l">定时巡检</div><div class="v" id="sumProbeEnabled">-</div></div>
@@ -354,7 +352,7 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
 
   <p class="foot">
     <b>隔离</b>=插件内跳过调度；<b>禁用</b>=关闭凭证；<b>启用</b>=打开凭证。
-    日常策略请在运维台「编辑配置」修改。写操作依赖 CPA 管理中心登录会话；服务端禁用/删除密钥在插件管理配置。运行时配置立即生效，进程重启后可能回落 yaml 默认值。
+    日常策略请在运维台「编辑配置」修改。写操作使用 CPA 管理中心登录会话（无需在本页再贴密钥）。运行时配置立即生效，进程重启后可能回落 yaml 默认值。
   </p>
   <input id="importFile" type="file" accept="application/json,.json" hidden>
 </div>
@@ -365,7 +363,7 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
   <div class="dh">
     <div>
       <h3>运维配置（主入口）</h3>
-      <p>巡检、自动执行与失败/成功策略请在此修改。保存后立即生效。插件管理页仅保留「启用」与管理密钥相关项。</p>
+      <p>巡检、自动执行与失败/成功策略请在此修改。保存后立即生效。插件管理页仅保留「启用」与服务端密钥相关项。</p>
     </div>
     <button class="bg" id="closeConfigBtn" type="button">✕</button>
   </div>
@@ -421,7 +419,7 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
     </div>
     <div class="sec">
       <h4>禁用路径 / Management（可选）</h4>
-      <p class="hint" style="margin:0 0 10px">浏览器密钥在上方列表区保存；此处为服务端调用 CPA 时的路径。也可在插件管理只配密钥环境变量。</p>
+      <p class="hint" style="margin:0 0 10px">服务端调用 CPA 禁用/删除时使用；密钥请在插件管理或环境变量配置，本页不再要求粘贴密钥。</p>
       <div class="fg"><label>禁用方式 disable_via</label>
         <select id="f_disable_via">
           <option value="host_auth">host_auth</option>
@@ -441,33 +439,10 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
 <script>
 const resourceBase='/v0/resource/plugins/xai-autoban';
 const mgmtBase='/v0/management/plugins/xai-autoban';
-const state={bans:[],credentials:[],counts:{},page:{page:1,page_size:50,total:0,pages:1,filter:'all',q:''},filter:'all',query:'',selected:new Set(),timer:null,searchTimer:null,toastTimer:null,busy:false,mgmtKey:'',settings:{},success:'unban',fail:'ban',autoExecute:true,history:[]};
+const state={bans:[],credentials:[],counts:{},page:{page:1,page_size:50,total:0,pages:1,filter:'all',q:''},filter:'all',query:'',selected:new Set(),timer:null,searchTimer:null,toastTimer:null,busy:false,settings:{},success:'unban',fail:'ban',autoExecute:true,history:[]};
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-// Best-effort: reuse CPA management-center key already in localStorage (no paste UI).
-function readManagementKey(){
-  const keys=['cliproxyapi_management_key','management_key','cpa_management_key','managementKey','management-password','apiKey','token','management_password'];
-  for(const k of keys){try{const v=localStorage.getItem(k); if(v&&v.trim()&&v.length<512) return v.trim();}catch(_){}}
-  try{
-    for(let i=0;i<localStorage.length;i++){
-      const k=localStorage.key(i); if(!k) continue;
-      const raw=localStorage.getItem(k); if(!raw||raw.length>8000) continue;
-      if(/management|mgmt|cpa|cliproxy/i.test(k)&&raw.trim()&&!raw.trim().startsWith('{')&&raw.length<512) return raw.trim();
-      if(raw.trim().startsWith('{')){
-        try{
-          const obj=JSON.parse(raw); const st=[obj];
-          while(st.length){const cur=st.pop(); if(!cur||typeof cur!=='object') continue;
-            for(const [kk,vv] of Object.entries(cur)){
-              if(typeof vv==='string'&&vv.trim()&&vv.length<512&&/management|mgmt|password|apiKey|token|secret/i.test(kk)) return vv.trim();
-              if(vv&&typeof vv==='object') st.push(vv);
-            }}
-        }catch(_){}
-      }
-    }
-  }catch(_){}
-  return '';
-}
 function setActionEnabled(ok){
   const can=!!ok && !state.busy;
   const ids=['btnProbe','btnRecheck429','btnBackup','btnImport','unbanSelected','banSelected','disableSelected','reenableSelected','recheckSelected','unbanAll','saveConfigBtn'];
@@ -480,10 +455,7 @@ function setActionEnabled(ok){
   if($('recheckSelected')) $('recheckSelected').textContent='复检所选 ('+n+')';
 }
 function setAuthUI(){
-  state.mgmtKey=readManagementKey();
-  const b=$('authBanner');
-  if(b) b.hidden=true;
-  // Write ops rely on CPA management session (same-origin cookies) and optional inherited key.
+  // No browser key UI. Mutations use CPA management session (cookies).
   setActionEnabled(true);
   return true;
 }
@@ -493,22 +465,14 @@ async function apiResource(path){
   if(!r.ok) throw new Error(d.error||('HTTP '+r.status)); return d;
 }
 async function apiMgmt(method,path,body){
-  state.mgmtKey=readManagementKey();
-  const headers={'Content-Type':'application/json'};
-  if(state.mgmtKey){
-    headers['Authorization']='Bearer '+state.mgmtKey;
-    headers['X-Management-Key']=state.mgmtKey;
-    headers['X-Api-Key']=state.mgmtKey;
-  }
-  const r=await fetch(mgmtBase+path,{method,cache:'no-store',credentials:'same-origin',headers,body:body?JSON.stringify(body):undefined});
+  // Do NOT inject localStorage admin keys — stale/wrong values cause "invalid admin key".
+  // Rely on CPA management-center session (same-origin cookies / panel auth).
+  const r=await fetch(mgmtBase+path,{method,cache:'no-store',credentials:'include',headers:{
+    'Content-Type':'application/json'
+  },body:body?JSON.stringify(body):undefined});
   const t=await r.text(); let d; try{d=JSON.parse(t)}catch(_){throw new Error(t||('HTTP '+r.status))}
   if(r.status===401||r.status===403){
-    const b=$('authBanner');
-    if(b){
-      b.hidden=false; b.className='banner warn';
-      b.textContent='写操作未授权：请先在 CPA 管理中心登录；服务端禁用/删除密钥在「插件管理」配置。';
-    }
-    throw new Error(d.error||d.message||'未授权（请登录管理中心）');
+    throw new Error(d.error||d.message||'未授权：请从 CPA 管理中心侧栏打开本页（保持已登录）');
   }
   if(!r.ok) throw new Error(d.error||d.message||('HTTP '+r.status)); return d;
 }
