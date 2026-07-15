@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.13 - 2026-07-15
+
+### Fix
+- Reauth token endpoint: use `https://auth.x.ai/oauth/token` (not `accounts.x.ai`, which returns HTTP 403)
+- Always send Grok CLI `client_id` + User-Agent; discover token URL via OIDC when possible
+- Clearer reauth error messages (JSON error / Cloudflare HTML)
+
 ## 0.5.12 - 2026-07-15
 
 ### UI polish

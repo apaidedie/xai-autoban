@@ -17,10 +17,16 @@ import (
 	"xai-autoban/internal/xai"
 )
 
-const defaultTokenURL = "https://accounts.x.ai/oauth/token"
-const defaultProbeBase = "https://api.x.ai/v1"
+// Grok CLI / shared public OAuth client (same as openclaw / official device-code flows).
+const defaultClientID = "b1a00492-073a-47ea-816f-4c329264a828"
 
-// Direct no-proxy transport (same idea as management client — avoid CPA global proxy).
+// auth.x.ai is the OIDC issuer; accounts.x.ai is the browser sign-in host (returns 403 on /oauth/token).
+const defaultTokenURL = "https://auth.x.ai/oauth/token"
+const discoveryURL = "https://auth.x.ai/.well-known/openid-configuration"
+const defaultProbeBase = "https://api.x.ai/v1"
+const defaultUserAgent = "xai-autoban/0.5.12 (oauth-refresh)"
+
+// Direct no-proxy transport (avoid CPA global proxy for OAuth).
 var directTransport = &http.Transport{
 	Proxy: nil,
 	DialContext: (&net.Dialer{
@@ -45,7 +51,7 @@ type Result struct {
 }
 
 // RefreshOne uses refresh_token to obtain a new access_token and AuthSave it.
-// Token endpoint uses direct HTTP (no host proxy). Optional verifyProbe hits /models.
+// Token endpoint uses direct HTTP to auth.x.ai (not accounts.x.ai).
 // Does not launch browser OAuth (use cpa-auth-inspect for Chromium reauth).
 func RefreshOne(h host.Client, f pluginapi.HostAuthFileEntry, tokenURL string) (Result, error) {
 	return RefreshOneOpts(h, f, tokenURL, true)
@@ -65,24 +71,41 @@ func RefreshOneOpts(h host.Client, f pluginapi.HostAuthFileEntry, tokenURL strin
 	if !local.HasRefreshToken {
 		return Result{AuthID: id, Message: "no refresh_token in credential"}, fmt.Errorf("no refresh_token")
 	}
-	if tokenURL == "" {
-		tokenURL = defaultTokenURL
+	var obj map[string]any
+	_ = json.Unmarshal(got.JSON, &obj)
+
+	endpoint := strings.TrimSpace(tokenURL)
+	if endpoint == "" {
+		endpoint = stringField(obj, "token_endpoint", "tokenEndpoint", "oidc_token_url")
 	}
+	if endpoint == "" || isRetiredAccountsEndpoint(endpoint) {
+		if discovered := discoverTokenEndpoint(); discovered != "" {
+			endpoint = discovered
+		} else {
+			endpoint = defaultTokenURL
+		}
+	}
+	if isRetiredAccountsEndpoint(endpoint) {
+		endpoint = defaultTokenURL
+	}
+
+	clientID := stringField(obj, "client_id", "clientId")
+	if clientID == "" {
+		clientID = defaultClientID
+	}
+
 	form := url.Values{}
 	form.Set("grant_type", "refresh_token")
 	form.Set("refresh_token", local.RefreshToken)
-	var obj map[string]any
-	_ = json.Unmarshal(got.JSON, &obj)
-	if cid := stringField(obj, "client_id", "clientId"); cid != "" {
-		form.Set("client_id", cid)
-	}
+	form.Set("client_id", clientID)
 
 	resp, err := directHTTP(pluginapi.HTTPRequest{
 		Method: http.MethodPost,
-		URL:    tokenURL,
+		URL:    endpoint,
 		Headers: http.Header{
 			"Content-Type": {"application/x-www-form-urlencoded"},
 			"Accept":       {"application/json"},
+			"User-Agent":   {defaultUserAgent},
 		},
 		Body: []byte(form.Encode()),
 	}, 30)
@@ -90,11 +113,8 @@ func RefreshOneOpts(h host.Client, f pluginapi.HostAuthFileEntry, tokenURL strin
 		return Result{AuthID: id, Message: err.Error()}, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		msg := strings.TrimSpace(string(resp.Body))
-		if len(msg) > 200 {
-			msg = msg[:200]
-		}
-		return Result{AuthID: id, Status: resp.StatusCode, Message: msg}, fmt.Errorf("token endpoint HTTP %d", resp.StatusCode)
+		msg := formatTokenError(resp.StatusCode, resp.Body, endpoint)
+		return Result{AuthID: id, Status: resp.StatusCode, Message: msg}, fmt.Errorf("%s", msg)
 	}
 	var tok struct {
 		AccessToken  string `json:"access_token"`
@@ -115,12 +135,17 @@ func RefreshOneOpts(h host.Client, f pluginapi.HostAuthFileEntry, tokenURL strin
 	obj["access_token"] = tok.AccessToken
 	if tok.RefreshToken != "" {
 		obj["refresh_token"] = tok.RefreshToken
+	} else {
+		// Keep old refresh token when server does not rotate.
+		obj["refresh_token"] = local.RefreshToken
 	}
 	if tok.ExpiresAt != "" {
 		obj["expires_at"] = tok.ExpiresAt
 	} else if tok.ExpiresIn > 0 {
 		obj["expires_at"] = time.Now().Add(time.Duration(tok.ExpiresIn) * time.Second).Format(time.RFC3339)
 	}
+	obj["token_endpoint"] = endpoint
+	obj["client_id"] = clientID
 	if nested, ok := obj["token"].(map[string]any); ok {
 		nested["access_token"] = tok.AccessToken
 		if tok.RefreshToken != "" {
@@ -168,6 +193,64 @@ func RefreshOneOpts(h host.Client, f pluginapi.HostAuthFileEntry, tokenURL strin
 	return out, nil
 }
 
+func isRetiredAccountsEndpoint(endpoint string) bool {
+	u := strings.ToLower(strings.TrimSpace(endpoint))
+	return strings.Contains(u, "accounts.x.ai")
+}
+
+func discoverTokenEndpoint() string {
+	resp, err := directHTTP(pluginapi.HTTPRequest{
+		Method: http.MethodGet,
+		URL:    discoveryURL,
+		Headers: http.Header{
+			"Accept":     {"application/json"},
+			"User-Agent": {defaultUserAgent},
+		},
+	}, 15)
+	if err != nil || resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return ""
+	}
+	var doc struct {
+		TokenEndpoint string `json:"token_endpoint"`
+	}
+	if json.Unmarshal(resp.Body, &doc) != nil {
+		return ""
+	}
+	ep := strings.TrimSpace(doc.TokenEndpoint)
+	if ep == "" || !strings.Contains(strings.ToLower(ep), "x.ai") {
+		return ""
+	}
+	return ep
+}
+
+func formatTokenError(status int, body []byte, endpoint string) string {
+	text := strings.TrimSpace(string(body))
+	// Cloudflare HTML challenge
+	low := strings.ToLower(text)
+	if strings.Contains(low, "<html") || strings.Contains(low, "cloudflare") || strings.Contains(low, "just a moment") {
+		return fmt.Sprintf("token endpoint HTTP %d (Cloudflare/HTML block on %s); retry later or use cpa-auth-inspect browser reauth", status, endpoint)
+	}
+	// JSON error
+	var errObj map[string]any
+	if json.Unmarshal(body, &errObj) == nil {
+		code := stringField(errObj, "error")
+		desc := stringField(errObj, "error_description", "message")
+		if code != "" && desc != "" {
+			return fmt.Sprintf("token endpoint HTTP %d: %s (%s)", status, code, desc)
+		}
+		if code != "" {
+			return fmt.Sprintf("token endpoint HTTP %d: %s", status, code)
+		}
+	}
+	if text == "" {
+		return fmt.Sprintf("token endpoint HTTP %d (%s)", status, endpoint)
+	}
+	if len(text) > 180 {
+		text = text[:180]
+	}
+	return fmt.Sprintf("token endpoint HTTP %d: %s", status, text)
+}
+
 func probeModels(accessToken string) (int, error) {
 	resp, err := directHTTP(pluginapi.HTTPRequest{
 		Method: http.MethodGet,
@@ -175,6 +258,7 @@ func probeModels(accessToken string) (int, error) {
 		Headers: http.Header{
 			"Authorization": {"Bearer " + accessToken},
 			"Accept":        {"application/json"},
+			"User-Agent":    {defaultUserAgent},
 		},
 	}, 20)
 	if err != nil {
