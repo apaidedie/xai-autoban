@@ -105,9 +105,17 @@ button:hover{background:rgba(51,65,85,.95)}button:disabled{opacity:.35;cursor:no
 .bg{background:transparent}.bs{background:rgba(15,23,42,.7)}
 .msg{min-height:18px;color:var(--muted);font-size:12.5px;font-weight:700}
 .msg.err{color:#fda4af}
-.progress{display:none;height:4px;margin:0 14px 10px;border-radius:999px;background:rgba(148,163,184,.12);overflow:hidden}
-.progress.on{display:block}
+.progress-panel{display:none;margin:0 14px 12px;padding:10px 12px;border-radius:12px;border:1px solid rgba(148,163,184,.12);background:rgba(15,23,42,.45)}
+.progress-panel.on{display:block}
+.progress-meta{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;font-size:12px;font-weight:800}
+.progress-meta .pl{color:var(--muted)}
+.progress-meta .pc{color:var(--cyan);font-family:var(--mono)}
+.progress{height:6px;border-radius:999px;background:rgba(148,163,184,.12);overflow:hidden}
 .progress>i{display:block;height:100%;width:0;border-radius:999px;background:linear-gradient(90deg,var(--cyan),var(--blue));transition:width .15s ease}
+.op-result{margin-top:10px;padding:10px 12px;border-radius:10px;font-size:12.5px;font-weight:750;line-height:1.5;border:1px solid rgba(148,163,184,.16);background:rgba(2,6,23,.45);color:#e2e8f0;white-space:pre-wrap}
+.op-result.ok{border-color:rgba(52,211,153,.35);background:rgba(6,78,59,.35);color:#bbf7d0}
+.op-result.err{border-color:rgba(251,113,133,.4);background:rgba(127,29,29,.35);color:#fecdd3}
+.op-result.warn{border-color:rgba(251,191,36,.35);background:rgba(120,53,15,.35);color:#fde68a}
 .toast{
   position:fixed;right:18px;bottom:18px;z-index:80;max-width:min(420px,92vw);
   padding:12px 14px;border-radius:12px;border:1px solid var(--line);
@@ -347,7 +355,14 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
     </div>
 
     <div class="row msg-row"><div id="message" class="msg">系统待命</div></div>
-    <div class="progress" id="progress"><i id="progressBar"></i></div>
+    <div class="progress-panel" id="progressPanel">
+      <div class="progress-meta">
+        <span class="pl" id="progressLabel">处理中</span>
+        <span class="pc" id="progressCount">0/0</span>
+      </div>
+      <div class="progress" id="progress"><i id="progressBar"></i></div>
+      <div class="op-result" id="opResult" hidden></div>
+    </div>
 
     <div class="list-head">
       <label class="chk"><input id="selectPage" type="checkbox"> 本页全选</label>
@@ -657,6 +672,16 @@ function toast(text, kind=''){
   if(state.toastTimer) clearTimeout(state.toastTimer);
   state.toastTimer=setTimeout(()=>{ el.className='toast'; }, 2800);
 }
+function setOpResult(text, kind=''){
+  const el=$('opResult'); if(!el) return;
+  if(!text){ el.hidden=true; el.textContent=''; el.className='op-result'; return; }
+  el.hidden=false;
+  el.textContent=text;
+  el.className='op-result'+(kind?' '+kind:'');
+  // keep panel visible so result stays under the bar
+  const panel=$('progressPanel'); if(panel) panel.classList.add('on');
+}
+function clearOpResult(){ setOpResult(''); }
 function setBusy(on, label){
   state.busy=!!on;
   const live=$('syncState');
@@ -665,15 +690,33 @@ function setBusy(on, label){
     else if(live.classList.contains('busy')){ live.textContent='在线'; live.className='live'; }
   }
   setActionEnabled(!on);
+  if(on){
+    clearOpResult();
+    const panel=$('progressPanel'); if(panel) panel.classList.add('on');
+  }
 }
-function setProgress(cur, total){
-  const wrap=$('progress'), bar=$('progressBar');
-  if(!wrap||!bar) return;
-  if(!total || total<=0){ wrap.classList.remove('on'); bar.style.width='0%'; return; }
-  wrap.classList.add('on');
-  const pct=Math.max(2, Math.min(100, Math.round(cur/total*100)));
-  bar.style.width=pct+'%';
-  if(cur>=total){ setTimeout(()=>{ wrap.classList.remove('on'); bar.style.width='0%'; }, 350); }
+function setProgress(cur, total, label){
+  const panel=$('progressPanel'), bar=$('progressBar');
+  const pl=$('progressLabel'), pc=$('progressCount');
+  if(!panel||!bar) return;
+  if(total==null || total<0){
+    // hide progress UI only when explicitly reset
+    panel.classList.remove('on');
+    bar.style.width='0%';
+    if(pl) pl.textContent='';
+    if(pc) pc.textContent='';
+    return;
+  }
+  panel.classList.add('on');
+  const t=Math.max(1, Number(total)||1);
+  const c=Math.max(0, Math.min(t, Number(cur)||0));
+  const pct=Math.max(0, Math.min(100, Math.round(c/t*100)));
+  bar.style.width=(c>0?Math.max(2,pct):0)+'%';
+  if(pl) pl.textContent=label||(c>=t?'已完成':'处理中');
+  if(pc) pc.textContent=c+'/'+t+(c>=t?'（完成）':'');
+}
+function finishProgress(cur, total, label){
+  setProgress(cur, total, label||'已完成');
 }
 function counts(){const o={401:0,402:0,403:0,429:0}; for(const b of state.bans) if(o[b.status_code]!==undefined) o[b.status_code]++; return o}
 function paintChips(){
@@ -987,34 +1030,36 @@ async function runRowAction(act,id){
   if(!confirm('确认对凭证执行「'+(labels[act]||act)+'」？\n'+id)) return;
   try{
     setBusy(true, labels[act]||act);
-    setProgress(0,1);
+    setProgress(0,1,labels[act]||act);
     setMessage('正在执行 '+(labels[act]||act)+'…');
     if(act==='unban') await apiMgmt('POST','/unban',{auth_id:id});
     else if(act==='reauth') await apiMgmt('POST','/reauth',{auth_id:id,force:true});
     else await apiMgmt('POST','/apply-action',{auth_id:id,action:act,force:true});
-    setProgress(1,1);
+    finishProgress(1,1,labels[act]||'完成');
     state.selected.delete(id);
-    setMessage('已完成 · '+(labels[act]||act));
-    toast('已完成 · '+(labels[act]||act),'ok');
+    const msg='已完成 · '+(labels[act]||act)+' · 1/1';
+    setMessage(msg);
+    setOpResult(msg,'ok');
     await loadData(true);
-  }catch(e){ setMessage(e.message,true); toast(e.message,'err'); }
+  }catch(e){ setMessage(e.message,true); setOpResult(e.message,'err'); }
   finally{ setBusy(false); }
 }
 async function unbanOne(id){ return runRowAction('unban',id); }
 async function bulkAct(act){
   if(state.busy) return;
   const ids=[...state.selected];
-  if(!ids.length){ setMessage('请先勾选凭证',true); toast('请先勾选凭证','err'); return; }
+  if(!ids.length){ setMessage('请先勾选凭证',true); setOpResult('请先勾选凭证','err'); return; }
   const labels={unban:'释放',ban:'隔离',disable:'禁用',reenable:'启用',reauth:'重授权',delete:'删除'};
   const danger=act==='delete'?'\n\n删除将调用 Management 删除凭证；失败则按删除回退策略禁用/隔离。不可轻易撤销。':'';
   if(!confirm('确认对所选 '+ids.length+' 条执行「'+(labels[act]||act)+'」？'+danger)) return;
   if(act==='delete' && !confirm('再次确认：删除所选 '+ids.length+' 条凭证？')) return;
   try{
-    setBusy(true,'批量中');
+    setBusy(true,'批量'+(labels[act]||act));
+    setProgress(0, ids.length, '批量'+(labels[act]||act));
     let i=0, okN=0, failN=0;
     const fails=[];
     for(const id of ids){
-      i++; setProgress(i-1, ids.length); setMessage('正在处理 '+i+'/'+ids.length+' …');
+      setMessage('正在'+(labels[act]||act)+' '+ (i+1)+'/'+ids.length+' …');
       try{
         if(act==='unban') await apiMgmt('POST','/unban',{auth_id:id});
         else if(act==='reauth') await apiMgmt('POST','/reauth',{auth_id:id,force:true});
@@ -1023,16 +1068,19 @@ async function bulkAct(act){
         state.selected.delete(id);
       }catch(one){
         failN++;
-        if(fails.length<5) fails.push((id||'')+': '+(one.message||one));
+        if(fails.length<8) fails.push((id||'')+': '+(one.message||one));
       }
-      setProgress(i, ids.length);
+      i++;
+      setProgress(i, ids.length, '批量'+(labels[act]||act));
     }
-    const msg='批量完成 · '+(labels[act]||act)+' 成功 '+okN+(failN?(' · 失败 '+failN):'');
-    setMessage(msg+(fails.length?(' · '+fails.join('；')):''), failN>0);
-    toast(msg, failN>0?'err':'ok');
+    const msg='批量'+(labels[act]||act)+'完成 · 成功 '+okN+' / 共 '+ids.length+(failN?(' · 失败 '+failN):'');
+    const detail=msg+(fails.length?('\n'+fails.join('\n')):'');
+    setMessage(msg, failN>0);
+    finishProgress(ids.length, ids.length, '批量完成');
+    setOpResult(detail, failN>0?(okN>0?'warn':'err'):'ok');
     await loadData(true);
-  }catch(e){ setMessage(e.message,true); toast(e.message,'err'); }
-  finally{ setBusy(false); setProgress(0,0); }
+  }catch(e){ setMessage(e.message,true); setOpResult(e.message,'err'); }
+  finally{ setBusy(false); }
 }
 async function selectCurrentFilter(){
   if(state.busy) return;
@@ -1066,12 +1114,13 @@ async function unbanSelected(){ return bulkAct('unban'); }
 async function unbanAll(){
   if(state.busy||!confirm('确认释放全部隔离？')) return;
   try{
-    setBusy(true,'全部释放'); setProgress(0,1);
+    setBusy(true,'全部释放'); setProgress(0,1,'全部释放');
     await apiMgmt('POST','/unban-all',{});
-    setProgress(1,1);
-    setMessage('已全部释放'); toast('已全部释放','ok');
+    finishProgress(1,1,'全部释放');
+    const msg='已全部释放';
+    setMessage(msg); setOpResult(msg,'ok');
     await loadData(true);
-  }catch(e){ setMessage(e.message,true); toast(e.message,'err'); }
+  }catch(e){ setMessage(e.message,true); setOpResult(e.message,'err'); }
   finally{ setBusy(false); }
 }
 async function pollProbeUntilDone(){
@@ -1079,16 +1128,19 @@ async function pollProbeUntilDone(){
   for(;;){
     const st=await apiMgmt('GET','/probe/status');
     const done=st.done||0, total=st.total||0;
-    setProgress(done, total>0?total:100);
+    const t=total>0?total:Math.max(done,1);
+    setProgress(done, t, '巡检中');
+    setMessage('巡检中… '+done+'/'+(total||'?'));
     if(done===lastDone) idle++; else { idle=0; lastDone=done; }
     if(!st.running){
       const r=st.result||{};
-      const msg='巡检完成 成功='+(r.ok||0)+' 失败='+(r.failed||0)+(r.report_only?'（只输出结果）':'');
-      setMessage(msg); toast(msg, st.error?'err':'ok');
+      const msg='巡检完成 · 成功 '+(r.ok||0)+' · 失败 '+(r.failed||0)+' · 检 '+(r.checked||done||0)+(r.report_only?'（只输出结果）':'');
+      finishProgress(total>0?total:done||1, total>0?total:done||1, '巡检完成');
+      setMessage(msg);
+      setOpResult(msg+(st.error?('\n'+st.error):''), st.error?'err':((r.failed||0)>0?'warn':'ok'));
       if(st.error) throw new Error(st.error);
       return st;
     }
-    // Stuck: running but no progress for ~90s → force restart once
     if(idle>180 && done===0 && total===0){
       setMessage('巡检似乎卡住，强制重新开始…');
       await apiMgmt('POST','/probe',{force:true,wait:false});
@@ -1100,7 +1152,7 @@ async function pollProbeUntilDone(){
 async function runProbe(){
   if(state.busy||!confirm('立即巡检全部 xAI 凭据？')) return;
   try{
-    setBusy(true,'巡检中'); setProgress(0,100);
+    setBusy(true,'巡检中'); setProgress(0,1,'巡检中');
     setMessage('巡检中…');
     let acc;
     try{
@@ -1116,41 +1168,67 @@ async function runProbe(){
     if(acc && acc.accepted===false && acc.error) throw new Error(acc.error);
     await pollProbeUntilDone();
     await loadData(true);
-  }catch(e){ setMessage(e.message,true); toast(e.message,'err'); }
-  finally{ setBusy(false); setProgress(0,0); }
+  }catch(e){ setMessage(e.message,true); setOpResult(e.message,'err'); }
+  finally{ setBusy(false); }
 }
 async function recheck429(){
   if(state.busy||!confirm('仅复检当前 429 隔离凭证？\n恢复则释放隔离，仍限流则续隔窗口。')) return;
   try{
-    setBusy(true,'429 复检'); setProgress(40,100);
-    setMessage('429 复检中…');
+    setBusy(true,'429 复检'); setProgress(0,1,'429 复检');
+    setMessage('429 复检中… 0/1');
     const res=await apiMgmt('POST','/bans-recheck-429',{force:true});
-    setProgress(100,100);
+    finishProgress(1,1,'429 复检完成');
     const r=res.result||{};
-    const msg='429 复检完成 · 检'+(r.checked||0)+' 释放'+(r.unbanned||0)+' 续隔'+(r.relocked||0)+' 跳过'+(r.skipped||0)+' 失败'+(r.failed||0);
-    setMessage(msg); toast(msg,'ok');
+    const msg='429 复检完成 · 检 '+(r.checked||0)+' · 释放 '+(r.unbanned||0)+' · 续隔 '+(r.relocked||0)+' · 跳过 '+(r.skipped||0)+' · 失败 '+(r.failed||0);
+    setMessage(msg);
+    setOpResult(msg, (r.failed||0)>0?'warn':'ok');
     state.filter='429'; state.page.page=1; paintChips();
     await loadData(true);
-  }catch(e){ setMessage(e.message,true); toast(e.message,'err'); }
-  finally{ setBusy(false); setProgress(0,0); }
+  }catch(e){ setMessage(e.message,true); setOpResult(e.message,'err'); }
+  finally{ setBusy(false); }
 }
 async function recheckSelected(){
   if(state.busy) return;
   const ids=[...state.selected];
-  if(!ids.length){ setMessage('请先勾选凭证',true); toast('请先勾选凭证','err'); return; }
-  if(!confirm('并发复检所选 '+ids.length+' 条？\n· 含已禁用凭证（全量巡检会跳过它们）\n· 成功：释放隔离 + 自动启用\n· 失败：写入/刷新隔离记录')) return;
+  if(!ids.length){ setMessage('请先勾选凭证',true); setOpResult('请先勾选凭证','err'); return; }
+  if(!confirm('复检所选 '+ids.length+' 条？\n· 含已禁用凭证\n· 成功：释放隔离 + 自动启用\n· 失败：写入/刷新隔离记录\n· 分批执行并显示真实进度')) return;
+  const chunkSize=5;
   try{
-    setBusy(true,'复检所选'); setProgress(20,100);
-    setMessage('并发复检 '+ids.length+' 条…');
-    const res=await apiMgmt('POST','/recheck-selected',{auth_ids:ids,reenable_on_ok:true});
-    setProgress(100,100);
-    const r=res.result||{};
-    const msg='复检完成 · 检'+(r.checked||0)+' 成功'+(r.ok||0)+' 失败'+(r.failed||0)+' 释放'+(r.unbanned||0)+' 启用'+(r.reenabled||0)+' 跳过'+(r.skipped||0);
-    setMessage(msg); toast(msg, (r.failed||0)>0?'err':'ok');
+    setBusy(true,'复检所选');
+    setProgress(0, ids.length, '复检所选');
+    let done=0, checked=0, okN=0, failed=0, unbanned=0, reenabled=0, skipped=0;
+    const errs=[];
+    for(let i=0;i<ids.length;i+=chunkSize){
+      const part=ids.slice(i, i+chunkSize);
+      setMessage('复检中… '+Math.min(i+part.length, ids.length)+'/'+ids.length);
+      try{
+        const res=await apiMgmt('POST','/recheck-selected',{auth_ids:part,reenable_on_ok:true});
+        const r=res.result||{};
+        checked+=(r.checked||0);
+        okN+=(r.ok||0);
+        failed+=(r.failed||0);
+        unbanned+=(r.unbanned||0);
+        reenabled+=(r.reenabled||0);
+        skipped+=(r.skipped||0);
+        if(Array.isArray(r.errors)){
+          for(const e of r.errors){ if(errs.length<12) errs.push(String(e)); }
+        }
+      }catch(one){
+        failed+=part.length;
+        if(errs.length<12) errs.push((one.message||one)+' · batch@'+i);
+      }
+      done=Math.min(i+part.length, ids.length);
+      setProgress(done, ids.length, '复检所选');
+    }
+    const msg='复检完成 · 检 '+checked+' · 成功 '+okN+' · 失败 '+failed+' · 释放 '+unbanned+' · 启用 '+reenabled+' · 跳过 '+skipped+' · 进度 '+done+'/'+ids.length;
+    const detail=msg+(errs.length?('\n'+errs.join('\n')):'');
+    setMessage(msg, failed>0);
+    finishProgress(ids.length, ids.length, '复检完成');
+    setOpResult(detail, failed>0?(okN>0?'warn':'err'):'ok');
     state.selected.clear();
     await loadData(true);
-  }catch(e){ setMessage(e.message,true); toast(e.message,'err'); }
-  finally{ setBusy(false); setProgress(0,0); }
+  }catch(e){ setMessage(e.message,true); setOpResult(e.message,'err'); }
+  finally{ setBusy(false); }
 }
 async function exportBackup(){
   if(state.busy) return;
