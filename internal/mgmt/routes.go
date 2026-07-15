@@ -263,7 +263,7 @@ func (h *Handler) updateSettings(raw []byte) pluginapi.ManagementResponse {
 		"ok":       true,
 		"settings": cfg.PublicView(),
 		"warnings": warnings,
-		"note":     "runtime only until CPA reloads plugins.configs.xai-autoban",
+		"note":     "已写入运行时；日常请用运维台改策略。重启后可能回落 yaml。插件管理仅建议改启用与管理密钥。",
 	})
 }
 

@@ -2,7 +2,7 @@
 
 CLIProxyAPI 原生插件：自动隔离异常 xAI 凭据，支持可配置 ban 时长/动作、定时/手动巡检、disable/delete、refresh 重授权、管理面板。
 
-版本：**0.5.13**
+版本：**0.5.14**
 
 ## 方式 A：插件商店安装（推荐）
 
@@ -105,7 +105,16 @@ plugins/darwin/arm64/xai-autoban.dylib
 - **xai-autoban**：运行时熔断、调度隔离、巡检、refresh 重授权
 - **[cpa-auth-inspect](https://github.com/YOUYCG/cpa-auth-inspect)**：多厂商巡检、Chromium Device OAuth 自动重登
 
-## 常用配置
+## 配置入口（推荐）
+
+| 入口 | 用途 |
+|------|------|
+| **运维台 → 编辑配置** | **主用**：巡检、策略、动作等日常配置 |
+| **插件管理** | 仅：**启用**开关 + **管理密钥**相关（`management_key_env` / `management_key` / `management_url` / `disable_via`） |
+
+插件管理不再展示 ban 时长、probe 等长表单，避免与运维台重复。
+
+### 安装时最小 yaml
 
 ```yaml
 plugins:
@@ -113,30 +122,12 @@ plugins:
     xai-autoban:
       enabled: true
       priority: 200
-      ban_401_seconds: 86400
-      ban_402_seconds: 604800
-      ban_403_seconds: 86400
-      ban_429_fallback_seconds: 1800
-      action_on_401: ban
-      action_on_402: ban
-      action_on_403: ban
-      action_on_429: ban
-      probe_enabled: true
-      probe_interval_seconds: 600
-      probe_concurrency: 3
-      probe_qps: 2
-      probe_mode: models
-      probe_action: ban
-      probe_on_success: unban
-      probe_include_disabled: false
-      probe_only_disabled: false
-      auto_execute: true
-      action_cooldown_seconds: 60
-      delete_fallback: disable
-      disable_via: host_auth
+      disable_via: management_api
       management_url: http://127.0.0.1:8317
       management_key_env: CPA_MANAGEMENT_KEY
 ```
+
+其余策略在运维台保存；也可继续在 yaml 写全量字段（仍会解析，只是插件管理 UI 不展示）。
 
 ## License
 

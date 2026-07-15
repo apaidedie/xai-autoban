@@ -309,37 +309,14 @@ func MergePatch(base PluginConfig, patch map[string]any) (PluginConfig, []string
 	return ParseYAML(string(out))
 }
 
+// Fields is the CPA「插件管理」schema only.
+// Daily ops (probe/actions) are configured in the ops console (编辑配置), not here.
+// Host still always shows Enable / Priority; we only expose management-key related install fields.
 func Fields() []pluginapi.ConfigField {
 	return []pluginapi.ConfigField{
-		{Name: "ban_401_seconds", Type: pluginapi.ConfigFieldTypeInteger, Description: "Ban duration for 401 in seconds."},
-		{Name: "ban_402_seconds", Type: pluginapi.ConfigFieldTypeInteger, Description: "Ban duration for 402 in seconds."},
-		{Name: "ban_403_seconds", Type: pluginapi.ConfigFieldTypeInteger, Description: "Ban duration for 403 in seconds."},
-		{Name: "ban_429_fallback_seconds", Type: pluginapi.ConfigFieldTypeInteger, Description: "Fallback ban duration for 429 when Retry-After is missing."},
-		{Name: "action_on_401", Type: pluginapi.ConfigFieldTypeEnum, EnumValues: []string{actionBan, actionDisable, actionDelete}, Description: "Action for 401 failures."},
-		{Name: "action_on_402", Type: pluginapi.ConfigFieldTypeEnum, EnumValues: []string{actionBan, actionDisable, actionDelete}, Description: "Action for 402 failures."},
-		{Name: "action_on_403", Type: pluginapi.ConfigFieldTypeEnum, EnumValues: []string{actionBan, actionDisable, actionDelete}, Description: "Action for 403 failures."},
-		{Name: "action_on_429", Type: pluginapi.ConfigFieldTypeEnum, EnumValues: []string{actionBan, actionDisable, actionDelete}, Description: "Action for 429 failures (prefer ban)."},
-		{Name: "probe_enabled", Type: pluginapi.ConfigFieldTypeBoolean, Description: "Enable timed credential probing."},
-		{Name: "probe_interval_seconds", Type: pluginapi.ConfigFieldTypeInteger, Description: "Probe interval seconds."},
-		{Name: "probe_timeout_seconds", Type: pluginapi.ConfigFieldTypeInteger, Description: "Probe HTTP timeout seconds."},
-		{Name: "probe_concurrency", Type: pluginapi.ConfigFieldTypeInteger, Description: "Max concurrent probes."},
-		{Name: "probe_qps", Type: pluginapi.ConfigFieldTypeInteger, Description: "Global probe requests per second."},
-		{Name: "probe_mode", Type: pluginapi.ConfigFieldTypeEnum, EnumValues: []string{"models", "responses_mini"}, Description: "Probe strategy."},
-		{Name: "probe_action", Type: pluginapi.ConfigFieldTypeEnum, EnumValues: []string{actionBan, actionDisable, actionDelete}, Description: "Default action when probe fails (used when auto_execute=true)."},
-		{Name: "probe_on_success", Type: pluginapi.ConfigFieldTypeEnum, EnumValues: []string{successNone, successUnban, successReenable, successUnbanAndReenable}, Description: "Action when probe succeeds (used when auto_execute=true)."},
-		{Name: "probe_include_disabled", Type: pluginapi.ConfigFieldTypeBoolean, Description: "Include disabled credentials in full probe."},
-		{Name: "probe_only_disabled", Type: pluginapi.ConfigFieldTypeBoolean, Description: "Probe only disabled credentials."},
-		{Name: "auto_execute", Type: pluginapi.ConfigFieldTypeBoolean, Description: "If false, probe only reports results (Codex-style report-only). If true, apply actions."},
-		{Name: "action_cooldown_seconds", Type: pluginapi.ConfigFieldTypeInteger, Description: "Cooldown between repeated actions for the same credential."},
-		{Name: "delete_fallback", Type: pluginapi.ConfigFieldTypeEnum, EnumValues: []string{actionDisable, actionBan}, Description: "Fallback when delete is unavailable."},
-		{Name: "scheduler_delegate", Type: pluginapi.ConfigFieldTypeEnum, EnumValues: []string{pluginapi.SchedulerBuiltinRoundRobin, pluginapi.SchedulerBuiltinFillFirst}, Description: "Builtin scheduler after filtering bans."},
-		{Name: "state_file", Type: pluginapi.ConfigFieldTypeString, Description: "Optional path to persist ban state."},
-		{Name: "audit_max_events", Type: pluginapi.ConfigFieldTypeInteger, Description: "Max in-memory audit events."},
-		{Name: "disable_via", Type: pluginapi.ConfigFieldTypeEnum, EnumValues: []string{disableViaHostAuth, disableViaManagementAPI}, Description: "How to disable/reenable credentials: host_auth (plugin host save) or management_api (CPA Management PATCH)."},
-		{Name: "management_url", Type: pluginapi.ConfigFieldTypeString, Description: "CPA base URL when disable_via=management_api (default http://127.0.0.1:8317)."},
-		{Name: "management_key", Type: pluginapi.ConfigFieldTypeString, Description: "CPA Management Key for disable_via=management_api (prefer env)."},
-		{Name: "management_key_env", Type: pluginapi.ConfigFieldTypeString, Description: "Env var name for Management Key (default CPA_MANAGEMENT_KEY)."},
-		{Name: "management_timeout_seconds", Type: pluginapi.ConfigFieldTypeInteger, Description: "Management API timeout seconds."},
-		{Name: "management_auth_failure_cooldown_seconds", Type: pluginapi.ConfigFieldTypeInteger, Description: "Cooldown after Management API 401/403 to avoid IP ban."},
+		{Name: "management_key_env", Type: pluginapi.ConfigFieldTypeString, Description: "服务端管理密钥环境变量名（默认 CPA_MANAGEMENT_KEY）。日常巡检策略请在运维台「编辑配置」修改。"},
+		{Name: "management_key", Type: pluginapi.ConfigFieldTypeString, Description: "服务端管理密钥（不推荐明文；优先用环境变量）。运维台写操作也可在浏览器内保存密钥。"},
+		{Name: "management_url", Type: pluginapi.ConfigFieldTypeString, Description: "CPA Management 地址（默认 http://127.0.0.1:8317），用于禁用/删除。"},
+		{Name: "disable_via", Type: pluginapi.ConfigFieldTypeEnum, EnumValues: []string{disableViaHostAuth, disableViaManagementAPI}, Description: "禁用凭证路径：host_auth 或 management_api（推荐 management_api + 密钥）。"},
 	}
 }

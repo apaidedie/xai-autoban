@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.14 - 2026-07-15
+
+### Config UX
+- CPA「插件管理」ConfigFields 仅保留管理密钥相关：`management_key_env` / `management_key` / `management_url` / `disable_via`
+- 日常巡检策略统一到运维台「编辑配置」（主入口文案 + Management 可选区）
+- README 标明两入口分工
+
 ## 0.5.13 - 2026-07-15
 
 ### Fix
