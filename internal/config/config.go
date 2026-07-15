@@ -315,8 +315,8 @@ func MergePatch(base PluginConfig, patch map[string]any) (PluginConfig, []string
 func Fields() []pluginapi.ConfigField {
 	return []pluginapi.ConfigField{
 		{Name: "management_key_env", Type: pluginapi.ConfigFieldTypeString, Description: "服务端管理密钥环境变量名（默认 CPA_MANAGEMENT_KEY）。日常巡检策略请在运维台「编辑配置」修改。"},
-		{Name: "management_key", Type: pluginapi.ConfigFieldTypeString, Description: "服务端管理密钥（不推荐明文；优先用环境变量）。运维台写操作也可在浏览器内保存密钥。"},
+		{Name: "management_key", Type: pluginapi.ConfigFieldTypeString, Description: "服务端管理密钥（不推荐明文；优先用环境变量 management_key_env）。用于插件进程调用 CPA 禁用/删除。"},
 		{Name: "management_url", Type: pluginapi.ConfigFieldTypeString, Description: "CPA Management 地址（默认 http://127.0.0.1:8317），用于禁用/删除。"},
-		{Name: "disable_via", Type: pluginapi.ConfigFieldTypeEnum, EnumValues: []string{disableViaHostAuth, disableViaManagementAPI}, Description: "禁用凭证路径：host_auth 或 management_api（推荐 management_api + 密钥）。"},
+		{Name: "disable_via", Type: pluginapi.ConfigFieldTypeEnum, EnumValues: []string{disableViaHostAuth, disableViaManagementAPI}, Description: "禁用凭证路径：host_auth 或 management_api（推荐 management_api + 服务端密钥）。"},
 	}
 }

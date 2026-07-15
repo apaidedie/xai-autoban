@@ -370,7 +370,7 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
   <div class="db">
     <div class="sec">
       <h4>调度</h4>
-      <label class="chk" style="margin-bottom:10px"><input id="f_probe_enabled" type="checkbox"> 启用定时巡检</label>
+      <label class="chk" style="margin-bottom:10px"><input id="f_probe_enabled" type="checkbox"> 打开定时巡检</label>
       <div class="fg"><label>间隔（秒）</label><input id="f_probe_interval_seconds" type="number" min="30" step="1"></div>
       <div class="fg"><label>超时（秒）</label><input id="f_probe_timeout_seconds" type="number" min="5" step="1"></div>
       <div class="fg"><label>并发</label><input id="f_probe_concurrency" type="number" min="1" step="1"></div>
@@ -570,7 +570,7 @@ function labelAction(a){return ({ban:'隔离',disable:'禁用',delete:'删除',n
 function renderSettingsSummary(s){
   state.settings=s||{};
   const pe=$('sumProbeEnabled');
-  if(pe){ pe.textContent=s.probe_enabled?'已启用':'关闭'; pe.className=s.probe_enabled?'on':'off'; }
+  if(pe){ pe.textContent=s.probe_enabled?'已打开':'关闭'; pe.className=s.probe_enabled?'on':'off'; }
   if($('sumInterval')) $('sumInterval').textContent=(s.probe_interval_seconds||'-')+'s';
   const auto=s.auto_execute!==false;
   const ae=$('sumAutoExec');

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.18 - 2026-07-15
+
+### Copy / consistency
+- Fix outdated plugin-manage field descriptions (no browser key paste)
+- Management route descriptions in Chinese: 隔离/取消隔离/禁用/启用
+- 定时巡检「启用」→「打开」，避免与「启用凭证」混淆
+
 ## 0.5.17 - 2026-07-15
 
 ### Config UX
