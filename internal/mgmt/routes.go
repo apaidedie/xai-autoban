@@ -56,8 +56,10 @@ func (h *Handler) Registration() pluginapi.ManagementRegistrationResponse {
 			{Method: http.MethodPost, Path: ("/plugins/" + h.Name) + "/recheck-selected", Description: "并发复检所选（含已禁用）。Body: {\"auth_ids\":[],\"reenable_on_ok?\":true}."},
 		},
 		Resources: []pluginapi.ResourceRoute{
-			{Path: "/status", Menu: "xAI Autoban", Description: "xAI 隔离/禁用运维台；写操作使用 CPA 管理中心登录会话。"},
+			{Path: "/status", Menu: "xAI Autoban", Description: "xAI 隔离/禁用运维台。"},
 			{Path: "/data", Description: "只读状态数据。Query: filter,q,page,page_size。"},
+			{Path: "/api", Description: "运维写操作入口（不经过浏览器 admin key）。Body: {\"op\":\"...\"}."},
+			{Path: "/probe/status", Description: "巡检任务进度。"},
 		},
 	}
 }
@@ -66,6 +68,18 @@ func (h *Handler) Handle(req pluginapi.ManagementRequest) pluginapi.ManagementRe
 	method := strings.ToUpper(strings.TrimSpace(req.Method))
 	resourcePrefix := "/v0/resource/plugins/" + h.Name
 	path := strings.TrimRight(req.Path, "/")
+	// Resource ops: same handlers as management, but reachable without browser admin key
+	// (CPA serves resource under the ops menu; plugin uses server-side management_key for outbound disable).
+	if strings.HasSuffix(path, resourcePrefix+"/api") && (method == http.MethodPost || method == http.MethodPut) {
+		return h.handleResourceAPI(req)
+	}
+	if method == http.MethodGet && strings.HasSuffix(path, resourcePrefix+"/probe/status") {
+		st := h.Probe.JobStatus()
+		return jsonResponse(http.StatusOK, map[string]any{
+			"ok": true, "running": st.Running, "job_id": st.JobID,
+			"done": st.Done, "total": st.Total, "result": st.Result, "error": st.Error,
+		})
+	}
 	switch {
 	case method == http.MethodGet && strings.HasSuffix(path, ("/plugins/"+h.Name)+"/bans"):
 		return jsonResponse(http.StatusOK, h.CurrentStatusPaged(req.Query))
@@ -244,6 +258,50 @@ func (h *Handler) Handle(req pluginapi.ManagementRequest) pluginapi.ManagementRe
 		}
 	default:
 		return jsonResponse(http.StatusNotFound, map[string]any{"error": "not_found"})
+	}
+}
+
+// handleResourceAPI dispatches ops-console mutations without requiring browser admin key.
+// Body: {"op":"unban|unban_all|settings|probe|apply|reauth|recheck429|recheck_selected|import|backup", ...}
+func (h *Handler) handleResourceAPI(req pluginapi.ManagementRequest) pluginapi.ManagementResponse {
+	var body map[string]any
+	_ = json.Unmarshal(req.Body, &body)
+	if body == nil {
+		body = map[string]any{}
+	}
+	op, _ := body["op"].(string)
+	op = strings.ToLower(strings.TrimSpace(op))
+	delete(body, "op")
+	raw, _ := json.Marshal(body)
+	base := "/v0/management/plugins/" + h.Name
+	switch op {
+	case "settings", "update_settings":
+		return h.updateSettings(raw)
+	case "unban":
+		return h.Handle(pluginapi.ManagementRequest{Method: http.MethodPost, Path: base + "/unban", Body: raw, Headers: req.Headers, Query: req.Query})
+	case "unban_all", "unban-all":
+		return h.Handle(pluginapi.ManagementRequest{Method: http.MethodPost, Path: base + "/unban-all", Body: raw, Headers: req.Headers, Query: req.Query})
+	case "probe":
+		return h.Handle(pluginapi.ManagementRequest{Method: http.MethodPost, Path: base + "/probe", Body: raw, Headers: req.Headers, Query: req.Query})
+	case "apply", "apply_action", "apply-action":
+		return h.Handle(pluginapi.ManagementRequest{Method: http.MethodPost, Path: base + "/apply-action", Body: raw, Headers: req.Headers, Query: req.Query})
+	case "reauth":
+		return h.Handle(pluginapi.ManagementRequest{Method: http.MethodPost, Path: base + "/reauth", Body: raw, Headers: req.Headers, Query: req.Query})
+	case "recheck429", "bans-recheck-429", "recheck_429":
+		return h.Handle(pluginapi.ManagementRequest{Method: http.MethodPost, Path: base + "/bans-recheck-429", Body: raw, Headers: req.Headers, Query: req.Query})
+	case "recheck_selected", "recheck-selected":
+		return h.Handle(pluginapi.ManagementRequest{Method: http.MethodPost, Path: base + "/recheck-selected", Body: raw, Headers: req.Headers, Query: req.Query})
+	case "import":
+		// prefer nested snapshot if present
+		if snap, ok := body["snapshot"]; ok {
+			b, _ := json.Marshal(snap)
+			return h.ImportSnapshot(b)
+		}
+		return h.ImportSnapshot(raw)
+	case "backup":
+		return jsonResponse(http.StatusOK, h.BuildBackup())
+	default:
+		return jsonResponse(http.StatusBadRequest, map[string]any{"error": "unknown_op", "op": op})
 	}
 }
 

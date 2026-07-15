@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.19 - 2026-07-15
+
+### Fix
+- Ops write actions use resource `POST /api` (no browser admin key) — fixes persistent `invalid admin key`
+- Probe status polled via resource path
+
 ## 0.5.18 - 2026-07-15
 
 ### Copy / consistency

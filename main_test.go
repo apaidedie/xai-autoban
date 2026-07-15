@@ -168,7 +168,8 @@ func TestStatusPageUsesManagementKeyFlow(t *testing.T) {
 		"复检所选",
 		"card-list",
 		"rcard",
-		"credentials:'include'",
+		"apiOps",
+		"/api",
 	} {
 		if !strings.Contains(page, required) {
 			t.Fatalf("page missing %q", required)

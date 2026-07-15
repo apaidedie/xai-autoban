@@ -352,7 +352,7 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
 
   <p class="foot">
     <b>隔离</b>=插件内跳过调度；<b>禁用</b>=关闭凭证；<b>启用</b>=打开凭证。
-    日常策略请在运维台「编辑配置」修改。写操作使用 CPA 管理中心登录会话（无需在本页再贴密钥）。运行时配置立即生效，进程重启后可能回落 yaml 默认值。
+    日常策略请在运维台「编辑配置」修改。写操作走插件资源接口，无需浏览器 admin key；禁用/删除使用插件管理中的服务端密钥。
   </p>
   <input id="importFile" type="file" accept="application/json,.json" hidden>
 </div>
@@ -447,22 +447,35 @@ function setAuthUI(){
   setActionEnabled(true);
   return true;
 }
-async function apiResource(path){
-  const r=await fetch(resourceBase+path,{cache:'no-store',credentials:'same-origin'}); const t=await r.text();
-  let d; try{d=JSON.parse(t)}catch(_){throw new Error(t||('HTTP '+r.status))}
-  if(!r.ok) throw new Error(d.error||('HTTP '+r.status)); return d;
+async function apiResource(path, opts){
+  const method=(opts&&opts.method)||'GET';
+  const body=opts&&opts.body;
+  const r=await fetch(resourceBase+path,{
+    method,cache:'no-store',credentials:'same-origin',
+    headers:body?{'Content-Type':'application/json'}:undefined,
+    body:body?JSON.stringify(body):undefined
+  });
+  const t=await r.text(); let d; try{d=JSON.parse(t)}catch(_){throw new Error(t||('HTTP '+r.status))}
+  if(!r.ok) throw new Error(d.error||d.message||('HTTP '+r.status)); return d;
+}
+// Write ops via resource /api — avoids CPA management "invalid admin key".
+async function apiOps(op, extra){
+  return apiResource('/api',{method:'POST',body:Object.assign({op:op}, extra||{})});
 }
 async function apiMgmt(method,path,body){
-  // Do NOT inject localStorage admin keys — stale/wrong values cause "invalid admin key".
-  // Rely on CPA management-center session (same-origin cookies / panel auth).
-  const r=await fetch(mgmtBase+path,{method,cache:'no-store',credentials:'include',headers:{
-    'Content-Type':'application/json'
-  },body:body?JSON.stringify(body):undefined});
-  const t=await r.text(); let d; try{d=JSON.parse(t)}catch(_){throw new Error(t||('HTTP '+r.status))}
-  if(r.status===401||r.status===403){
-    throw new Error(d.error||d.message||'未授权：请从 CPA 管理中心侧栏打开本页（保持已登录）');
-  }
-  if(!r.ok) throw new Error(d.error||d.message||('HTTP '+r.status)); return d;
+  const p=String(path||'');
+  if(method==='GET'&&p.indexOf('/probe/status')>=0) return apiResource('/probe/status');
+  if(method==='GET'&&p.indexOf('/backup')>=0) return apiOps('backup');
+  if((method==='PUT'||method==='POST')&&p.indexOf('/settings')>=0) return apiOps('settings', body||{});
+  if(method==='POST'&&p.indexOf('/unban-all')>=0) return apiOps('unban_all', body||{});
+  if(method==='POST'&&p.indexOf('/unban')>=0) return apiOps('unban', body||{});
+  if(method==='POST'&&p.indexOf('/probe')>=0) return apiOps('probe', body||{});
+  if(method==='POST'&&p.indexOf('/apply-action')>=0) return apiOps('apply', body||{});
+  if(method==='POST'&&p.indexOf('/reauth')>=0) return apiOps('reauth', body||{});
+  if(method==='POST'&&p.indexOf('/bans-recheck-429')>=0) return apiOps('recheck429', body||{});
+  if(method==='POST'&&p.indexOf('/recheck-selected')>=0) return apiOps('recheck_selected', body||{});
+  if(method==='POST'&&p.indexOf('/import')>=0) return apiOps('import', body||{});
+  throw new Error('unsupported ops '+method+' '+path);
 }
 function setMessage(text,err=false){
   const m=$('message'); if(m){ m.textContent=text; m.className='msg'+(err?' err':''); }
