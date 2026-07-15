@@ -91,10 +91,14 @@ func resourcePathMatch(path, name, suffix string) bool {
 func (h *Handler) Handle(req pluginapi.ManagementRequest) pluginapi.ManagementResponse {
 	method := strings.ToUpper(strings.TrimSpace(req.Method))
 	path := strings.TrimRight(req.Path, "/")
-	// POST /data is the ops write channel (same resource that GET list uses → no 404).
-	if (method == http.MethodPost || method == http.MethodPut) && resourcePathMatch(path, h.Name, "data") {
-		// Distinguish list POST-with-op from accidental empty POST.
-		if len(req.Body) > 0 && (bytesContainsOp(req.Body) || req.Query.Get("op") != "") {
+	// Mutations on /data: POST body {op:...} or GET ?op=... (some CPA only forward GET on resources).
+	if resourcePathMatch(path, h.Name, "data") {
+		if method == http.MethodPost || method == http.MethodPut {
+			if len(req.Body) > 0 && (bytesContainsOp(req.Body) || req.Query.Get("op") != "") {
+				return h.handleResourceAPI(req)
+			}
+		}
+		if method == http.MethodGet && strings.TrimSpace(req.Query.Get("op")) != "" {
 			return h.handleResourceAPI(req)
 		}
 	}
@@ -287,14 +291,7 @@ func (h *Handler) Handle(req pluginapi.ManagementRequest) pluginapi.ManagementRe
 }
 
 func resolveOpsKey(cfg config.PluginConfig) string {
-	if k := strings.TrimSpace(cfg.ManagementKey); k != "" {
-		return k
-	}
-	envName := strings.TrimSpace(cfg.ManagementKeyEnv)
-	if envName == "" {
-		envName = "CPA_MANAGEMENT_KEY"
-	}
-	return strings.TrimSpace(os.Getenv(envName))
+	return cfg.ResolveManagementKey()
 }
 
 func bytesContainsOp(raw []byte) bool {
@@ -310,6 +307,17 @@ func (h *Handler) handleResourceAPI(req pluginapi.ManagementRequest) pluginapi.M
 	_ = json.Unmarshal(req.Body, &body)
 	if body == nil {
 		body = map[string]any{}
+	}
+	// Merge query params (GET ?op=unban&auth_id=...) for CPA builds that only route resource GET.
+	if req.Query != nil {
+		for k, vs := range req.Query {
+			if len(vs) == 0 {
+				continue
+			}
+			if _, exists := body[k]; !exists {
+				body[k] = vs[0]
+			}
+		}
 	}
 	op, _ := body["op"].(string)
 	if op == "" {

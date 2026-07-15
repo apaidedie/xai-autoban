@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -283,10 +284,33 @@ func (c PluginConfig) PublicView() map[string]any {
 		"disable_via":                              c.DisableVia,
 		"management_url":                           c.ManagementURL,
 		"management_key_env":                       c.ManagementKeyEnv,
-		"management_key_configured":                strings.TrimSpace(c.ManagementKey) != "",
+		"management_key_configured":                c.ResolveManagementKey() != "",
 		"management_timeout_seconds":               c.ManagementTimeoutSeconds,
 		"management_auth_failure_cooldown_seconds": c.ManagementAuthFailureCooldownSeconds,
 	}
+}
+
+// ResolveManagementKey returns plugin-configured or env management key (never log this).
+func (c PluginConfig) ResolveManagementKey() string {
+	if k := strings.TrimSpace(c.ManagementKey); k != "" {
+		return k
+	}
+	envName := strings.TrimSpace(c.ManagementKeyEnv)
+	if envName == "" {
+		envName = defaultManagementKeyEnv
+	}
+	if v := strings.TrimSpace(os.Getenv(envName)); v != "" {
+		return v
+	}
+	for _, e := range []string{"CPA_MANAGEMENT_KEY", "MANAGEMENT_PASSWORD", "MANAGEMENT_KEY", "CPA_MANAGEMENT_PASSWORD", "CLIPROXYAPI_MANAGEMENT_KEY"} {
+		if e == envName {
+			continue
+		}
+		if v := strings.TrimSpace(os.Getenv(e)); v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 func MergePatch(base PluginConfig, patch map[string]any) (PluginConfig, []string) {

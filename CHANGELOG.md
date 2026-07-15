@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.23 - 2026-07-15
+
+### Fix
+- Ops writes: try resource POST /data, then **GET /data?op=...** (CPA often only routes GET)
+- Stronger management key resolution (multiple env names)
+- Clearer errors when key missing vs invalid
+
 ## 0.5.22 - 2026-07-15
 
 ### Fix

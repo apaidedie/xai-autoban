@@ -470,7 +470,6 @@ async function apiResource(path, opts){
   const t=await r.text(); let d; try{d=JSON.parse(t)}catch(_){throw new Error(t||('HTTP '+r.status))}
   if(!r.ok) throw new Error(d.error||d.message||('HTTP '+r.status)); return d;
 }
-// Prefer Management API with plugin-configured key; fallback to resource POST /data.
 async function apiMgmtDirect(method,path,body){
   if(!SERVER_MGMT_KEY) throw new Error('no_server_key');
   const r=await fetch(mgmtBase+path,{method,cache:'no-store',credentials:'same-origin',headers:{
@@ -482,46 +481,71 @@ async function apiMgmtDirect(method,path,body){
   const t=await r.text(); let d; try{d=JSON.parse(t)}catch(_){throw new Error(t||('HTTP '+r.status))}
   if(!r.ok) throw new Error(d.error||d.message||('HTTP '+r.status)); return d;
 }
+// Resource channel: try POST /data then GET /data?op= (CPA often only routes GET on resources).
 async function apiOps(op, extra){
-  return apiResource('/data',{method:'POST',body:Object.assign({op:op}, extra||{})});
+  const payload=Object.assign({op:op}, extra||{});
+  try{
+    return await apiResource('/data',{method:'POST',body:payload});
+  }catch(ePost){
+    const msg=String(ePost.message||ePost);
+    if(msg.indexOf('404')<0 && msg.indexOf('405')<0 && msg.toLowerCase().indexOf('method')<0){
+      throw ePost;
+    }
+    // GET fallback for simple ops
+    const q=new URLSearchParams();
+    q.set('op', op);
+    Object.keys(payload).forEach(k=>{
+      if(k==='op') return;
+      const v=payload[k];
+      if(v===undefined||v===null) return;
+      if(typeof v==='object') q.set(k, JSON.stringify(v));
+      else q.set(k, String(v));
+    });
+    return apiResource('/data?'+q.toString());
+  }
+}
+function mapPathToOp(method,path,body){
+  const p=String(path||'');
+  if(method==='GET'&&p.indexOf('/probe/status')>=0) return {op:'probe_status'};
+  if(method==='GET'&&p.indexOf('/backup')>=0) return {op:'backup'};
+  if((method==='PUT'||method==='POST')&&p.indexOf('/settings')>=0) return Object.assign({op:'settings'}, body||{});
+  if(method==='POST'&&p.indexOf('/unban-all')>=0) return Object.assign({op:'unban_all'}, body||{});
+  if(method==='POST'&&p.indexOf('/unban')>=0) return Object.assign({op:'unban'}, body||{});
+  if(method==='POST'&&p.indexOf('/probe')>=0) return Object.assign({op:'probe'}, body||{});
+  if(method==='POST'&&p.indexOf('/apply-action')>=0) return Object.assign({op:'apply'}, body||{});
+  if(method==='POST'&&p.indexOf('/reauth')>=0) return Object.assign({op:'reauth'}, body||{});
+  if(method==='POST'&&p.indexOf('/bans-recheck-429')>=0) return Object.assign({op:'recheck429'}, body||{});
+  if(method==='POST'&&p.indexOf('/recheck-selected')>=0) return Object.assign({op:'recheck_selected'}, body||{});
+  if(method==='POST'&&p.indexOf('/import')>=0) return Object.assign({op:'import'}, body||{});
+  return null;
 }
 async function apiMgmt(method,path,body){
-  // 1) server-injected key (from 插件管理) → official management routes
+  const mapped=mapPathToOp(method,path,body);
+  let lastErr=null;
+  // 1) resource channel first (no admin key; list GET already works)
+  if(mapped){
+    try{
+      if(mapped.op==='probe_status'){
+        try{ return await apiResource('/probe/status'); }catch(_){ /* fall */ }
+      }
+      return await apiOps(mapped.op, mapped);
+    }catch(e){ lastErr=e; }
+  }
+  // 2) management API with plugin-configured key
   if(SERVER_MGMT_KEY){
     try{ return await apiMgmtDirect(method,path,body); }
     catch(e){
-      // fall through to resource channel
-      if(String(e.message||e).indexOf('invalid')>=0 && String(e.message||e).indexOf('key')>=0){
-        // wrong key configured in plugin manage — surface clearly after fallback fails
+      const m=String(e.message||e);
+      if(/invalid.*key|admin key/i.test(m)){
+        throw new Error('管理密钥无效：插件管理里的 management_key / 环境变量 与 CPA 管理中心密码不一致');
       }
+      throw e;
     }
   }
-  // 2) resource POST /data (no admin key; works when CPA forwards resource POST)
-  const p=String(path||'');
-  try{
-    if(method==='GET'&&p.indexOf('/probe/status')>=0){
-      try{ return await apiResource('/probe/status'); } catch(_){ return await apiOps('probe_status'); }
-    }
-    if(method==='GET'&&p.indexOf('/backup')>=0) return await apiOps('backup');
-    if((method==='PUT'||method==='POST')&&p.indexOf('/settings')>=0) return await apiOps('settings', body||{});
-    if(method==='POST'&&p.indexOf('/unban-all')>=0) return await apiOps('unban_all', body||{});
-    if(method==='POST'&&p.indexOf('/unban')>=0) return await apiOps('unban', body||{});
-    if(method==='POST'&&p.indexOf('/probe')>=0) return await apiOps('probe', body||{});
-    if(method==='POST'&&p.indexOf('/apply-action')>=0) return await apiOps('apply', body||{});
-    if(method==='POST'&&p.indexOf('/reauth')>=0) return await apiOps('reauth', body||{});
-    if(method==='POST'&&p.indexOf('/bans-recheck-429')>=0) return await apiOps('recheck429', body||{});
-    if(method==='POST'&&p.indexOf('/recheck-selected')>=0) return await apiOps('recheck_selected', body||{});
-    if(method==='POST'&&p.indexOf('/import')>=0) return await apiOps('import', body||{});
-  }catch(e2){
-    if(!SERVER_MGMT_KEY){
-      throw new Error('写操作失败（'+ (e2.message||e2) +'）。请在插件管理配置 management_key 或 CPA_MANAGEMENT_KEY 环境变量后重试。');
-    }
-    throw e2;
+  if(lastErr){
+    throw new Error('写操作失败（'+(lastErr.message||lastErr)+'）。请确认已升级插件；若仍失败，在插件管理填写与 CPA 相同的 management_key，并重载插件。');
   }
-  if(!SERVER_MGMT_KEY){
-    throw new Error('请在插件管理配置服务端管理密钥（management_key / management_key_env）');
-  }
-  throw new Error('unsupported ops '+method+' '+path);
+  throw new Error('请在插件管理配置 management_key 或环境变量 CPA_MANAGEMENT_KEY，然后重载插件');
 }
 function setMessage(text,err=false){
   const m=$('message'); if(m){ m.textContent=text; m.className='msg'+(err?' err':''); }

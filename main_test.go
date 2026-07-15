@@ -223,6 +223,23 @@ func TestResourceDataPOSTUnban(t *testing.T) {
 	}
 }
 
+func TestResourceDataGETUnbanQuery(t *testing.T) {
+	defaultApp.bans.ClearAll()
+	now := time.Now()
+	defaultApp.bans.Set("g1", ban.Entry{StatusCode: 403, ResetAt: now.Add(time.Hour)})
+	resp := defaultApp.mgmt.Handle(pluginapi.ManagementRequest{
+		Method: http.MethodGet,
+		Path:   "/v0/resource/plugins/xai-autoban/data",
+		Query:  map[string][]string{"op": {"unban"}, "auth_id": {"g1"}},
+	})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status=%d body=%s", resp.StatusCode, string(resp.Body))
+	}
+	if defaultApp.bans.Active("g1", now) {
+		t.Fatal("expected unban via GET /data?op=unban")
+	}
+}
+
 func TestImportSnapshot(t *testing.T) {
 	defaultApp.bans.ClearAll()
 	now := time.Now()
