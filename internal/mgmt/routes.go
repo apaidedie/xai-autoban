@@ -848,11 +848,16 @@ func (h *Handler) ImportSnapshot(raw []byte) pluginapi.ManagementResponse {
 	if len(snapshot.Settings) > 0 {
 		cfg, w := config.MergePatch(h.Cfg(), snapshot.Settings)
 		h.SetCfg(cfg)
+		if h.Persist != nil {
+			h.Persist.SetSettings(cfg.OpsSettingsView())
+		}
 		warnings = w
 		settingsApplied = true
 	}
 
-	h.Persist.ScheduleSave()
+	if h.Persist != nil {
+		h.Persist.ScheduleSave()
+	}
 	h.Audit.Add("manual", "", "import", "ok", fmt.Sprintf("imported=%d settings=%v", imported, settingsApplied), 0)
 	return jsonResponse(http.StatusOK, map[string]any{
 		"ok":               true,
