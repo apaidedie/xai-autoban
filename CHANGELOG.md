@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.24 - 2026-07-15
+
+### Fix
+- Build: remove unused `os` import (0.5.23 release failed CI)
+
 ## 0.5.23 - 2026-07-15
 
 ### Fix
