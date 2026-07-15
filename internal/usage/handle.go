@@ -16,10 +16,17 @@ func Handle(raw []byte, engine *action.Engine) {
 	if len(raw) == 0 || json.Unmarshal(raw, &record) != nil {
 		return
 	}
-	if !strings.EqualFold(record.Provider, xai.Provider) || !record.Failed {
+	if !strings.EqualFold(record.Provider, xai.Provider) {
 		return
 	}
 	if record.AuthID == "" {
+		return
+	}
+	// Real successful traffic is ground truth — heal false isolations from probe/usage noise.
+	if !record.Failed {
+		if err := engine.ApplyUsageSuccess(record.AuthID); err != nil {
+			slog.Debug("xai-autoban: usage success heal", "auth_id", record.AuthID, "error", err)
+		}
 		return
 	}
 	now := time.Now()

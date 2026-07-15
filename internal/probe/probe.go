@@ -600,27 +600,37 @@ func (p *Service) ProbeOneWithJSON(cfg config.PluginConfig, host host.Client, au
 		})
 	}
 
-	// models-only mode already returned on success; on failure try responses once for better signal.
+	// models-only: on hard failures try responses then chat/completions (real traffic often uses chat).
 	if mode == "" || mode == "models" {
 		if modelsErr != nil {
 			return 0, "", modelsErr
 		}
-		// hard failures: dual-check with responses
+		if modelsStatus >= 200 && modelsStatus < 300 {
+			return modelsStatus, modelsBody, nil
+		}
 		if modelsStatus == 401 || modelsStatus == 402 || modelsStatus == 403 || modelsStatus == 429 {
 			st, body, err := runResponses()
 			st, body, err = with429Retry(st, body, err, runResponses)
 			if err == nil && st >= 200 && st < 300 {
 				return st, body, nil
 			}
+			st2, body2, err2 := runCompletions()
+			st2, body2, err2 = with429Retry(st2, body2, err2, runCompletions)
+			if err2 == nil && st2 >= 200 && st2 < 300 {
+				return st2, body2, nil
+			}
+			// Prefer chat status when models failed but chat was tried (closer to real traffic).
+			if err2 == nil {
+				return st2, body2, fmt.Errorf("probe status %d", st2)
+			}
 			if err == nil {
 				return st, body, fmt.Errorf("probe status %d", st)
 			}
-			// fall through to return models failure
 		}
 		return modelsStatus, modelsBody, fmt.Errorf("probe status %d", modelsStatus)
 	}
 
-	// responses_mini (and any other non-models mode): responses + 429 retry + completions fallback
+	// responses_mini: responses → 429 retry → chat/completions (grok traffic often uses completions)
 	st, body, err := runResponses()
 	st, body, err = with429Retry(st, body, err, runResponses)
 	if err == nil && st >= 200 && st < 300 {

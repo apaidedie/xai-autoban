@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.36 - 2026-07-15
+
+### Fix
+- **真实调用成功即释放隔离**：usage 成功流量按 ground truth 清除 ban（修复 probe 误伤后后台仍可用却显示不健康）
+- 自动执行 + 成功策略含「启用」时，成功流量也会尝试重新启用凭证
+- Probe：models 失败时增加 chat/completions 回退（更接近真实 grok 流量）
+
 ## 0.5.35 - 2026-07-15
 
 ### UI

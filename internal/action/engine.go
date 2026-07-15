@@ -456,6 +456,48 @@ func (e *Engine) resolveAuthNames(authID string, hostClient host.Client) (fileNa
 	return fileName, index
 }
 
+// ApplyUsageSuccess heals isolation when real model traffic succeeds.
+// Always clears ban ledger (ground truth: account can call). Reenable follows probe_on_success
+// only when auto_execute is on (disable/enable is a stronger CPA-side action).
+func (e *Engine) ApplyUsageSuccess(authID string) error {
+	authID = strings.TrimSpace(authID)
+	if authID == "" {
+		return nil
+	}
+	now := time.Now()
+	email := e.lookupEmail(authID)
+	banned := e.bans.Active(authID, now) || (email != "" && e.bans.Active(email, now)) ||
+		e.bans.IsBannedCandidate(authID, email, now)
+
+	e.mu.Lock()
+	cfg := e.cfg
+	e.mu.Unlock()
+
+	// Always clear isolation on real success (even report-only mode).
+	if banned {
+		if !e.inCooldown(authID, SuccessUnban) {
+			removed := e.bans.Clear(authID)
+			if email != "" {
+				_ = e.bans.Clear(email)
+			}
+			e.markCooldown(authID, SuccessUnban)
+			e.audit.Add("usage", authID, SuccessUnban, "ok", fmt.Sprintf("real traffic success removed=%v", removed), 0)
+			e.notifyChanged()
+		}
+	}
+
+	// Reenable disabled credentials only when auto_execute and success policy asks for it.
+	if !cfg.AutoExecute {
+		return nil
+	}
+	switch cfg.ProbeOnSuccess {
+	case SuccessReenable, SuccessUnbanAndReenable:
+		return e.ApplySuccess(authID, "usage", false)
+	default:
+		return nil
+	}
+}
+
 func (e *Engine) ApplySuccess(authID, source string, force bool) error {
 	e.mu.Lock()
 	cfg := e.cfg
