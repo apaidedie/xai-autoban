@@ -1,9 +1,20 @@
 package ui
 
-import "html"
+import (
+	"encoding/json"
+	"html"
+)
 
-func StatusPage(pluginName, pluginVersion string) string {
+// StatusPage renders the ops console.
+// serverMgmtKey is the plugin-configured CPA management key (from plugin manage / env).
+// It is injected for Management API writes so the browser never asks the user to paste a key.
+// Empty key → writes fall back to resource POST /data (may 404 on some CPA builds).
+func StatusPage(pluginName, pluginVersion, serverMgmtKey string) string {
 	name := html.EscapeString(pluginName)
+	keyJS, err := json.Marshal(serverMgmtKey)
+	if err != nil {
+		keyJS = []byte(`""`)
+	}
 	return `<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -352,7 +363,7 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
 
   <p class="foot">
     <b>隔离</b>=插件内跳过调度；<b>禁用</b>=关闭凭证；<b>启用</b>=打开凭证。
-    日常策略请在运维台「编辑配置」修改。写操作走插件资源接口，无需浏览器 admin key；禁用/删除使用插件管理中的服务端密钥。
+    日常策略请在运维台「编辑配置」修改。写操作自动使用插件管理中配置的服务端密钥（无需在本页粘贴）。
   </p>
   <input id="importFile" type="file" accept="application/json,.json" hidden>
 </div>
@@ -426,6 +437,9 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
 
 <script>
 const resourceBase='/v0/resource/plugins/xai-autoban';
+const mgmtBase='/v0/management/plugins/xai-autoban';
+// Injected from plugin management / env — not pasted in this page.
+const SERVER_MGMT_KEY=` + string(keyJS) + `;
 const state={bans:[],credentials:[],counts:{},page:{page:1,page_size:50,total:0,pages:1,filter:'all',q:''},filter:'all',query:'',selected:new Set(),timer:null,searchTimer:null,toastTimer:null,busy:false,settings:{},success:'unban',fail:'ban',autoExecute:true,history:[]};
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -442,7 +456,6 @@ function setActionEnabled(ok){
   if($('recheckSelected')) $('recheckSelected').textContent='复检所选 ('+n+')';
 }
 function setAuthUI(){
-  // No browser key UI. Mutations use CPA management session (cookies).
   setActionEnabled(true);
   return true;
 }
@@ -457,27 +470,57 @@ async function apiResource(path, opts){
   const t=await r.text(); let d; try{d=JSON.parse(t)}catch(_){throw new Error(t||('HTTP '+r.status))}
   if(!r.ok) throw new Error(d.error||d.message||('HTTP '+r.status)); return d;
 }
-// Write ops via POST /data (same resource path as list GET — CPA always routes it).
+// Prefer Management API with plugin-configured key; fallback to resource POST /data.
+async function apiMgmtDirect(method,path,body){
+  if(!SERVER_MGMT_KEY) throw new Error('no_server_key');
+  const r=await fetch(mgmtBase+path,{method,cache:'no-store',credentials:'same-origin',headers:{
+    'Content-Type':'application/json',
+    'Authorization':'Bearer '+SERVER_MGMT_KEY,
+    'X-Management-Key':SERVER_MGMT_KEY,
+    'X-Api-Key':SERVER_MGMT_KEY
+  },body:body!==undefined?JSON.stringify(body):undefined});
+  const t=await r.text(); let d; try{d=JSON.parse(t)}catch(_){throw new Error(t||('HTTP '+r.status))}
+  if(!r.ok) throw new Error(d.error||d.message||('HTTP '+r.status)); return d;
+}
 async function apiOps(op, extra){
   return apiResource('/data',{method:'POST',body:Object.assign({op:op}, extra||{})});
 }
 async function apiMgmt(method,path,body){
-  const p=String(path||'');
-  // probe progress: reuse POST data op if dedicated resource 404s
-  if(method==='GET'&&p.indexOf('/probe/status')>=0){
-    try{ return await apiResource('/probe/status'); }
-    catch(_){ return apiOps('probe_status'); }
+  // 1) server-injected key (from 插件管理) → official management routes
+  if(SERVER_MGMT_KEY){
+    try{ return await apiMgmtDirect(method,path,body); }
+    catch(e){
+      // fall through to resource channel
+      if(String(e.message||e).indexOf('invalid')>=0 && String(e.message||e).indexOf('key')>=0){
+        // wrong key configured in plugin manage — surface clearly after fallback fails
+      }
+    }
   }
-  if(method==='GET'&&p.indexOf('/backup')>=0) return apiOps('backup');
-  if((method==='PUT'||method==='POST')&&p.indexOf('/settings')>=0) return apiOps('settings', body||{});
-  if(method==='POST'&&p.indexOf('/unban-all')>=0) return apiOps('unban_all', body||{});
-  if(method==='POST'&&p.indexOf('/unban')>=0) return apiOps('unban', body||{});
-  if(method==='POST'&&p.indexOf('/probe')>=0) return apiOps('probe', body||{});
-  if(method==='POST'&&p.indexOf('/apply-action')>=0) return apiOps('apply', body||{});
-  if(method==='POST'&&p.indexOf('/reauth')>=0) return apiOps('reauth', body||{});
-  if(method==='POST'&&p.indexOf('/bans-recheck-429')>=0) return apiOps('recheck429', body||{});
-  if(method==='POST'&&p.indexOf('/recheck-selected')>=0) return apiOps('recheck_selected', body||{});
-  if(method==='POST'&&p.indexOf('/import')>=0) return apiOps('import', body||{});
+  // 2) resource POST /data (no admin key; works when CPA forwards resource POST)
+  const p=String(path||'');
+  try{
+    if(method==='GET'&&p.indexOf('/probe/status')>=0){
+      try{ return await apiResource('/probe/status'); } catch(_){ return await apiOps('probe_status'); }
+    }
+    if(method==='GET'&&p.indexOf('/backup')>=0) return await apiOps('backup');
+    if((method==='PUT'||method==='POST')&&p.indexOf('/settings')>=0) return await apiOps('settings', body||{});
+    if(method==='POST'&&p.indexOf('/unban-all')>=0) return await apiOps('unban_all', body||{});
+    if(method==='POST'&&p.indexOf('/unban')>=0) return await apiOps('unban', body||{});
+    if(method==='POST'&&p.indexOf('/probe')>=0) return await apiOps('probe', body||{});
+    if(method==='POST'&&p.indexOf('/apply-action')>=0) return await apiOps('apply', body||{});
+    if(method==='POST'&&p.indexOf('/reauth')>=0) return await apiOps('reauth', body||{});
+    if(method==='POST'&&p.indexOf('/bans-recheck-429')>=0) return await apiOps('recheck429', body||{});
+    if(method==='POST'&&p.indexOf('/recheck-selected')>=0) return await apiOps('recheck_selected', body||{});
+    if(method==='POST'&&p.indexOf('/import')>=0) return await apiOps('import', body||{});
+  }catch(e2){
+    if(!SERVER_MGMT_KEY){
+      throw new Error('写操作失败（'+ (e2.message||e2) +'）。请在插件管理配置 management_key 或 CPA_MANAGEMENT_KEY 环境变量后重试。');
+    }
+    throw e2;
+  }
+  if(!SERVER_MGMT_KEY){
+    throw new Error('请在插件管理配置服务端管理密钥（management_key / management_key_env）');
+  }
   throw new Error('unsupported ops '+method+' '+path);
 }
 function setMessage(text,err=false){

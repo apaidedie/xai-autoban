@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -278,11 +279,22 @@ func (h *Handler) Handle(req pluginapi.ManagementRequest) pluginapi.ManagementRe
 		return pluginapi.ManagementResponse{
 			StatusCode: http.StatusOK,
 			Headers:    http.Header{"Content-Type": {"text/html; charset=utf-8"}},
-			Body:       []byte(ui.StatusPage(h.Name, h.Version)),
+			Body:       []byte(ui.StatusPage(h.Name, h.Version, resolveOpsKey(h.Cfg()))),
 		}
 	default:
 		return jsonResponse(http.StatusNotFound, map[string]any{"error": "not_found"})
 	}
+}
+
+func resolveOpsKey(cfg config.PluginConfig) string {
+	if k := strings.TrimSpace(cfg.ManagementKey); k != "" {
+		return k
+	}
+	envName := strings.TrimSpace(cfg.ManagementKeyEnv)
+	if envName == "" {
+		envName = "CPA_MANAGEMENT_KEY"
+	}
+	return strings.TrimSpace(os.Getenv(envName))
 }
 
 func bytesContainsOp(raw []byte) bool {

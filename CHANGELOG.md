@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.22 - 2026-07-15
+
+### Fix
+- Ops writes use Management API with **server-injected** key from plugin manage / `CPA_MANAGEMENT_KEY` (no paste UI, no localStorage)
+- Fallback to `POST /data` when management call fails
+- Clear error if neither key nor resource channel works
+
+## 0.5.21 - 2026-07-15
+
+### Fix
+- Harden resource path matching for relative `/data`
+
 ## 0.5.20 - 2026-07-15
 
 ### Fix

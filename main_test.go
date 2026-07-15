@@ -133,7 +133,7 @@ func TestSchedulerNoopWhenNothingFiltered(t *testing.T) {
 }
 
 func TestStatusPageUsesManagementKeyFlow(t *testing.T) {
-	page := ui.StatusPage(pluginName, pluginVersion)
+	page := ui.StatusPage(pluginName, pluginVersion, "test-key")
 	for _, required := range []string{
 		"/v0/resource/plugins/xai-autoban",
 		"color-scheme:dark",
@@ -162,8 +162,9 @@ func TestStatusPageUsesManagementKeyFlow(t *testing.T) {
 		"复检所选",
 		"card-list",
 		"rcard",
-		"apiOps",
-		"apiResource('/data'",
+		"apiMgmtDirect",
+		"SERVER_MGMT_KEY",
+		"/v0/management/plugins/xai-autoban",
 	} {
 		if !strings.Contains(page, required) {
 			t.Fatalf("page missing %q", required)
@@ -174,6 +175,9 @@ func TestStatusPageUsesManagementKeyFlow(t *testing.T) {
 		if strings.Contains(page, banned) {
 			t.Fatalf("page must not contain browser key UI %q", banned)
 		}
+	}
+	if !strings.Contains(page, "test-key") {
+		t.Fatal("expected server key injection")
 	}
 	if strings.Contains(page, "/action?op=unban") || strings.Contains(page, resourceActionPath()) {
 		t.Fatal("public unban action must be removed")
