@@ -497,10 +497,8 @@ func (p *Service) ProbeOne(cfg config.PluginConfig, host host.Client, f pluginap
 }
 
 // ProbeOneWithJSON probes using already-loaded credential JSON (avoids second AuthGet).
-// Enhanced (grok-inspection style):
-//   - bare 429: one short retry (~350ms)
-//   - responses_mini / dual: on 401/402/403/429 try chat/completions fallback
-//   - models mode: GET models first; on hard auth failures try responses ping once
+// Default (responses / responses_mini): real POST /v1/responses with grok model.
+// models: lightweight GET /models only.
 func (p *Service) ProbeOneWithJSON(cfg config.PluginConfig, host host.Client, authJSON json.RawMessage) (int, string, error) {
 	token, err := ExtractAccessToken(authJSON)
 	if err != nil {
@@ -552,8 +550,11 @@ func (p *Service) ProbeOneWithJSON(cfg config.PluginConfig, host host.Client, au
 
 	model := "grok-4.5"
 	mode := strings.ToLower(strings.TrimSpace(cfg.ProbeMode))
+	if mode == "" || mode == "responses" {
+		mode = "responses_mini"
+	}
 
-	// Optional models list to pick a real model id.
+	// Optional models list to pick a real model id (best-effort; never required for responses).
 	path := cfg.ProbePath
 	if path == "" {
 		path = "/models"
@@ -570,17 +571,25 @@ func (p *Service) ProbeOneWithJSON(cfg config.PluginConfig, host host.Client, au
 		if m := pickModel(modelsBody); m != "" {
 			model = m
 		}
-		if mode == "" || mode == "models" {
+		if mode == "models" {
 			return modelsStatus, modelsBody, nil
 		}
 	}
 
-	// Primary chat-style probe (responses).
+	// Real Responses API request (same family as production grok traffic).
 	runResponses := func() (int, string, error) {
 		body, _ := json.Marshal(map[string]any{
-			"model":  model,
+			"model": model,
+			"input": []map[string]any{
+				{
+					"role": "user",
+					"content": []map[string]string{
+						{"type": "input_text", "text": "Reply with exactly: OK"},
+					},
+				},
+			},
 			"stream": false,
-			"input":  "ping",
+			"max_output_tokens": 16,
 		})
 		return do(pluginapi.HTTPRequest{
 			Method:  http.MethodPost,
@@ -589,12 +598,14 @@ func (p *Service) ProbeOneWithJSON(cfg config.PluginConfig, host host.Client, au
 			Body:    body,
 		})
 	}
+	// Fallback if responses path denied for this credential shape.
 	runCompletions := func() (int, string, error) {
 		body, _ := json.Marshal(map[string]any{
 			"model":  model,
 			"stream": false,
+			"max_tokens": 16,
 			"messages": []map[string]string{
-				{"role": "user", "content": "ping"},
+				{"role": "user", "content": "Reply with exactly: OK"},
 			},
 		})
 		return do(pluginapi.HTTPRequest{
@@ -605,8 +616,8 @@ func (p *Service) ProbeOneWithJSON(cfg config.PluginConfig, host host.Client, au
 		})
 	}
 
-	// models-only: on hard failures try responses then chat/completions (real traffic often uses chat).
-	if mode == "" || mode == "models" {
+	// models-only: lightweight list; on hard failures dual-check with real requests.
+	if mode == "models" {
 		if modelsErr != nil {
 			return 0, "", modelsErr
 		}
@@ -624,39 +635,42 @@ func (p *Service) ProbeOneWithJSON(cfg config.PluginConfig, host host.Client, au
 			if err2 == nil && st2 >= 200 && st2 < 300 {
 				return st2, body2, nil
 			}
-			// Prefer chat status when models failed but chat was tried (closer to real traffic).
-			if err2 == nil {
-				return st2, body2, fmt.Errorf("probe status %d", st2)
-			}
 			if err == nil {
 				return st, body, fmt.Errorf("probe status %d", st)
+			}
+			if err2 == nil {
+				return st2, body2, fmt.Errorf("probe status %d", st2)
 			}
 		}
 		return modelsStatus, modelsBody, fmt.Errorf("probe status %d", modelsStatus)
 	}
 
-	// responses_mini: prefer chat/completions first (matches real grok traffic), then responses.
-	st, body, err := runCompletions()
-	st, body, err = with429Retry(st, body, err, runCompletions)
+	// Default: real POST /responses first, then chat/completions fallback.
+	st, body, err := runResponses()
+	st, body, err = with429Retry(st, body, err, runResponses)
 	if err == nil && st >= 200 && st < 300 {
 		return st, body, nil
 	}
-	st2, body2, err2 := runResponses()
-	st2, body2, err2 = with429Retry(st2, body2, err2, runResponses)
-	if err2 == nil && st2 >= 200 && st2 < 300 {
-		return st2, body2, nil
+	needFallback := err != nil || st == 401 || st == 402 || st == 403 || st == 429
+	if needFallback {
+		st2, body2, err2 := runCompletions()
+		st2, body2, err2 = with429Retry(st2, body2, err2, runCompletions)
+		if err2 == nil && st2 >= 200 && st2 < 300 {
+			return st2, body2, nil
+		}
+		// Prefer responses body for classify (primary path).
+		if err == nil && body != "" {
+			return st, body, fmt.Errorf("probe status %d", st)
+		}
+		if err2 == nil {
+			return st2, body2, fmt.Errorf("probe status %d", st2)
+		}
+		if err != nil {
+			return st, body, err
+		}
+		return st2, body2, err2
 	}
-	// Prefer completions body for classify (closer to real traffic).
-	if err == nil && body != "" {
-		return st, body, fmt.Errorf("probe status %d", st)
-	}
-	if err2 == nil {
-		return st2, body2, fmt.Errorf("probe status %d", st2)
-	}
-	if err != nil {
-		return st, body, err
-	}
-	return st2, body2, err2
+	return st, body, fmt.Errorf("probe status %d", st)
 }
 
 // pickModel chooses a preferred grok model id from /models JSON body.

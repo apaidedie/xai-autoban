@@ -89,7 +89,7 @@ func Default() PluginConfig {
 		ProbeTimeoutSeconds:                  20,
 		ProbeConcurrency:                     3,
 		ProbeQPS:                             2,
-		ProbeMode:                            "models",
+		ProbeMode:                            "responses_mini",
 		ProbeBaseURL:                         "",
 		ProbePath:                            "/models",
 		ProbeAction:                          actionBan,
@@ -181,9 +181,12 @@ func Normalize(cfg PluginConfig) (PluginConfig, []string) {
 	}
 	cfg.ProbeOnSuccess = normalizeSuccess(cfg.ProbeOnSuccess, def.ProbeOnSuccess, &warnings)
 	cfg.ProbeMode = strings.ToLower(strings.TrimSpace(cfg.ProbeMode))
+	if cfg.ProbeMode == "responses" {
+		cfg.ProbeMode = "responses_mini"
+	}
 	if cfg.ProbeMode != "models" && cfg.ProbeMode != "responses_mini" {
 		cfg.ProbeMode = def.ProbeMode
-		warnings = append(warnings, "invalid probe_mode; using models")
+		warnings = append(warnings, "invalid probe_mode; using responses_mini")
 	}
 	if strings.TrimSpace(cfg.ProbePath) == "" {
 		cfg.ProbePath = def.ProbePath

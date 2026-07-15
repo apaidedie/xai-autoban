@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.39 - 2026-07-15
+
+### Change
+- **探测默认走 `/responses` 真实请求**（grok-4.5，`Reply with exactly: OK`）
+- `responses_mini` / `responses`：POST responses 优先，失败再 fallback chat/completions
+- `models` 仍为轻量 GET 列表模式
+- 默认 `probe_mode=responses_mini`
+
 ## 0.5.38 - 2026-07-15
 
 ### Fix

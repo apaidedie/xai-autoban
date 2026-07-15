@@ -403,7 +403,7 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
       <div class="fg"><label>并发</label><input id="f_probe_concurrency" type="number" min="1" step="1"></div>
       <div class="fg"><label>QPS</label><input id="f_probe_qps" type="number" min="0.1" step="0.1"></div>
       <div class="fg"><label>探测模式</label>
-        <select id="f_probe_mode"><option value="models">models（轻量）</option><option value="responses_mini">responses_mini · grok-4.5（更准）</option></select>
+        <select id="f_probe_mode"><option value="responses_mini">responses · 真实请求（推荐）</option><option value="models">models（轻量列表）</option></select>
       </div>
       <label class="chk" style="margin-bottom:8px"><input id="f_probe_include_disabled" type="checkbox"> 巡检包含已禁用凭证</label>
       <label class="chk" style="margin-bottom:10px"><input id="f_probe_only_disabled" type="checkbox"> 仅巡检已禁用凭证</label>
@@ -782,7 +782,7 @@ function fillDrawer(s){
   $('f_probe_timeout_seconds').value=s.probe_timeout_seconds??20;
   $('f_probe_concurrency').value=s.probe_concurrency??3;
   $('f_probe_qps').value=s.probe_qps??2;
-  $('f_probe_mode').value=s.probe_mode||'models';
+  $('f_probe_mode').value=s.probe_mode||'responses_mini';
   if($('f_probe_include_disabled')) $('f_probe_include_disabled').checked=!!s.probe_include_disabled;
   if($('f_probe_only_disabled')) $('f_probe_only_disabled').checked=!!s.probe_only_disabled;
   $('f_delete_fallback').value=s.delete_fallback||'disable';

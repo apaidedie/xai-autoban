@@ -33,7 +33,7 @@ func TestProbeOneModelsSuccess(t *testing.T) {
 }
 
 func TestProbeOneBare429RetriesOnce(t *testing.T) {
-	var hits int32
+	var responsesHits int32
 	stub := &host.Stub{
 		Files:  []pluginapi.HostAuthFileEntry{{ID: "a1", AuthIndex: "1", Name: "xai-1", Provider: "xai"}},
 		JSONBy: map[string]json.RawMessage{"1": json.RawMessage(`{"access_token":"tok"}`)},
@@ -41,11 +41,15 @@ func TestProbeOneBare429RetriesOnce(t *testing.T) {
 			if strings.Contains(req.URL, "/models") {
 				return pluginapi.HTTPResponse{StatusCode: 200, Body: []byte(`{"data":[{"id":"grok-4.5"}]}`)}, nil
 			}
-			n := atomic.AddInt32(&hits, 1)
-			if n == 1 {
-				return pluginapi.HTTPResponse{StatusCode: 429, Body: []byte(`{"error":{"message":"rate limited"}}`)}, nil
+			if strings.Contains(req.URL, "/responses") {
+				n := atomic.AddInt32(&responsesHits, 1)
+				if n == 1 {
+					return pluginapi.HTTPResponse{StatusCode: 429, Body: []byte(`{"error":{"message":"rate limited"}}`)}, nil
+				}
+				return pluginapi.HTTPResponse{StatusCode: 200, Body: []byte(`{"id":"ok"}`)}, nil
 			}
-			return pluginapi.HTTPResponse{StatusCode: 200, Body: []byte(`{"id":"ok"}`)}, nil
+			t.Fatalf("unexpected url %s", req.URL)
+			return pluginapi.HTTPResponse{}, nil
 		},
 	}
 	p := NewService(config.Default(), stub, nil)
@@ -53,10 +57,10 @@ func TestProbeOneBare429RetriesOnce(t *testing.T) {
 	cfg.ProbeMode = "responses_mini"
 	st, _, err := p.ProbeOne(cfg, stub, stub.Files[0])
 	if err != nil || st != 200 {
-		t.Fatalf("st=%d err=%v hits=%d", st, err, hits)
+		t.Fatalf("st=%d err=%v hits=%d", st, err, responsesHits)
 	}
-	if hits < 2 {
-		t.Fatalf("expected retry, hits=%d", hits)
+	if responsesHits < 2 {
+		t.Fatalf("expected responses retry, hits=%d", responsesHits)
 	}
 }
 
@@ -72,7 +76,9 @@ func TestProbeOneFreeUsageNoRetry(t *testing.T) {
 			}
 			if strings.Contains(req.URL, "/responses") {
 				atomic.AddInt32(&responsesHits, 1)
+				return pluginapi.HTTPResponse{StatusCode: 429, Body: []byte(body429)}, nil
 			}
+			// completions fallback may also see free-usage; do not count as responses retry
 			return pluginapi.HTTPResponse{StatusCode: 429, Body: []byte(body429)}, nil
 		},
 	}
@@ -84,12 +90,12 @@ func TestProbeOneFreeUsageNoRetry(t *testing.T) {
 		t.Fatalf("st=%d err=%v body=%q", st, err, body)
 	}
 	if responsesHits != 1 {
-		t.Fatalf("free-usage must not 429-retry same endpoint, responsesHits=%d", responsesHits)
+		t.Fatalf("free-usage must not 429-retry responses, responsesHits=%d", responsesHits)
 	}
 }
 
 func TestProbeOneResponsesFallbackCompletions(t *testing.T) {
-	var sawCompletions bool
+	var sawResponses, sawCompletions bool
 	stub := &host.Stub{
 		Files:  []pluginapi.HostAuthFileEntry{{ID: "a1", AuthIndex: "1", Name: "xai-1", Provider: "xai"}},
 		JSONBy: map[string]json.RawMessage{"1": json.RawMessage(`{"access_token":"tok"}`)},
@@ -98,6 +104,7 @@ func TestProbeOneResponsesFallbackCompletions(t *testing.T) {
 				return pluginapi.HTTPResponse{StatusCode: 200, Body: []byte(`{"data":[{"id":"grok-4.5"}]}`)}, nil
 			}
 			if strings.Contains(req.URL, "/responses") {
+				sawResponses = true
 				return pluginapi.HTTPResponse{StatusCode: 403, Body: []byte(`{"error":{"message":"denied"}}`)}, nil
 			}
 			if strings.Contains(req.URL, "/chat/completions") {
@@ -112,7 +119,36 @@ func TestProbeOneResponsesFallbackCompletions(t *testing.T) {
 	cfg := config.Default()
 	cfg.ProbeMode = "responses_mini"
 	st, _, err := p.ProbeOne(cfg, stub, stub.Files[0])
-	if err != nil || st != 200 || !sawCompletions {
-		t.Fatalf("st=%d err=%v sawCompletions=%v", st, err, sawCompletions)
+	if err != nil || st != 200 || !sawResponses || !sawCompletions {
+		t.Fatalf("st=%d err=%v sawResponses=%v sawCompletions=%v", st, err, sawResponses, sawCompletions)
+	}
+}
+
+func TestProbeOneResponsesRealBody(t *testing.T) {
+	var gotBody string
+	stub := &host.Stub{
+		Files:  []pluginapi.HostAuthFileEntry{{ID: "a1", AuthIndex: "1", Name: "xai-1", Provider: "xai"}},
+		JSONBy: map[string]json.RawMessage{"1": json.RawMessage(`{"access_token":"tok"}`)},
+		HTTPFn: func(req pluginapi.HTTPRequest) (pluginapi.HTTPResponse, error) {
+			if strings.Contains(req.URL, "/models") {
+				return pluginapi.HTTPResponse{StatusCode: 200, Body: []byte(`{"data":[{"id":"grok-4.5"}]}`)}, nil
+			}
+			if strings.Contains(req.URL, "/responses") {
+				gotBody = string(req.Body)
+				return pluginapi.HTTPResponse{StatusCode: 200, Body: []byte(`{"id":"resp_1","output":[]}`)}, nil
+			}
+			t.Fatalf("url %s", req.URL)
+			return pluginapi.HTTPResponse{}, nil
+		},
+	}
+	p := NewService(config.Default(), stub, nil)
+	cfg := config.Default()
+	cfg.ProbeMode = "responses_mini"
+	st, _, err := p.ProbeOne(cfg, stub, stub.Files[0])
+	if err != nil || st != 200 {
+		t.Fatalf("st=%d err=%v", st, err)
+	}
+	if !strings.Contains(gotBody, `"model"`) || !strings.Contains(gotBody, "input") || !strings.Contains(gotBody, "OK") {
+		t.Fatalf("expected real responses body, got %s", gotBody)
 	}
 }
