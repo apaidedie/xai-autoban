@@ -13,8 +13,8 @@ func StatusPage(pluginName, pluginVersion string) string {
 <style>
 :root{color-scheme:dark;--bg:#070b14;--panel:#101a2c;--line:rgba(148,163,184,.16);--text:#f8fafc;--muted:#93a4c3;--cyan:#22d3ee;--blue:#3b82f6;--green:#34d399;--amber:#fbbf24;--red:#fb7185;--violet:#a78bfa;--mono:ui-monospace,Consolas,monospace;--sans:Inter,ui-sans-serif,system-ui,"Segoe UI",sans-serif}
 *{box-sizing:border-box}body{margin:0;min-height:100vh;font-family:var(--sans);color:var(--text);background:radial-gradient(1000px 500px at 10% -10%,rgba(34,211,238,.1),transparent 50%),radial-gradient(800px 400px at 100% 0,rgba(59,130,246,.1),transparent 45%),linear-gradient(180deg,#070b14,#0a101c);font-size:14px}
-.shell{max-width:1540px;margin:0 auto;padding:18px 20px 36px}
-.top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:14px}
+.shell{max-width:1540px;margin:0 auto;padding:14px 18px 28px}
+.top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px}
 .kicker{display:inline-flex;align-items:center;gap:8px;color:var(--cyan);font-size:11px;font-weight:800;letter-spacing:.12em}
 .kicker i{width:7px;height:7px;border-radius:50%;background:var(--cyan);box-shadow:0 0 0 4px rgba(34,211,238,.15)}
 h1{margin:8px 0 0;font-size:26px;font-weight:800;letter-spacing:-.03em}
@@ -22,19 +22,19 @@ h1{margin:8px 0 0;font-size:26px;font-weight:800;letter-spacing:-.03em}
 .live{padding:8px 12px;border-radius:999px;border:1px solid var(--line);background:rgba(15,23,42,.75);color:var(--green);font-size:12px;font-weight:800}
 .banner{padding:11px 14px;border-radius:12px;margin-bottom:12px;border:1px solid rgba(52,211,153,.3);background:rgba(6,78,59,.35);color:#bbf7d0;font-weight:700}
 .banner.warn{border-color:rgba(251,191,36,.35);background:rgba(120,53,15,.35);color:#fde68a}
-.panel{background:linear-gradient(180deg,rgba(18,28,46,.96),rgba(12,20,34,.98));border:1px solid var(--line);border-radius:16px;margin-bottom:12px;overflow:hidden;box-shadow:0 16px 40px rgba(0,0,0,.35)}
-.phd{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line)}
+.panel{background:linear-gradient(180deg,rgba(18,28,46,.96),rgba(12,20,34,.98));border:1px solid var(--line);border-radius:16px;margin-bottom:10px;overflow:hidden;box-shadow:0 16px 40px rgba(0,0,0,.35)}
+.phd{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line)}
 .phd h2{margin:0;font-size:12px;font-weight:800;letter-spacing:.08em;color:#dbe4f3}
 .hint{color:var(--muted);font-size:12px}
-.cfg-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;padding:10px 12px}
-.cfg-card{background:rgba(7,12,22,.55);border:1px solid var(--line);border-radius:12px;padding:10px 12px;min-height:56px}
+.cfg-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;padding:8px 12px}
+.cfg-card{background:rgba(7,12,22,.55);border:1px solid var(--line);border-radius:10px;padding:8px 10px;min-height:48px}
 .cfg-card.accent{border-color:rgba(59,130,246,.45);box-shadow:0 0 0 1px rgba(59,130,246,.12) inset}
 .cfg-card .l{color:var(--muted);font-size:10px;font-weight:800;letter-spacing:.04em}
 .cfg-card .v{margin-top:6px;font-size:14px;font-weight:800;color:#f8fafc}
 .cfg-card .v.on{color:var(--green)}.cfg-card .v.off{color:var(--amber)}
 @media(max-width:1100px){.cfg-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:700px){.cfg-grid{grid-template-columns:1fr 1fr}}
-.toolbar{display:flex;flex-direction:column;gap:10px;padding:12px 14px;border-bottom:1px solid rgba(148,163,184,.08)}
+.toolbar{display:flex;flex-direction:column;gap:8px;padding:10px 14px;border-bottom:1px solid rgba(148,163,184,.08)}
 .filters{display:flex;flex-wrap:wrap;gap:6px}
 .fchip{height:30px;border-radius:999px;padding:0 12px;font-size:12px;font-weight:750;background:rgba(7,12,22,.55);border:1px solid var(--line);color:var(--muted)}
 .fchip:hover{color:var(--text);border-color:rgba(148,163,184,.35)}
@@ -47,9 +47,11 @@ h1{margin:8px 0 0;font-size:26px;font-weight:800;letter-spacing:-.03em}
 .more-menu{position:absolute;right:0;top:42px;z-index:20;min-width:180px;padding:8px;border-radius:12px;border:1px solid var(--line);background:rgba(15,23,42,.98);box-shadow:0 16px 40px rgba(0,0,0,.45);display:flex;flex-direction:column;gap:4px}
 .more-menu button,.more-menu label{height:34px;justify-content:flex-start;text-align:left;background:transparent;border:0;width:100%;border-radius:8px;padding:0 10px}
 .more-menu button:hover{background:rgba(51,65,85,.8)}
-.auth-row{border-top:0!important;padding-top:4px!important}
-.auth-row.auth-ok{padding:8px 14px!important;opacity:.85}
+.auth-row{border-top:0!important;padding:6px 14px!important}
+.auth-row.auth-ok{padding:6px 14px!important;opacity:.9}
 .auth-row.auth-ok input{display:none}
+.msg-row{padding:4px 14px 8px!important;border-top:0!important}
+.msg-row .msg{min-height:16px}
 .qcard.s401{border-color:rgba(59,130,246,.22)}.qcard.s402{border-color:rgba(251,191,36,.22)}.qcard.s403{border-color:rgba(251,113,133,.22)}.qcard.s429{border-color:rgba(167,139,250,.22)}
 .qcard.active,.qcard.on{border-color:rgba(34,211,238,.5);box-shadow:0 0 0 1px rgba(34,211,238,.18) inset}
 .hist-wrap{max-height:0;overflow:hidden;opacity:0;transition:max-height .18s ease,opacity .15s ease,padding .15s ease}
@@ -147,44 +149,43 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
 .hist{display:flex;flex-wrap:wrap;gap:8px;padding:12px 14px}
 .hist button{height:auto;min-width:150px;padding:10px;text-align:left}
 .hist b{display:block}.hist small{display:block;color:#93a4c3;margin-top:2px}
-.qcard{
-  text-align:left;height:auto;min-height:84px;padding:14px;border-radius:14px;
-  border:1px solid var(--line);background:rgba(12,20,34,.92);
-  box-shadow:none;transition:border-color .12s ease,background .12s ease
-}
 .fchip.ghost,.code-chip.ghost{opacity:.8}
-.list-head{display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-bottom:1px solid rgba(148,163,184,.08)}
-.card-list{display:flex;flex-direction:column;gap:8px;padding:10px 12px 12px;max-height:58vh;overflow:auto}
+.list-head{display:flex;align-items:center;justify-content:space-between;padding:6px 14px;border-bottom:1px solid rgba(148,163,184,.08)}
+.card-list{display:flex;flex-direction:column;gap:6px;padding:8px 10px 10px;max-height:62vh;overflow:auto}
 .rcard{
-  display:grid;grid-template-columns:32px minmax(200px,1.5fr) minmax(160px,1fr) auto;
-  gap:12px 14px;align-items:center;padding:12px 14px;border-radius:14px;border:1px solid var(--line);
+  display:grid;grid-template-columns:28px minmax(180px,1.4fr) minmax(200px,1.2fr) auto;
+  gap:8px 12px;align-items:center;padding:10px 12px;border-radius:12px;border:1px solid var(--line);
   background:rgba(8,14,26,.72)
 }
 .rcard:hover{border-color:rgba(96,165,250,.28);background:rgba(15,23,42,.88)}
-.rcard .acc .t{font-weight:750;color:#fff;font-size:13px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.rcard .acc .id{margin-top:4px;font-family:var(--mono);font-size:11px;color:#93a4c3;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.rcard .mid{display:flex;flex-direction:column;gap:6px;min-width:0}
+.rcard .acc .t{font-weight:750;color:#fff;font-size:13px;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rcard .acc .id{margin-top:3px;font-family:var(--mono);font-size:11px;color:#93a4c3;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rcard .mid{display:flex;flex-direction:column;gap:4px;min-width:0}
 .rcard .mid-top{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
-.rcard .mid-sub{display:flex;flex-wrap:wrap;align-items:center;gap:8px;color:var(--muted);font-size:12px;line-height:1.35}
+.rcard .mid-sub{display:flex;flex-wrap:wrap;align-items:center;gap:6px;color:var(--muted);font-size:11.5px;line-height:1.35}
 .rcard .mid-sub .sep{opacity:.35}
 .rcard .ops{justify-self:end}
 .rcard .muted{color:var(--muted);font-size:12px}
 @media(max-width:900px){
-  .rcard{grid-template-columns:28px 1fr;grid-template-areas:"ck acc" "ck mid" "ops ops";row-gap:8px}
+  .rcard{grid-template-columns:28px 1fr;grid-template-areas:"ck acc" "ck mid" "ops ops";row-gap:6px}
   .rcard .ck{grid-area:ck}.rcard .acc{grid-area:acc}.rcard .mid{grid-area:mid}.rcard .ops{grid-area:ops;justify-self:stretch}
   .rcard .ops .acts{justify-content:flex-start}
 }
-.qcards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:0 0 10px}
-.code-strip{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:0 0 12px}
+.qcards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:0 0 8px}
+.code-strip{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:0 0 10px}
 @media(max-width:1100px){.code-strip{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:700px){.code-strip{grid-template-columns:1fr 1fr}}
+/* Horizontal metric-like chips: label row + big number — no vertical Chinese stack */
 .code-chip{
-  min-height:72px;padding:12px 14px;border-radius:14px;border:1px solid var(--line);
-  background:rgba(12,20,34,.92);color:var(--muted);font-weight:750;font-size:11px;
-  display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:6px;
-  cursor:pointer;text-align:left;letter-spacing:.04em;height:auto
+  min-height:76px;padding:12px 14px;border-radius:14px;border:1px solid var(--line);
+  background:rgba(12,20,34,.92);color:var(--muted);font-weight:750;
+  display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:8px;
+  cursor:pointer;text-align:left;height:auto;overflow:hidden
 }
-.code-chip .cl{font-size:11px;font-weight:800;color:var(--muted);letter-spacing:.06em}
+.code-chip .cl{
+  font-size:11px;font-weight:800;color:var(--muted);letter-spacing:.04em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;line-height:1.2
+}
 .code-chip b{font-size:22px;font-weight:850;font-variant-numeric:tabular-nums;color:var(--text);line-height:1}
 .code-chip:hover{border-color:rgba(148,163,184,.35);background:rgba(15,23,42,.95);color:var(--text)}
 .code-chip.active,.code-chip.on{border-color:rgba(34,211,238,.5);background:rgba(8,47,73,.35);box-shadow:0 0 0 1px rgba(34,211,238,.18) inset}
@@ -194,14 +195,20 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
 .code-chip.s429 b{color:#ddd6fe}.code-chip.s429.active{border-color:rgba(167,139,250,.55)}
 .code-chip.ghost{align-items:center;justify-content:center;color:var(--muted)}
 .code-chip.ghost b{display:none}
-.code-chip.ghost .cl{font-size:13px;letter-spacing:0;font-weight:750}
+.code-chip.ghost .cl{font-size:13px;letter-spacing:0;font-weight:750;white-space:nowrap}
+.qcard{
+  text-align:left;height:auto;min-height:80px;padding:12px 14px;border-radius:14px;
+  border:1px solid var(--line);background:rgba(12,20,34,.92);
+  box-shadow:none;transition:border-color .12s ease,background .12s ease
+}
 .qcard:hover{border-color:rgba(34,211,238,.35);background:rgba(15,23,42,.95)}
 .qcard:focus-visible{outline:2px solid rgba(34,211,238,.65);outline-offset:2px}
-.qcard .ql{color:var(--muted);font-size:11px;font-weight:800;letter-spacing:.06em}
+.qcard .ql{color:var(--muted);font-size:11px;font-weight:800;letter-spacing:.06em;white-space:nowrap}
 .qcard .qn{margin-top:6px;font-size:22px;font-weight:850;font-variant-numeric:tabular-nums;line-height:1}
-.qcard .qs{margin-top:6px;color:var(--muted);font-size:11px;font-weight:650;line-height:1.3;min-height:1.3em}
+.qcard .qs{margin-top:5px;color:var(--muted);font-size:11px;font-weight:650;line-height:1.25;min-height:1.25em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .qcard.ok .qn{color:var(--green)}.qcard.warn .qn{color:var(--amber)}.qcard.bad .qn{color:var(--red)}.qcard.info .qn{color:var(--cyan)}
 .qcard.disabled-card .qn{color:#cbd5e1}
+.row-action{height:30px;padding:0 10px;border-radius:9px;font-size:12px}
 .row-action.primary{background:linear-gradient(180deg,#3b82f6,#2563eb);border-color:#1d4ed8;color:#fff}
 .row-action.primary:hover{background:linear-gradient(180deg,#60a5fa,#3b82f6);border-color:#2563eb;color:#fff}
 @media(max-width:1100px){.qcards{grid-template-columns:repeat(3,minmax(0,1fr))}}
@@ -248,8 +255,8 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
     <button type="button" class="qcard ok" data-jump="healthy" data-filter="healthy" title="未隔离且未禁用，可参与调度">
       <div class="ql">健康</div><div class="qn" id="ov_healthy">0</div><div class="qs">可调度</div>
     </button>
-    <button type="button" class="qcard warn" data-jump="banned" data-filter="banned" title="插件内隔离：调度会跳过这些凭证">
-      <div class="ql">当前隔离</div><div class="qn" id="ov_banned">0</div><div class="qs" id="ov_banned_sub">调度已跳过</div>
+    <button type="button" class="qcard warn" data-jump="banned" data-filter="banned" title="插件内隔离账本条数（调度会跳过）。下方 401–429 为状态码计数，口径不同：可含未写入隔离账本的本地标记。">
+      <div class="ql">当前隔离</div><div class="qn" id="ov_banned">0</div><div class="qs" id="ov_banned_sub">隔离账本 · 调度跳过</div>
     </button>
     <button type="button" class="qcard disabled-card" data-jump="disabled" data-filter="disabled" title="已关闭的 CPA 凭证">
       <div class="ql">已禁用</div><div class="qn" id="c_disabled">0</div><div class="qs">关闭凭证</div>
@@ -259,19 +266,19 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
     </button>
   </div>
   <div class="code-strip" id="codeStrip" role="toolbar" aria-label="状态码筛选">
-    <button type="button" class="code-chip s401" data-filter="401" title="未授权 / Token 失效 / 需重新授权">
-      <span class="cl">401 重授权</span><b id="ov_401">0</b>
+    <button type="button" class="code-chip s401" data-filter="401" title="401 重授权：未授权 / Token 失效 / 需重新授权（状态码计数，未必都在隔离账本）">
+      <span class="cl">401 · 重授权</span><b id="ov_401">0</b>
     </button>
-    <button type="button" class="code-chip s402" data-filter="402" title="额度不足（需在线探测）">
-      <span class="cl">402 无额度</span><b id="ov_402">0</b>
+    <button type="button" class="code-chip s402" data-filter="402" title="402 无额度：额度不足 / free-usage（状态码计数）">
+      <span class="cl">402 · 无额度</span><b id="ov_402">0</b>
     </button>
-    <button type="button" class="code-chip s403" data-filter="403" title="权限/风控拒绝">
-      <span class="cl">403 禁止</span><b id="ov_403">0</b>
+    <button type="button" class="code-chip s403" data-filter="403" title="403 禁止：权限/风控拒绝（状态码计数）">
+      <span class="cl">403 · 禁止</span><b id="ov_403">0</b>
     </button>
-    <button type="button" class="code-chip s429" data-filter="429" title="临时限流">
-      <span class="cl">429 限流</span><b id="ov_429">0</b>
+    <button type="button" class="code-chip s429" data-filter="429" title="429 限流：临时限流（状态码计数）">
+      <span class="cl">429 · 限流</span><b id="ov_429">0</b>
     </button>
-    <button type="button" class="code-chip ghost" id="clearFilterBtn" data-filter="all" title="清除状态码筛选">
+    <button type="button" class="code-chip ghost" id="clearFilterBtn" data-filter="all" title="清除状态码筛选，回到全部">
       <span class="cl">清除筛选</span>
     </button>
   </div>
@@ -291,7 +298,7 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
     <div class="phd">
       <div>
         <h2>凭证列表</h2>
-        <div class="hint">主指标筛选主状态；色条筛选 401–429</div>
+        <div class="hint">主卡=健康/隔离/禁用；下方=状态码计数（口径可不同）</div>
       </div>
       <div class="hint" id="resultCount">0 条</div>
     </div>
@@ -325,11 +332,12 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
       <button class="bg" id="clearKeyBtn" type="button">清除</button>
       <button class="bs" id="toggleKeyBtn" type="button" hidden>更换密钥</button>
     </div>
-    <div class="row"><div id="message" class="msg">系统待命</div></div>
+    <div class="row msg-row"><div id="message" class="msg">系统待命</div></div>
     <div class="progress" id="progress"><i id="progressBar"></i></div>
 
     <div class="list-head">
       <label class="chk"><input id="selectPage" type="checkbox"> 本页全选</label>
+      <span class="hint" id="listHint"></span>
     </div>
     <div class="card-list" id="rows"></div>
     <div id="empty" class="empty" hidden>没有匹配的凭证</div>
@@ -556,12 +564,8 @@ function paintChips(){
   set('ov_401',c['401']??0); set('ov_402',c['402']??0); set('ov_403',c['403']??0); set('ov_429',c['429']??0);
   const sub=$('ov_banned_sub');
   if(sub){
-    const parts=[];
-    if(c['401']) parts.push('401 '+c['401']);
-    if(c['402']) parts.push('402 '+c['402']);
-    if(c['403']) parts.push('403 '+c['403']);
-    if(c['429']) parts.push('429 '+c['429']);
-    sub.textContent=parts.length?parts.join(' · '):'调度已跳过';
+    // Keep isolation ledger meaning; do not paste 40x counts here (different口径).
+    sub.textContent='隔离账本 · 调度跳过';
   }
   document.querySelectorAll('#overviewCards [data-filter], #codeStrip [data-filter], #statusChips [data-filter]').forEach(btn=>{
     const on=btn.dataset.filter===state.filter;
@@ -769,14 +773,18 @@ function midCell(c){
   parts.push(statusBadge(c));
   if(c.token_expired) parts.push('<span class="pill">Token 过期</span>');
   else if(c.needs_refresh&&!c.banned) parts.push('<span class="pill">待刷新</span>');
-  if(c.banned&&c.action) parts.push('<span class="pill">'+esc(labelAction(c.action))+'</span>');
+  // Avoid redundant「隔离」pill when already status-coded; show only non-default actions.
+  if(c.banned&&c.action&&c.action!=='ban') parts.push('<span class="pill">'+esc(labelAction(c.action))+'</span>');
+  else if(c.banned) parts.push('<span class="pill">隔离</span>');
   const reason=reasonLabel(c.reason);
   const cls=classLabel(c.classification);
   const detail=[];
   if(cls) detail.push(esc(cls));
   if(reason&&reason!=='-'&&reason!==cls) detail.push(esc(reason));
-  if(c.banned&&c.remaining_seconds!=null) detail.push('<span class="remain">剩余 '+esc(formatRemaining(c.remaining_seconds))+'</span>');
-  if(c.last_probe_at||!c.banned) detail.push(esc(probeText(c)));
+  if(c.banned&&c.remaining_seconds!=null&&c.remaining_seconds>=0) detail.push('<span class="remain">剩余 '+esc(formatRemaining(c.remaining_seconds))+'</span>');
+  const pt=probeText(c);
+  if(c.last_probe_at) detail.push(esc(pt));
+  else if(!c.banned) detail.push(esc(pt));
   return '<div class="mid"><div class="mid-top">'+parts.join('')+'</div>'+
     (detail.length?'<div class="mid-sub">'+detail.join('<span class="sep">·</span>')+'</div>':'')+
     '</div>';
@@ -786,6 +794,12 @@ function render(){
   const filterLabel={all:'全部',healthy:'健康',banned:'隔离',disabled:'已禁用','401':'401','402':'402','403':'403','429':'429'}[state.filter]||state.filter;
   const p=state.page||{};
   $('resultCount').textContent=(p.total!=null?p.total:list.length)+' 条 · '+filterLabel+(p.pages>1?(' · 第 '+(p.page||1)+'/'+p.pages+' 页'):'');
+  const lh=$('listHint');
+  if(lh){
+    if(state.filter==='banned') lh.textContent='显示隔离账本';
+    else if(['401','402','403','429'].includes(state.filter)) lh.textContent='状态码筛选 · 与「当前隔离」口径不同';
+    else lh.textContent='';
+  }
   paintPager();
   $('rows').innerHTML=list.map(c=>{
     const name=c.name||c.label||'-';

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.12 - 2026-07-15
+
+### UI polish
+- Status-code chips: nowrap labels (`401 · 重授权`), no crushed vertical text
+- Isolation card subtitle fixed meaning (ledger only); hover explains 40x口径差异
+- Tighter vertical rhythm (config/list/rows); taller list viewport
+- List hint when filtering by status code vs isolation ledger
+
 ## 0.5.11 - 2026-07-15
 
 ### UI
