@@ -1060,26 +1060,47 @@ async function unbanAll(){
   }catch(e){ setMessage(e.message,true); toast(e.message,'err'); }
   finally{ setBusy(false); }
 }
+async function pollProbeUntilDone(){
+  let idle=0, lastDone=-1;
+  for(;;){
+    const st=await apiMgmt('GET','/probe/status');
+    const done=st.done||0, total=st.total||0;
+    setProgress(done, total>0?total:100);
+    if(done===lastDone) idle++; else { idle=0; lastDone=done; }
+    if(!st.running){
+      const r=st.result||{};
+      const msg='巡检完成 成功='+(r.ok||0)+' 失败='+(r.failed||0)+(r.report_only?'（只输出结果）':'');
+      setMessage(msg); toast(msg, st.error?'err':'ok');
+      if(st.error) throw new Error(st.error);
+      return st;
+    }
+    // Stuck: running but no progress for ~90s → force restart once
+    if(idle>180 && done===0 && total===0){
+      setMessage('巡检似乎卡住，强制重新开始…');
+      await apiMgmt('POST','/probe',{force:true,wait:false});
+      idle=0;
+    }
+    await new Promise(r=>setTimeout(r,500));
+  }
+}
 async function runProbe(){
   if(state.busy||!confirm('立即巡检全部 xAI 凭据？')) return;
   try{
     setBusy(true,'巡检中'); setProgress(0,100);
     setMessage('巡检中…');
-    const acc=await apiMgmt('POST','/probe',{force:false,wait:false});
-    if(acc.accepted===false&&acc.error){ throw new Error(acc.error); }
-    for(;;){
-      const st=await apiMgmt('GET','/probe/status');
-      const done=st.done||0, total=st.total||0;
-      setProgress(done, total>0?total:100);
-      if(!st.running){
-        const r=st.result||{};
-        const msg='巡检完成 成功='+(r.ok||0)+' 失败='+(r.failed||0)+(r.report_only?'（只输出结果）':'');
-        setMessage(msg); toast(msg, st.error?'err':'ok');
-        if(st.error) throw new Error(st.error);
-        break;
-      }
-      await new Promise(r=>setTimeout(r,500));
+    let acc;
+    try{
+      acc=await apiMgmt('POST','/probe',{force:false,wait:false});
+    }catch(e){
+      const m=String(e.message||e);
+      if(/already running/i.test(m)){
+        setMessage('已有巡检在进行，接入进度…');
+        acc={ok:true,accepted:true,already_running:true};
+      }else throw e;
     }
+    if(acc && acc.already_running) setMessage('已有巡检在进行，接入进度…');
+    if(acc && acc.accepted===false && acc.error) throw new Error(acc.error);
+    await pollProbeUntilDone();
     await loadData(true);
   }catch(e){ setMessage(e.message,true); toast(e.message,'err'); }
   finally{ setBusy(false); setProgress(0,0); }

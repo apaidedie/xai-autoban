@@ -198,9 +198,22 @@ func (h *Handler) Handle(req pluginapi.ManagementRequest) pluginapi.ManagementRe
 			h.Audit.Add("manual", "", "probe", "ok", "", 0)
 			return jsonResponse(http.StatusOK, map[string]any{"ok": true, "result": res, "status": h.CurrentStatus()})
 		}
+		// force query/body: force=true also clears a stuck "already running" lock
+		if !body.Force {
+			if v := strings.ToLower(strings.TrimSpace(req.Query.Get("force"))); v == "1" || v == "true" {
+				body.Force = true
+			}
+		}
 		id, err := h.Probe.StartJob(body.Force, "manual")
 		if err != nil {
 			st := h.Probe.JobStatus()
+			// Attach to in-flight job instead of hard-fail (UI will poll progress).
+			if strings.Contains(err.Error(), "already running") {
+				return jsonResponse(http.StatusOK, map[string]any{
+					"ok": true, "accepted": true, "already_running": true,
+					"job_id": st.JobID, "running": st.Running, "done": st.Done, "total": st.Total,
+				})
+			}
 			return jsonResponse(http.StatusConflict, map[string]any{
 				"ok": false, "error": err.Error(), "job_id": st.JobID,
 				"running": st.Running, "done": st.Done, "total": st.Total,

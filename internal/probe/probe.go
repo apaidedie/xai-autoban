@@ -49,6 +49,8 @@ type Service struct {
 	persist    *persist.Persister
 	stopCh     chan struct{}
 	running    bool // scheduled loop
+	// jobStarted is set when a manual/async job acquires the flight lock.
+	jobStarted time.Time
 	lastRun    time.Time
 	lastErr    string
 	lastOK     int
@@ -133,9 +135,17 @@ func (p *Service) beginProbe() (int64, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.jobRunning {
-		return p.jobID, fmt.Errorf("probe already running")
+		// Stale lock: no finish after 3h (process stall / lost goroutine).
+		if !p.jobStarted.IsZero() && time.Since(p.jobStarted) > 3*time.Hour {
+			slog.Warn("xai-autoban: clearing stale probe lock", "age", time.Since(p.jobStarted).String(), "job_id", p.jobID)
+			p.jobRunning = false
+			p.jobErr = "stale job cleared"
+		} else {
+			return p.jobID, fmt.Errorf("probe already running")
+		}
 	}
 	p.jobRunning = true
+	p.jobStarted = time.Now()
 	p.runSeq++
 	p.jobID = p.runSeq
 	p.jobDone = 0
@@ -145,10 +155,20 @@ func (p *Service) beginProbe() (int64, error) {
 	return p.jobID, nil
 }
 
+// ForceResetJob clears the in-flight lock so a new probe can start (manual recovery).
+func (p *Service) ForceResetJob() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.jobRunning = false
+	p.jobErr = "force reset"
+	p.jobStarted = time.Time{}
+}
+
 func (p *Service) finishProbe(res Result, err error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.jobRunning = false
+	p.jobStarted = time.Time{}
 	cp := res
 	p.jobResult = &cp
 	if err != nil {
@@ -191,10 +211,17 @@ func (p *Service) RunOnce(force bool) (Result, error) {
 }
 
 // StartJob runs a probe in the background. Returns job id or error if already running.
+// If force is true and a job is already running, the lock is cleared first (new job starts).
 func (p *Service) StartJob(force bool, trigger string) (int64, error) {
 	id, err := p.beginProbe()
 	if err != nil {
-		return id, err
+		if force && strings.Contains(err.Error(), "already running") {
+			p.ForceResetJob()
+			id, err = p.beginProbe()
+		}
+		if err != nil {
+			return id, err
+		}
 	}
 	go func() {
 		defer func() {
