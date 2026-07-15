@@ -208,7 +208,6 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
 .qcard .qs{margin-top:5px;color:var(--muted);font-size:11px;font-weight:650;line-height:1.25;min-height:1.25em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .qcard.ok .qn{color:var(--green)}.qcard.warn .qn{color:var(--amber)}.qcard.bad .qn{color:var(--red)}.qcard.info .qn{color:var(--cyan)}
 .qcard.disabled-card .qn{color:#cbd5e1}
-.row-action{height:30px;padding:0 10px;border-radius:9px;font-size:12px}
 .row-action.primary{background:linear-gradient(180deg,#3b82f6,#2563eb);border-color:#1d4ed8;color:#fff}
 .row-action.primary:hover{background:linear-gradient(180deg,#60a5fa,#3b82f6);border-color:#2563eb;color:#fff}
 @media(max-width:1100px){.qcards{grid-template-columns:repeat(3,minmax(0,1fr))}}
