@@ -91,7 +91,8 @@ func Default() PluginConfig {
 		ActionCooldownSeconds:                60,
 		DeleteFallback:                       actionDisable,
 		SchedulerDelegate:                    pluginapi.SchedulerBuiltinRoundRobin,
-		StateFile:                            "",
+		// Default state path: bans + ops-console settings overlay (survives reload).
+		StateFile:                            "xai-autoban-state.json",
 		AuditMaxEvents:                       200,
 		DisableVia:                           disableViaHostAuth,
 		ManagementURL:                        defaultManagementURL,
@@ -311,6 +312,29 @@ func (c PluginConfig) ResolveManagementKey() string {
 		}
 	}
 	return ""
+}
+
+// OpsSettingsKeys are fields the ops console may persist (excludes install secrets).
+var OpsSettingsKeys = []string{
+	"ban_401_seconds", "ban_402_seconds", "ban_403_seconds", "ban_429_fallback_seconds",
+	"action_on_401", "action_on_402", "action_on_403", "action_on_429",
+	"probe_enabled", "probe_interval_seconds", "probe_timeout_seconds",
+	"probe_concurrency", "probe_qps", "probe_mode", "probe_base_url", "probe_path",
+	"probe_action", "probe_on_success", "probe_include_disabled", "probe_only_disabled",
+	"auto_execute", "action_cooldown_seconds", "delete_fallback",
+	"scheduler_delegate", "audit_max_events",
+}
+
+// OpsSettingsView returns only ops-console fields suitable for state-file overlay.
+func (c PluginConfig) OpsSettingsView() map[string]any {
+	full := c.PublicView()
+	out := make(map[string]any, len(OpsSettingsKeys))
+	for _, k := range OpsSettingsKeys {
+		if v, ok := full[k]; ok {
+			out[k] = v
+		}
+	}
+	return out
 }
 
 func MergePatch(base PluginConfig, patch map[string]any) (PluginConfig, []string) {

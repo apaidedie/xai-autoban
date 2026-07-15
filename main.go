@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"log/slog"
+	"strings"
 	"sync"
 
 	"xai-autoban/cpasdk/pluginabi"
@@ -21,7 +22,7 @@ import (
 
 const (
 	pluginName    = "xai-autoban"
-	pluginVersion = "0.5.30"
+	pluginVersion = "0.5.31"
 )
 
 type App struct {
@@ -164,9 +165,21 @@ func (a *App) handleRegister(raw []byte) ([]byte, error) {
 		slog.Warn("xai-autoban: config warning", "warning", w)
 		a.audit.Add("system", "", "config", "warn", w, 0)
 	}
+	if strings.TrimSpace(cfg.StateFile) == "" {
+		cfg.StateFile = config.Default().StateFile
+	}
 	a.SetConfig(cfg)
 	a.persist.Load()
-	if cfg.ProbeEnabled {
+	// Overlay ops-console settings saved in state file (survives yaml reconfigure).
+	if overlay := a.persist.Settings(); len(overlay) > 0 {
+		merged, more := config.MergePatch(a.Config(), overlay)
+		for _, w := range more {
+			slog.Warn("xai-autoban: settings overlay warning", "warning", w)
+		}
+		a.SetConfig(merged)
+		slog.Info("xai-autoban: applied persisted ops settings", "keys", len(overlay))
+	}
+	if a.Config().ProbeEnabled {
 		a.probe.Start()
 	}
 	return okEnvelope(a.pluginRegistration())

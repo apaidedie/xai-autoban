@@ -717,14 +717,26 @@ func (h *Handler) updateSettings(raw []byte) pluginapi.ManagementResponse {
 	if nested, ok := patch["settings"].(map[string]any); ok {
 		patch = nested
 	}
+	// Drop non-ops keys that may ride along from list payloads / PublicView.
+	for _, drop := range []string{"management_key", "management_key_configured", "management_key_env", "management_url", "disable_via", "state_file", "op", "payload"} {
+		delete(patch, drop)
+	}
 	cfg, warnings := config.MergePatch(h.Cfg(), patch)
 	h.SetCfg(cfg)
-	h.Audit.Add("manual", "", "settings", "ok", "runtime settings updated", 0)
+	if h.Persist != nil {
+		h.Persist.SetSettings(cfg.OpsSettingsView())
+		h.Persist.ScheduleSave()
+	}
+	h.Audit.Add("manual", "", "settings", "ok", "ops settings updated+persisted", 0)
+	note := "已保存并写入 state 文件（默认 xai-autoban-state.json），重载后仍生效。"
+	if h.Persist == nil || h.Persist.Path() == "" {
+		note = "已写入运行时；未配置 state_file，重载后可能回落 yaml。"
+	}
 	return jsonResponse(http.StatusOK, map[string]any{
 		"ok":       true,
 		"settings": cfg.PublicView(),
 		"warnings": warnings,
-		"note":     "已写入运行时；日常请用运维台改策略。重启后可能回落 yaml。插件管理仅建议改启用与管理密钥。",
+		"note":     note,
 	})
 }
 

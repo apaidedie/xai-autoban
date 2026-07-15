@@ -497,7 +497,11 @@ function isListPayload(d){
   return !!(d && (Array.isArray(d.bans)||Array.isArray(d.credentials)) && d.counts && d.ok!==true && d.removed===undefined && d.accepted===undefined && !d.error);
 }
 function isOpsResult(d){
-  return !!(d && (d.ok===true || d.accepted===true || d.removed!==undefined || d.result!==undefined || d.settings!==undefined || d.error));
+  // Must require ok/accepted — list /data also has settings and must not count as save success.
+  if(!d || typeof d!=='object') return false;
+  if(d.ok===true || d.accepted===true) return true;
+  if(d.format==='xai-autoban-backup') return true;
+  return false;
 }
 async function apiResource(path, opts){
   const method=(opts&&opts.method)||'GET';
@@ -787,12 +791,21 @@ function collectDraft(){
 async function saveSettings(){
   try{
     setMessage('正在保存配置…');
-    const res=await apiMgmt('PUT','/settings',collectDraft());
-    renderSettingsSummary(res.settings||{});
-    setMessage('配置已生效'+(res.note?(' · '+res.note):''));
+    const draft=collectDraft();
+    const res=await apiMgmt('PUT','/settings',draft);
+    if(!res || res.ok!==true || !res.settings){
+      throw new Error('保存未确认成功（未返回 ok/settings）。请升级插件并强刷。');
+    }
+    // Verify a few fields actually stuck
+    if(Number(res.settings.probe_interval_seconds)!==Number(draft.probe_interval_seconds)){
+      throw new Error('保存后间隔未生效（服务端仍为 '+res.settings.probe_interval_seconds+'）。请升级到 0.5.31+。');
+    }
+    renderSettingsSummary(res.settings);
+    setMessage('配置已保存'+(res.note?(' · '+res.note):''));
+    toast('配置已保存','ok');
     closeDrawer();
     await loadData(true);
-  }catch(e){ setMessage(e.message,true); }
+  }catch(e){ setMessage(e.message,true); toast(e.message,'err'); }
 }
 async function loadData(silent=false){
   try{

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -337,6 +338,52 @@ func TestResourceOpsListIDsFilter403(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("expected a403 in ids: %v body=%s", ids, string(resp.Body))
+	}
+}
+
+func TestSettingsPersistAndReload(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "state.json")
+	app := NewApp(host.Real{})
+	cfg := config.Default()
+	cfg.StateFile = path
+	cfg.ProbeIntervalSeconds = 600
+	app.SetConfig(cfg)
+
+	resp := app.mgmt.Handle(pluginapi.ManagementRequest{
+		Method: http.MethodGet,
+		Path:   "/v0/resource/plugins/xai-autoban/ops",
+		Query: map[string][]string{
+			"op": {"settings"},
+			"payload": {func() string {
+				raw, _ := json.Marshal(map[string]any{"probe_interval_seconds": 900, "auto_execute": false})
+				return base64.RawURLEncoding.EncodeToString(raw)
+			}()},
+		},
+	})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("save status=%d body=%s", resp.StatusCode, string(resp.Body))
+	}
+	app.persist.Flush()
+	if app.Config().ProbeIntervalSeconds != 900 {
+		t.Fatalf("runtime interval=%d", app.Config().ProbeIntervalSeconds)
+	}
+
+	// Simulate reconfigure from yaml defaults then overlay
+	app2 := NewApp(host.Real{})
+	cfg2 := config.Default()
+	cfg2.StateFile = path
+	app2.SetConfig(cfg2)
+	app2.persist.Load()
+	if overlay := app2.persist.Settings(); len(overlay) > 0 {
+		merged, _ := config.MergePatch(app2.Config(), overlay)
+		app2.SetConfig(merged)
+	}
+	if app2.Config().ProbeIntervalSeconds != 900 {
+		t.Fatalf("after reload interval=%d want 900", app2.Config().ProbeIntervalSeconds)
+	}
+	if app2.Config().AutoExecute {
+		t.Fatal("auto_execute should stay false after reload")
 	}
 }
 
