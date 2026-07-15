@@ -4,9 +4,9 @@
     {
       "id": "xai-autoban",
       "name": "xAI Autoban",
-      "description": "自动隔离异常 xAI 凭据（401/402/403/429）。0.4.0 运维台支持状态芯片筛选、全部凭证列表、单行/批量 ban·disable·reenable，以及可配置巡检与管理密钥保护的写操作。",
+      "description": "自动隔离异常 xAI 凭据（401/402/403/429）。运维台：筛选/全选当前筛选、批量隔离·禁用·启用·删除·复检、巡检与配置；兼容 CPA-Manager-Plus。",
       "author": "apaidedie",
-      "version": "0.5.29",
+      "version": "0.5.30",
       "repository": "https://github.com/apaidedie/xai-autoban",
       "homepage": "https://github.com/apaidedie/xai-autoban",
       "license": "MIT",

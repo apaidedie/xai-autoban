@@ -6,9 +6,8 @@ import (
 )
 
 // StatusPage renders the ops console.
-// serverMgmtKey is the plugin-configured CPA management key (from plugin manage / env).
-// It is injected for Management API writes so the browser never asks the user to paste a key.
-// Empty key → writes fall back to resource POST /data (may 404 on some CPA builds).
+// serverMgmtKey is the plugin-configured CPA management key (plugin manage / env).
+// Used only as optional Authorization on resource POST; primary writes use GET /ops under CPAMP.
 func StatusPage(pluginName, pluginVersion, serverMgmtKey string) string {
 	name := html.EscapeString(pluginName)
 	keyJS, err := json.Marshal(serverMgmtKey)
@@ -366,8 +365,8 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
   </section>
 
   <p class="foot">
-    <b>隔离</b>=插件内跳过调度；<b>禁用</b>=关闭凭证；<b>启用</b>=打开凭证。
-    日常策略请在运维台「编辑配置」修改。写操作自动使用插件管理中配置的服务端密钥（无需在本页粘贴）。
+    <b>隔离</b>=插件内跳过调度；<b>禁用</b>=关闭凭证；<b>启用</b>=打开凭证；<b>删除</b>=Management 删除。
+    日常策略在「编辑配置」；禁用/删除需插件管理中配置 CPA Management Key（非 cpamp_ 面板密钥）。
   </p>
   <input id="importFile" type="file" accept="application/json,.json" hidden>
 </div>
@@ -441,8 +440,7 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
 
 <script>
 const resourceBase='/v0/resource/plugins/xai-autoban';
-const mgmtBase='/v0/management/plugins/xai-autoban';
-// Injected from plugin management / env — not pasted in this page.
+// Optional CPA secret-key for resource POST; primary path is GET /ops (CPAMP-friendly).
 const SERVER_MGMT_KEY=` + string(keyJS) + `;
 const state={bans:[],credentials:[],counts:{},page:{page:1,page_size:50,total:0,pages:1,filter:'all',q:''},filter:'all',query:'',selected:new Set(),timer:null,searchTimer:null,toastTimer:null,busy:false,settings:{},success:'unban',fail:'ban',autoExecute:true,history:[]};
 const $=id=>document.getElementById(id);
@@ -472,11 +470,7 @@ function setAuthUI(){
   setActionEnabled(true);
   return true;
 }
-// CPAMP:
-// - GET  /v0/resource/plugins/* → 用 CPAMP 已保存的 CPA Management Key 代理（浏览器无需密钥）
-// - POST /v0/resource/plugins/* → 需 Authorization=cpamp_ 或 CPA secret-key
-// - /v0/management/plugins/* 在 CPAMP 为保留路径，浏览器带 CPA 密钥必报 invalid admin key
-// 因此写操作只走 resource，绝不回退 management（避免误报密钥错误）。
+// Writes use resource only (GET /ops preferred under CPAMP; never /v0/management/plugins/*).
 function buildOpsQuery(op, payload){
   const q=new URLSearchParams();
   q.set('op', op);
@@ -581,7 +575,7 @@ async function apiOps(op, extra){
   if(d) return d;
   d=await tryOne('POST /data nokey', ()=>apiResource('/data',Object.assign({method:'POST',body:payload,withKey:false}, meta)));
   if(d) return d;
-  throw new Error('写操作失败：'+errs.join(' | ')+'。请装 0.5.28+ 并强刷。CPAMP 下配置保存走 GET /ops?payload=。');
+  throw new Error('写操作失败：'+errs.join(' | ')+'。请装最新版并强刷运维台。');
 }
 function mapPathToOp(method,path,body){
   const p=String(path||'');

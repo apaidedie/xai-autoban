@@ -8,7 +8,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -107,14 +106,7 @@ func (m *managementDisabler) status() map[string]any {
 }
 
 func (m *managementDisabler) resolveKeyLocked() string {
-	if k := strings.TrimSpace(m.cfg.ManagementKey); k != "" {
-		return k
-	}
-	envName := strings.TrimSpace(m.cfg.ManagementKeyEnv)
-	if envName == "" {
-		envName = DefaultManagementKeyEnv
-	}
-	return strings.TrimSpace(os.Getenv(envName))
+	return m.cfg.ResolveManagementKey()
 }
 
 func (m *managementDisabler) setAuthDisabled(authID, authIndex string, disabled bool) error {
