@@ -363,7 +363,7 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
   <div class="dh">
     <div>
       <h3>运维配置（主入口）</h3>
-      <p>巡检、自动执行与失败/成功策略请在此修改。保存后立即生效。插件管理页仅保留「启用」与服务端密钥相关项。</p>
+      <p>巡检、自动执行与失败/成功策略请在此修改。保存后立即生效。启用与服务端 Management 密钥仅在插件管理配置。</p>
     </div>
     <button class="bg" id="closeConfigBtn" type="button">✕</button>
   </div>
@@ -416,18 +416,6 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
       <div class="fg"><label>403</label><select id="f_action_on_403"><option value="ban">隔离</option><option value="disable">禁用</option><option value="delete">删除</option></select></div>
       <div class="fg"><label>429（建议仅隔离）</label><select id="f_action_on_429"><option value="ban">隔离</option><option value="disable">禁用</option><option value="delete">删除</option></select></div>
       <div class="fg"><label>动作冷却（秒）</label><input id="f_action_cooldown_seconds" type="number" min="0" step="1"></div>
-    </div>
-    <div class="sec">
-      <h4>禁用路径 / Management（可选）</h4>
-      <p class="hint" style="margin:0 0 10px">服务端调用 CPA 禁用/删除时使用；密钥请在插件管理或环境变量配置，本页不再要求粘贴密钥。</p>
-      <div class="fg"><label>禁用方式 disable_via</label>
-        <select id="f_disable_via">
-          <option value="host_auth">host_auth</option>
-          <option value="management_api">management_api（推荐）</option>
-        </select>
-      </div>
-      <div class="fg"><label>Management URL</label><input id="f_management_url" type="text" placeholder="http://127.0.0.1:8317"></div>
-      <div class="fg"><label>密钥环境变量名</label><input id="f_management_key_env" type="text" placeholder="CPA_MANAGEMENT_KEY"></div>
     </div>
   </div>
   <div class="df">
@@ -620,9 +608,6 @@ function fillDrawer(s){
   $('f_action_on_403').value=s.action_on_403||'ban';
   $('f_action_on_429').value=s.action_on_429||'ban';
   $('f_action_cooldown_seconds').value=s.action_cooldown_seconds??60;
-  if($('f_disable_via')) $('f_disable_via').value=s.disable_via||'host_auth';
-  if($('f_management_url')) $('f_management_url').value=s.management_url||'http://127.0.0.1:8317';
-  if($('f_management_key_env')) $('f_management_key_env').value=s.management_key_env||'CPA_MANAGEMENT_KEY';
   state.success=s.probe_on_success||'unban';
   state.fail=s.probe_action||'ban';
   state.autoExecute=s.auto_execute!==false;
@@ -656,10 +641,7 @@ function collectDraft(){
     action_on_402: $('f_action_on_402').value,
     action_on_403: $('f_action_on_403').value,
     action_on_429: $('f_action_on_429').value,
-    action_cooldown_seconds: Number($('f_action_cooldown_seconds').value||0),
-    disable_via: $('f_disable_via')?$('f_disable_via').value:'host_auth',
-    management_url: $('f_management_url')?$('f_management_url').value:'',
-    management_key_env: $('f_management_key_env')?$('f_management_key_env').value:''
+    action_cooldown_seconds: Number($('f_action_cooldown_seconds').value||0)
   };
 }
 async function saveSettings(){

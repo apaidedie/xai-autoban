@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.17 - 2026-07-15
+
+### Config UX
+- Remove Management / disable_via block from ops console drawer (plugin manage only)
+
 ## 0.5.16 - 2026-07-15
 
 ### Fix
