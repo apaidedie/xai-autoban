@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.11 - 2026-07-15
+
+### UI
+- Status-code filters match primary metric card size (grid strip)
+- Unified Chinese terms: 隔离 / 取消隔离 / 禁用 / 启用 (no mixed ban wording)
+
 ## 0.5.10 - 2026-07-15
 
 ### UI

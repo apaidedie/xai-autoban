@@ -175,19 +175,26 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
   .rcard .ops .acts{justify-content:flex-start}
 }
 .qcards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:0 0 10px}
-.code-strip{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}
+.code-strip{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:0 0 12px}
+@media(max-width:1100px){.code-strip{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:700px){.code-strip{grid-template-columns:1fr 1fr}}
 .code-chip{
-  height:36px;padding:0 14px;border-radius:999px;border:1px solid var(--line);
-  background:rgba(12,20,34,.9);color:var(--muted);font-weight:750;font-size:12px;
-  display:inline-flex;align-items:center;gap:8px;cursor:pointer
+  min-height:72px;padding:12px 14px;border-radius:14px;border:1px solid var(--line);
+  background:rgba(12,20,34,.92);color:var(--muted);font-weight:750;font-size:11px;
+  display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:6px;
+  cursor:pointer;text-align:left;letter-spacing:.04em;height:auto
 }
-.code-chip b{font-size:14px;font-variant-numeric:tabular-nums;color:var(--text)}
-.code-chip:hover{border-color:rgba(148,163,184,.35);color:var(--text)}
-.code-chip.active,.code-chip.on{border-color:rgba(34,211,238,.5);background:rgba(8,47,73,.35);color:#93c5fd}
-.code-chip.s401.active{border-color:rgba(59,130,246,.55);color:#93c5fd}
-.code-chip.s402.active{border-color:rgba(251,191,36,.55);color:#fcd34d}
-.code-chip.s403.active{border-color:rgba(251,113,133,.55);color:#fda4af}
-.code-chip.s429.active{border-color:rgba(167,139,250,.55);color:#ddd6fe}
+.code-chip .cl{font-size:11px;font-weight:800;color:var(--muted);letter-spacing:.06em}
+.code-chip b{font-size:22px;font-weight:850;font-variant-numeric:tabular-nums;color:var(--text);line-height:1}
+.code-chip:hover{border-color:rgba(148,163,184,.35);background:rgba(15,23,42,.95);color:var(--text)}
+.code-chip.active,.code-chip.on{border-color:rgba(34,211,238,.5);background:rgba(8,47,73,.35);box-shadow:0 0 0 1px rgba(34,211,238,.18) inset}
+.code-chip.s401 b{color:#93c5fd}.code-chip.s401.active{border-color:rgba(59,130,246,.55)}
+.code-chip.s402 b{color:#fcd34d}.code-chip.s402.active{border-color:rgba(251,191,36,.55)}
+.code-chip.s403 b{color:#fda4af}.code-chip.s403.active{border-color:rgba(251,113,133,.55)}
+.code-chip.s429 b{color:#ddd6fe}.code-chip.s429.active{border-color:rgba(167,139,250,.55)}
+.code-chip.ghost{align-items:center;justify-content:center;color:var(--muted)}
+.code-chip.ghost b{display:none}
+.code-chip.ghost .cl{font-size:13px;letter-spacing:0;font-weight:750}
 .qcard:hover{border-color:rgba(34,211,238,.35);background:rgba(15,23,42,.95)}
 .qcard:focus-visible{outline:2px solid rgba(34,211,238,.65);outline-offset:2px}
 .qcard .ql{color:var(--muted);font-size:11px;font-weight:800;letter-spacing:.06em}
@@ -208,7 +215,7 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
     <div>
       <div class="kicker"><i></i>运维台 · xAI 账号巡检</div>
       <h1>xAI Autoban</h1>
-      <p class="sub">隔离 · 禁用 · 复检 · v` + pluginVersion + `</p>
+      <p class="sub">隔离 · 禁用 · 启用 · 复检 · v` + pluginVersion + `</p>
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <div class="live" id="syncState">准备中</div>
@@ -241,22 +248,32 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
     <button type="button" class="qcard ok" data-jump="healthy" data-filter="healthy" title="未隔离且未禁用，可参与调度">
       <div class="ql">健康</div><div class="qn" id="ov_healthy">0</div><div class="qs">可调度</div>
     </button>
-    <button type="button" class="qcard warn" data-jump="banned" data-filter="banned" title="内存隔离账本中的凭证">
+    <button type="button" class="qcard warn" data-jump="banned" data-filter="banned" title="插件内隔离：调度会跳过这些凭证">
       <div class="ql">当前隔离</div><div class="qn" id="ov_banned">0</div><div class="qs" id="ov_banned_sub">调度已跳过</div>
     </button>
-    <button type="button" class="qcard disabled-card" data-jump="disabled" data-filter="disabled" title="CPA 凭证 disabled=true">
-      <div class="ql">已禁用</div><div class="qn" id="c_disabled">0</div><div class="qs">凭证停用</div>
+    <button type="button" class="qcard disabled-card" data-jump="disabled" data-filter="disabled" title="已关闭的 CPA 凭证">
+      <div class="ql">已禁用</div><div class="qn" id="c_disabled">0</div><div class="qs">关闭凭证</div>
     </button>
     <button type="button" class="qcard info" data-jump="probe" id="ov_probe_card" title="点击立即巡检全部 xAI 凭证">
       <div class="ql">上次巡检</div><div class="qn" id="ov_probe">—</div><div class="qs" id="ov_probe_sub">点击立即巡检</div>
     </button>
   </div>
   <div class="code-strip" id="codeStrip" role="toolbar" aria-label="状态码筛选">
-    <button type="button" class="code-chip s401" data-filter="401" title="未授权 / Token 失效 / 需重授权">401 重授权 <b id="ov_401">0</b></button>
-    <button type="button" class="code-chip s402" data-filter="402" title="额度不足（需在线探测）">402 无额度 <b id="ov_402">0</b></button>
-    <button type="button" class="code-chip s403" data-filter="403" title="权限/风控拒绝">403 禁止 <b id="ov_403">0</b></button>
-    <button type="button" class="code-chip s429" data-filter="429" title="临时限流">429 限流 <b id="ov_429">0</b></button>
-    <button type="button" class="code-chip ghost" id="clearFilterBtn" data-filter="all">清除筛选</button>
+    <button type="button" class="code-chip s401" data-filter="401" title="未授权 / Token 失效 / 需重新授权">
+      <span class="cl">401 重授权</span><b id="ov_401">0</b>
+    </button>
+    <button type="button" class="code-chip s402" data-filter="402" title="额度不足（需在线探测）">
+      <span class="cl">402 无额度</span><b id="ov_402">0</b>
+    </button>
+    <button type="button" class="code-chip s403" data-filter="403" title="权限/风控拒绝">
+      <span class="cl">403 禁止</span><b id="ov_403">0</b>
+    </button>
+    <button type="button" class="code-chip s429" data-filter="429" title="临时限流">
+      <span class="cl">429 限流</span><b id="ov_429">0</b>
+    </button>
+    <button type="button" class="code-chip ghost" id="clearFilterBtn" data-filter="all" title="清除状态码筛选">
+      <span class="cl">清除筛选</span>
+    </button>
   </div>
   <div id="statusChips" hidden aria-hidden="true">
     <button type="button" data-filter="all"><b id="c_all">-</b></button>
@@ -288,11 +305,11 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
         <details class="more">
           <summary class="bs">更多</summary>
           <div class="more-menu">
-            <button type="button" id="unbanSelected" onclick="bulkAct('unban')" disabled>解禁所选</button>
+            <button type="button" id="unbanSelected" onclick="bulkAct('unban')" disabled>取消隔离所选</button>
             <button type="button" id="banSelected" onclick="bulkAct('ban')" disabled>隔离所选</button>
             <button type="button" id="disableSelected" onclick="bulkAct('disable')" disabled>禁用所选</button>
             <button type="button" id="reenableSelected" onclick="bulkAct('reenable')" disabled>启用所选</button>
-            <button type="button" id="unbanAll" onclick="unbanAll()" disabled>全部解禁</button>
+            <button type="button" id="unbanAll" onclick="unbanAll()" disabled>全部取消隔离</button>
             <button type="button" id="btnBackup" onclick="exportBackup()" disabled>导出备份</button>
             <button type="button" id="btnImport" onclick="importBackup()" disabled>导入备份</button>
             <label class="chk"><input id="autoRefresh" type="checkbox" checked> 30 秒刷新</label>
@@ -336,7 +353,7 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
   </section>
 
   <p class="foot">
-    <b>隔离</b>=内存跳过调度；<b>禁用</b>=写入凭证停用。配置立即生效，进程重启后回落 config.yaml。
+    <b>隔离</b>=插件内跳过调度；<b>禁用</b>=关闭凭证；<b>启用</b>=打开凭证。配置立即生效，进程重启后回落 config.yaml。
   </p>
   <input id="importFile" type="file" accept="application/json,.json" hidden>
 </div>
@@ -368,34 +385,37 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
     <div class="sec">
       <h4>自动执行（对齐 Codex 巡检）</h4>
       <div class="choice" id="autoExecChoices" style="margin-bottom:10px">
-        <button type="button" data-v="0"><b>只输出结果</b><span>巡检只记录；失败最多 ban 展示，不 disable/delete</span></button>
+        <button type="button" data-v="0"><b>只输出结果</b><span>巡检只记录；失败最多写入隔离展示，不禁用/删除</span></button>
         <button type="button" data-v="1"><b>自动执行</b><span>按下方策略处理问题账号与恢复</span></button>
       </div>
-      <div class="fg"><label>成功策略 probe_on_success</label>
+      <div class="fg"><label>成功策略</label>
         <div class="choice" id="successChoices">
-          <button type="button" data-v="none"><b>不处理</b><span>仅记录，不改 ban/disabled</span></button>
-          <button type="button" data-v="unban"><b>自动解 ban</b><span>清除内存隔离（默认）</span></button>
-          <button type="button" data-v="reenable"><b>重新启用</b><span>disabled=false，不碰 ban</span></button>
-          <button type="button" data-v="unban_and_reenable"><b>解 ban + 启用</b><span>同时恢复调度与启用态</span></button>
+          <button type="button" data-v="none"><b>不处理</b><span>仅记录，不改隔离/禁用状态</span></button>
+          <button type="button" data-v="unban"><b>自动取消隔离</b><span>清除插件内隔离（默认）</span></button>
+          <button type="button" data-v="reenable"><b>启用凭证</b><span>打开凭证，不改隔离</span></button>
+          <button type="button" data-v="unban_and_reenable"><b>取消隔离 + 启用</b><span>同时恢复调度与打开凭证</span></button>
         </div>
       </div>
-      <div class="fg"><label>问题账号策略 probe_action</label>
+      <div class="fg"><label>问题账号策略</label>
         <div class="choice" id="failChoices">
-          <button type="button" data-v="ban"><b>仅 ban</b><span>内存隔离，最安全</span></button>
-          <button type="button" data-v="disable"><b>禁用账号</b><span>写入 disabled=true</span></button>
-          <button type="button" data-v="delete"><b>删除</b><span>Management DELETE；失败则 disable/ban 并标记 pending_delete</span></button>
+          <button type="button" data-v="ban"><b>仅隔离</b><span>插件内跳过调度，最安全</span></button>
+          <button type="button" data-v="disable"><b>禁用凭证</b><span>关闭 CPA 凭证</span></button>
+          <button type="button" data-v="delete"><b>删除</b><span>Management 删除；失败则禁用/隔离并标记待删</span></button>
         </div>
       </div>
-      <div class="fg"><label>delete 回退</label>
-        <select id="f_delete_fallback"><option value="disable">disable</option><option value="ban">ban</option></select>
+      <div class="fg"><label>删除失败时回退</label>
+        <select id="f_delete_fallback">
+          <option value="disable">禁用</option>
+          <option value="ban">隔离</option>
+        </select>
       </div>
     </div>
     <div class="sec">
-      <h4>按状态默认动作</h4>
-      <div class="fg"><label>401</label><select id="f_action_on_401"><option>ban</option><option>disable</option><option>delete</option></select></div>
-      <div class="fg"><label>402</label><select id="f_action_on_402"><option>ban</option><option>disable</option><option>delete</option></select></div>
-      <div class="fg"><label>403</label><select id="f_action_on_403"><option>ban</option><option>disable</option><option>delete</option></select></div>
-      <div class="fg"><label>429（建议 ban）</label><select id="f_action_on_429"><option>ban</option><option>disable</option><option>delete</option></select></div>
+      <h4>失败动作（按状态码）</h4>
+      <div class="fg"><label>401</label><select id="f_action_on_401"><option value="ban">隔离</option><option value="disable">禁用</option><option value="delete">删除</option></select></div>
+      <div class="fg"><label>402</label><select id="f_action_on_402"><option value="ban">隔离</option><option value="disable">禁用</option><option value="delete">删除</option></select></div>
+      <div class="fg"><label>403</label><select id="f_action_on_403"><option value="ban">隔离</option><option value="disable">禁用</option><option value="delete">删除</option></select></div>
+      <div class="fg"><label>429（建议仅隔离）</label><select id="f_action_on_429"><option value="ban">隔离</option><option value="disable">禁用</option><option value="delete">删除</option></select></div>
       <div class="fg"><label>动作冷却（秒）</label><input id="f_action_cooldown_seconds" type="number" min="0" step="1"></div>
     </div>
   </div>
@@ -444,7 +464,7 @@ function setActionEnabled(ok){
   if(can){
     ['unbanSelected','banSelected','disableSelected','reenableSelected','recheckSelected'].forEach(id=>{const el=$(id); if(el) el.disabled=n===0;});
   }
-  if($('unbanSelected')) $('unbanSelected').textContent='解禁所选 ('+n+')';
+  if($('unbanSelected')) $('unbanSelected').textContent='取消隔离所选 ('+n+')';
   if($('recheckSelected')) $('recheckSelected').textContent='复检所选 ('+n+')';
 }
 function setAuthUI(){
@@ -457,7 +477,7 @@ function setAuthUI(){
     }else{
       b.hidden=false;
       b.className='banner warn';
-      b.textContent='只读模式：粘贴并保存管理密钥后，才能解禁 / 隔离 / 禁用 / 巡检 / 改配置。';
+      b.textContent='只读模式：粘贴并保存管理密钥后，才能取消隔离 / 隔离 / 禁用 / 启用 / 巡检 / 改配置。';
     }
   }
   const keyRow=$('keyRow');
@@ -603,7 +623,7 @@ function formatDate(v){const d=new Date(v); return Number.isNaN(d.getTime())?v:d
 function formatRemaining(s){s=Math.max(0,Number(s||0)); const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60); if(d)return d+'天 '+h+'小时'; if(h)return h+'小时 '+m+'分'; return m+'分钟'}
 function reasonLabel(r){return ({payment_required:'额度不足',forbidden:'禁止访问',unauthorized:'未授权',rate_limited:'限流',rate_limited_fallback:'限流(默认等待)',probe_failed:'巡检失败',manual:'手动',token_expired:'Token 过期',needs_refresh:'待刷新'})[r]||r||'-'}
 function classLabel(c){return ({rate_limited:'限流',quota_exhausted:'额度用尽',reauth:'需重新授权',permission_denied:'权限拒绝',model_unavailable:'模型不可用',probe_error:'巡检错误',healthy:'健康',token_expired:'Token 过期',needs_refresh:'待刷新'})[c]||c||''}
-function labelAction(a){return ({ban:'仅隔离',disable:'禁用',delete:'删除',none:'不处理',unban:'自动解禁',reenable:'重新启用',unban_and_reenable:'解禁并启用',reauth:'重授权'})[a]||a||'-'}
+function labelAction(a){return ({ban:'隔离',disable:'禁用',delete:'删除',none:'不处理',unban:'取消隔离',reenable:'启用',unban_and_reenable:'取消隔离并启用',reauth:'重授权'})[a]||a||'-'}
 
 function renderSettingsSummary(s){
   state.settings=s||{};
@@ -733,7 +753,7 @@ function rowActions(c){
   if(needsReauth(c)){
     btns.push('<button class="row-action primary" data-act="reauth" data-id="'+id+'" '+dis+'>重授权</button>');
   }
-  if(c.banned) btns.push('<button class="row-action" data-act="unban" data-id="'+id+'" '+dis+'>解禁</button>');
+  if(c.banned) btns.push('<button class="row-action" data-act="unban" data-id="'+id+'" '+dis+'>取消隔离</button>');
   else if(!needsReauth(c)) btns.push('<button class="row-action" data-act="ban" data-id="'+id+'" '+dis+'>隔离</button>');
   if(c.disabled) btns.push('<button class="row-action" data-act="reenable" data-id="'+id+'" '+dis+'>启用</button>');
   else btns.push('<button class="row-action danger" data-act="disable" data-id="'+id+'" '+dis+'>禁用</button>');
@@ -790,7 +810,7 @@ function render(){
 }
 async function runRowAction(act,id){
   if(!id||state.busy) return;
-  const labels={unban:'解禁',ban:'隔离',disable:'禁用',reenable:'重新启用',reauth:'重授权'};
+  const labels={unban:'取消隔离',ban:'隔离',disable:'禁用',reenable:'启用',reauth:'重授权'};
   if(!confirm('确认对凭证执行「'+(labels[act]||act)+'」？\n'+id)) return;
   try{
     setBusy(true, labels[act]||act);
@@ -812,7 +832,7 @@ async function bulkAct(act){
   if(state.busy) return;
   const ids=[...state.selected];
   if(!ids.length){ setMessage('请先勾选凭证',true); toast('请先勾选凭证','err'); return; }
-  const labels={unban:'解禁',ban:'隔离',disable:'禁用',reenable:'重新启用',reauth:'重授权'};
+  const labels={unban:'取消隔离',ban:'隔离',disable:'禁用',reenable:'启用',reauth:'重授权'};
   if(!confirm('确认对所选 '+ids.length+' 条执行「'+(labels[act]||act)+'」？')) return;
   try{
     setBusy(true,'批量中');
@@ -833,12 +853,12 @@ async function bulkAct(act){
 }
 async function unbanSelected(){ return bulkAct('unban'); }
 async function unbanAll(){
-  if(state.busy||!confirm('确认解禁全部隔离？')) return;
+  if(state.busy||!confirm('确认取消全部隔离？')) return;
   try{
-    setBusy(true,'解禁全部'); setProgress(0,1);
+    setBusy(true,'取消全部隔离'); setProgress(0,1);
     await apiMgmt('POST','/unban-all',{});
-    setProgress(1,1); state.selected.clear();
-    setMessage('已全部解禁'); toast('已全部解禁','ok');
+    setProgress(1,1);
+    setMessage('已全部取消隔离'); toast('已全部取消隔离','ok');
     await loadData(true);
   }catch(e){ setMessage(e.message,true); toast(e.message,'err'); }
   finally{ setBusy(false); }
@@ -868,14 +888,14 @@ async function runProbe(){
   finally{ setBusy(false); setProgress(0,0); }
 }
 async function recheck429(){
-  if(state.busy||!confirm('仅复检当前 429 隔离凭证？\n恢复则解禁，仍限流则刷新隔离窗口。')) return;
+  if(state.busy||!confirm('仅复检当前 429 隔离凭证？\n恢复则取消隔离，仍限流则刷新隔离窗口。')) return;
   try{
     setBusy(true,'429 复检'); setProgress(40,100);
     setMessage('429 复检中…');
     const res=await apiMgmt('POST','/bans-recheck-429',{force:true});
     setProgress(100,100);
     const r=res.result||{};
-    const msg='429 复检完成 · 检'+(r.checked||0)+' 解禁'+(r.unbanned||0)+' 续锁'+(r.relocked||0)+' 跳过'+(r.skipped||0)+' 失败'+(r.failed||0);
+    const msg='429 复检完成 · 检'+(r.checked||0)+' 取消隔离'+(r.unbanned||0)+' 续隔'+(r.relocked||0)+' 跳过'+(r.skipped||0)+' 失败'+(r.failed||0);
     setMessage(msg); toast(msg,'ok');
     state.filter='429'; state.page.page=1; paintChips();
     await loadData(true);
@@ -886,14 +906,14 @@ async function recheckSelected(){
   if(state.busy) return;
   const ids=[...state.selected];
   if(!ids.length){ setMessage('请先勾选凭证',true); toast('请先勾选凭证','err'); return; }
-  if(!confirm('并发复检所选 '+ids.length+' 条？\n· 含已禁用凭证（全量巡检会跳过它们）\n· 成功：解禁 + 自动 reenable\n· 失败：写入/刷新隔离记录')) return;
+  if(!confirm('并发复检所选 '+ids.length+' 条？\n· 含已禁用凭证（全量巡检会跳过它们）\n· 成功：取消隔离 + 自动启用\n· 失败：写入/刷新隔离记录')) return;
   try{
     setBusy(true,'复检所选'); setProgress(20,100);
     setMessage('并发复检 '+ids.length+' 条…');
     const res=await apiMgmt('POST','/recheck-selected',{auth_ids:ids,reenable_on_ok:true});
     setProgress(100,100);
     const r=res.result||{};
-    const msg='复检完成 · 检'+(r.checked||0)+' 成功'+(r.ok||0)+' 失败'+(r.failed||0)+' 解禁'+(r.unbanned||0)+' 启用'+(r.reenabled||0)+' 跳过'+(r.skipped||0);
+    const msg='复检完成 · 检'+(r.checked||0)+' 成功'+(r.ok||0)+' 失败'+(r.failed||0)+' 取消隔离'+(r.unbanned||0)+' 启用'+(r.reenabled||0)+' 跳过'+(r.skipped||0);
     setMessage(msg); toast(msg, (r.failed||0)>0?'err':'ok');
     state.selected.clear();
     await loadData(true);
@@ -934,7 +954,7 @@ async function handleImportFile(file){
     let obj; try{ obj=JSON.parse(text); }catch(_){ throw new Error('JSON 解析失败'); }
     const bansN=(obj.bans&&obj.bans.length)||(obj.status&&obj.status.bans&&obj.status.bans.length)||0;
     const hasSettings=!!(obj.settings||(obj.status&&obj.status.settings));
-    if(!confirm('确认导入备份？\n隔离项约 '+bansN+' 条'+(hasSettings?'\n将同时应用 settings（运行时）':'')+'\n仅导入尚未过期的 bans。')) {
+    if(!confirm('确认导入备份？\n隔离项约 '+bansN+' 条'+(hasSettings?'\n将同时应用 settings（运行时）':'')+'\n仅导入尚未过期的隔离记录。')) {
       setBusy(false); setProgress(0,0); return;
     }
     setProgress(60,100); setMessage('正在导入…');
