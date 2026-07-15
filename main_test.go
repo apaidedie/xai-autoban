@@ -169,7 +169,7 @@ func TestStatusPageUsesManagementKeyFlow(t *testing.T) {
 		"card-list",
 		"rcard",
 		"apiOps",
-		"/api",
+		"apiResource('/data'",
 	} {
 		if !strings.Contains(page, required) {
 			t.Fatalf("page missing %q", required)
@@ -198,6 +198,23 @@ func TestPublicActionRouteRemoved(t *testing.T) {
 	})
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("public action should 404, got %d body=%s", resp.StatusCode, string(resp.Body))
+	}
+}
+
+func TestResourceDataPOSTUnban(t *testing.T) {
+	defaultApp.bans.ClearAll()
+	now := time.Now()
+	defaultApp.bans.Set("r1", ban.Entry{StatusCode: 403, ResetAt: now.Add(time.Hour), Reason: "forbidden"})
+	resp := defaultApp.mgmt.Handle(pluginapi.ManagementRequest{
+		Method: http.MethodPost,
+		Path:   "/v0/resource/plugins/xai-autoban/data",
+		Body:   []byte(`{"op":"unban","auth_id":"r1"}`),
+	})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status=%d body=%s", resp.StatusCode, string(resp.Body))
+	}
+	if defaultApp.bans.Active("r1", now) {
+		t.Fatal("expected unban via resource POST /data")
 	}
 }
 

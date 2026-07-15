@@ -57,23 +57,41 @@ func (h *Handler) Registration() pluginapi.ManagementRegistrationResponse {
 		},
 		Resources: []pluginapi.ResourceRoute{
 			{Path: "/status", Menu: "xAI Autoban", Description: "xAI 隔离/禁用运维台。"},
-			{Path: "/data", Description: "只读状态数据。Query: filter,q,page,page_size。"},
-			{Path: "/api", Description: "运维写操作入口（不经过浏览器 admin key）。Body: {\"op\":\"...\"}."},
-			{Path: "/probe/status", Description: "巡检任务进度。"},
+			// GET = 列表；POST = 运维写操作（与读列表同路径，CPA 一定能路由到）
+			{Path: "/data", Description: "GET 只读列表；POST {\"op\":...} 运维写操作。"},
 		},
 	}
 }
 
+func resourcePathMatch(path, name, suffix string) bool {
+	path = strings.TrimRight(path, "/")
+	suffix = strings.TrimPrefix(suffix, "/")
+	candidates := []string{
+		"/v0/resource/plugins/" + name + "/" + suffix,
+		"/resource/plugins/" + name + "/" + suffix,
+		"/plugins/" + name + "/" + suffix,
+		"/" + name + "/" + suffix,
+	}
+	for _, c := range candidates {
+		if path == c || strings.HasSuffix(path, c) {
+			return true
+		}
+	}
+	// loose: ends with /xai-autoban/data
+	return strings.HasSuffix(path, "/"+name+"/"+suffix)
+}
+
 func (h *Handler) Handle(req pluginapi.ManagementRequest) pluginapi.ManagementResponse {
 	method := strings.ToUpper(strings.TrimSpace(req.Method))
-	resourcePrefix := "/v0/resource/plugins/" + h.Name
 	path := strings.TrimRight(req.Path, "/")
-	// Resource ops: same handlers as management, but reachable without browser admin key
-	// (CPA serves resource under the ops menu; plugin uses server-side management_key for outbound disable).
-	if strings.HasSuffix(path, resourcePrefix+"/api") && (method == http.MethodPost || method == http.MethodPut) {
-		return h.handleResourceAPI(req)
+	// POST /data is the ops write channel (same resource that GET list uses → no 404).
+	if (method == http.MethodPost || method == http.MethodPut) && resourcePathMatch(path, h.Name, "data") {
+		// Distinguish list POST-with-op from accidental empty POST.
+		if len(req.Body) > 0 && (bytesContainsOp(req.Body) || req.Query.Get("op") != "") {
+			return h.handleResourceAPI(req)
+		}
 	}
-	if method == http.MethodGet && strings.HasSuffix(path, resourcePrefix+"/probe/status") {
+	if method == http.MethodGet && (resourcePathMatch(path, h.Name, "probe/status") || resourcePathMatch(path, h.Name, "probe-status")) {
 		st := h.Probe.JobStatus()
 		return jsonResponse(http.StatusOK, map[string]any{
 			"ok": true, "running": st.Running, "job_id": st.JobID,
@@ -248,9 +266,9 @@ func (h *Handler) Handle(req pluginapi.ManagementRequest) pluginapi.ManagementRe
 		}
 		h.Audit.Add("manual", "", "recheck_selected", "ok", fmt.Sprintf("checked=%d ok=%d failed=%d reenabled=%d", res.Checked, res.OK, res.Failed, res.Reenabled), 0)
 		return jsonResponse(http.StatusOK, map[string]any{"ok": true, "result": res, "status": h.CurrentStatus()})
-	case method == http.MethodGet && strings.HasSuffix(path, resourcePrefix+"/data"):
+	case method == http.MethodGet && resourcePathMatch(path, h.Name, "data"):
 		return jsonResponse(http.StatusOK, h.CurrentStatusPaged(req.Query))
-	case method == http.MethodGet && (strings.HasSuffix(path, resourcePrefix+"/status") || strings.HasSuffix(path, ("/plugins/"+h.Name)+"/status")):
+	case method == http.MethodGet && resourcePathMatch(path, h.Name, "status"):
 		return pluginapi.ManagementResponse{
 			StatusCode: http.StatusOK,
 			Headers:    http.Header{"Content-Type": {"text/html; charset=utf-8"}},
@@ -259,6 +277,12 @@ func (h *Handler) Handle(req pluginapi.ManagementRequest) pluginapi.ManagementRe
 	default:
 		return jsonResponse(http.StatusNotFound, map[string]any{"error": "not_found"})
 	}
+}
+
+func bytesContainsOp(raw []byte) bool {
+	// cheap check before full parse
+	s := strings.ToLower(string(raw))
+	return strings.Contains(s, `"op"`) || strings.Contains(s, `"op":`)
 }
 
 // handleResourceAPI dispatches ops-console mutations without requiring browser admin key.
@@ -270,6 +294,9 @@ func (h *Handler) handleResourceAPI(req pluginapi.ManagementRequest) pluginapi.M
 		body = map[string]any{}
 	}
 	op, _ := body["op"].(string)
+	if op == "" {
+		op = req.Query.Get("op")
+	}
 	op = strings.ToLower(strings.TrimSpace(op))
 	delete(body, "op")
 	raw, _ := json.Marshal(body)
@@ -300,6 +327,12 @@ func (h *Handler) handleResourceAPI(req pluginapi.ManagementRequest) pluginapi.M
 		return h.ImportSnapshot(raw)
 	case "backup":
 		return jsonResponse(http.StatusOK, h.BuildBackup())
+	case "probe_status", "probe-status":
+		st := h.Probe.JobStatus()
+		return jsonResponse(http.StatusOK, map[string]any{
+			"ok": true, "running": st.Running, "job_id": st.JobID,
+			"done": st.Done, "total": st.Total, "result": st.Result, "error": st.Error,
+		})
 	default:
 		return jsonResponse(http.StatusBadRequest, map[string]any{"error": "unknown_op", "op": op})
 	}

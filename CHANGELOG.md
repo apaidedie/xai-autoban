@@ -1,10 +1,14 @@
 # Changelog
 
+## 0.5.20 - 2026-07-15
+
+### Fix
+- Ops writes use `POST /v0/resource/plugins/xai-autoban/data` (same path as list GET) to avoid HTTP 404 on unregistered `/api`
+
 ## 0.5.19 - 2026-07-15
 
 ### Fix
-- Ops write actions use resource `POST /api` (no browser admin key) — fixes persistent `invalid admin key`
-- Probe status polled via resource path
+- Ops write actions via resource path (no browser admin key)
 
 ## 0.5.18 - 2026-07-15
 

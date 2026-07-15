@@ -458,13 +458,17 @@ async function apiResource(path, opts){
   const t=await r.text(); let d; try{d=JSON.parse(t)}catch(_){throw new Error(t||('HTTP '+r.status))}
   if(!r.ok) throw new Error(d.error||d.message||('HTTP '+r.status)); return d;
 }
-// Write ops via resource /api — avoids CPA management "invalid admin key".
+// Write ops via POST /data (same resource path as list GET — CPA always routes it).
 async function apiOps(op, extra){
-  return apiResource('/api',{method:'POST',body:Object.assign({op:op}, extra||{})});
+  return apiResource('/data',{method:'POST',body:Object.assign({op:op}, extra||{})});
 }
 async function apiMgmt(method,path,body){
   const p=String(path||'');
-  if(method==='GET'&&p.indexOf('/probe/status')>=0) return apiResource('/probe/status');
+  // probe progress: reuse POST data op if dedicated resource 404s
+  if(method==='GET'&&p.indexOf('/probe/status')>=0){
+    try{ return await apiResource('/probe/status'); }
+    catch(_){ return apiOps('probe_status'); }
+  }
   if(method==='GET'&&p.indexOf('/backup')>=0) return apiOps('backup');
   if((method==='PUT'||method==='POST')&&p.indexOf('/settings')>=0) return apiOps('settings', body||{});
   if(method==='POST'&&p.indexOf('/unban-all')>=0) return apiOps('unban_all', body||{});
