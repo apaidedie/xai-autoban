@@ -136,10 +136,7 @@ func TestStatusPageUsesManagementKeyFlow(t *testing.T) {
 	page := ui.StatusPage(pluginName, pluginVersion)
 	for _, required := range []string{
 		"/v0/management/plugins/xai-autoban",
-		"Authorization",
-		"Bearer",
 		"/v0/resource/plugins/xai-autoban",
-		"readManagementKey",
 		"color-scheme:dark",
 		"运维台",
 		"编辑配置",
@@ -151,7 +148,6 @@ func TestStatusPageUsesManagementKeyFlow(t *testing.T) {
 		"自动执行",
 		"巡检历史",
 		"data-filter",
-		"credentials",
 		"apply-action",
 		"reenable",
 		"健康",
@@ -172,9 +168,16 @@ func TestStatusPageUsesManagementKeyFlow(t *testing.T) {
 		"复检所选",
 		"card-list",
 		"rcard",
+		"credentials:'include'",
 	} {
 		if !strings.Contains(page, required) {
 			t.Fatalf("page missing %q", required)
+		}
+	}
+	// no browser key paste UI
+	for _, banned := range []string{"mgmtKeyInput", "保存密钥", "readManagementKey", "xai_autoban_management_key"} {
+		if strings.Contains(page, banned) {
+			t.Fatalf("page must not contain browser key UI %q", banned)
 		}
 	}
 	if strings.Contains(page, "/action?op=unban") || strings.Contains(page, resourceActionPath()) {
