@@ -1,0 +1,8 @@
+/dist/
+*.so
+*.h
+*.dll
+*.dylib
+*.exe
+.DS_Store
+.superpowers/

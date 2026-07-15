@@ -1,0 +1,143 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version without v prefix (e.g. 0.3.0)"
+        required: true
+        default: "0.3.0"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            cc: gcc
+            ext: so
+          - goos: linux
+            goarch: arm64
+            cc: aarch64-linux-gnu-gcc
+            ext: so
+            packages: gcc-aarch64-linux-gnu
+          - goos: windows
+            goarch: amd64
+            cc: x86_64-w64-mingw32-gcc
+            ext: dll
+            packages: gcc-mingw-w64-x86-64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.x"
+
+      - name: Install native toolchain
+        if: matrix.packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ matrix.packages }}
+
+      - name: Test
+        if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
+        run: go test ./...
+
+      - name: Resolve version
+        id: ver
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build plugin
+        env:
+          CGO_ENABLED: "1"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CC: ${{ matrix.cc }}
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.ver.outputs.version }}"
+          OUT_DIR="dist/${{ matrix.goos }}_${{ matrix.goarch }}"
+          mkdir -p "$OUT_DIR" dist/zips
+          LIB="xai-autoban.${{ matrix.ext }}"
+          go build -buildvcs=false -buildmode=c-shared -trimpath -ldflags="-s -w" -o "$OUT_DIR/$LIB" .
+          (
+            cd "$OUT_DIR"
+            zip -9 "../../dist/zips/xai-autoban_${VERSION}_${{ matrix.goos }}_${{ matrix.goarch }}.zip" "$LIB"
+          )
+
+      - name: Upload platform artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/zips/*.zip
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: plugin-*
+          merge-multiple: true
+
+      - name: Prepare release assets
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          find artifacts -type f -name '*.zip' -exec cp {} release/ \;
+          cd release
+          sha256sum *.zip > checksums.txt
+          ls -la
+
+      - name: Resolve version
+        id: ver
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: ${{ steps.ver.outputs.tag }}
+          generate_release_notes: true
+          body: |
+            CLIProxyAPI 插件商店兼容发布。
+
+            资产命名：`xai-autoban_<version>_<goos>_<goarch>.zip`
+            zip 根目录动态库：`xai-autoban.so` / `xai-autoban.dll`
+
+            当前 CI 发布 Linux/Windows（CPA Docker/常见部署）。macOS 可本地 CGO 构建。
+
+            安装：在 CPA `plugins.store-sources` 添加本仓库 `registry.json`，管理中心插件商店安装。
+          files: |
+            release/*.zip
+            release/checksums.txt
