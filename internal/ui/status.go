@@ -914,7 +914,12 @@ function rowActions(c){
 }
 function probeText(c){
   if(!c.last_probe_at) return '未巡检';
-  return (c.last_probe_ok===true?'巡检成功':'巡检失败')+(c.last_probe_status?(' '+c.last_probe_status):'');
+  if(c.last_probe_ok===true) return '巡检成功'+(c.last_probe_status?(' '+c.last_probe_status):'');
+  // Healthy account + old probe fail: do not look like current status
+  if(!c.banned && !c.disabled){
+    return '上次巡检异常'+(c.last_probe_status?(' '+c.last_probe_status):'')+'（当前可用）';
+  }
+  return '巡检失败'+(c.last_probe_status?(' '+c.last_probe_status):'');
 }
 function midCell(c){
   const parts=[];

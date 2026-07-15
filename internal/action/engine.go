@@ -45,6 +45,8 @@ type Engine struct {
 	onChanged func()
 	// requestMgmtKey is set per Management API request (Bearer from ops console).
 	requestMgmtKey string
+	// onProbeMemo updates last probe result display (wired to probe.Service).
+	onProbeMemo func(authID string, ok bool, status int, errMsg string)
 }
 
 func (e *Engine) SetRequestManagementKey(key string) {
@@ -63,6 +65,22 @@ func (e *Engine) RequestManagementKey() string {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return e.requestMgmtKey
+}
+
+// SetProbeMemoHook lets usage success clear "巡检失败" labels after real traffic OK.
+func (e *Engine) SetProbeMemoHook(fn func(authID string, ok bool, status int, errMsg string)) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.onProbeMemo = fn
+}
+
+func (e *Engine) noteProbeOK(authID string) {
+	e.mu.Lock()
+	fn := e.onProbeMemo
+	e.mu.Unlock()
+	if fn != nil {
+		fn(authID, true, 200, "usage success")
+	}
 }
 
 func NewEngine(cfg config.PluginConfig, bans *ban.State, audit *audit.Log, host host.Client, onChanged func()) *Engine {
@@ -270,11 +288,21 @@ func (e *Engine) ApplyFailure(authID, source string, entry ban.Entry, force bool
 	if action == "" {
 		action = cfg.ActionForStatus(entry.StatusCode)
 	}
-	// Real chat success is ground truth: do not re-isolate from probe/recheck false 403s.
+	// Real chat success is ground truth: do not re-isolate from probe/recheck false positives.
 	if !force && probeLikeSource(source) && e.recentUsageOK(authID) {
 		e.audit.Add(source, authID, action, "skipped_usage_ok",
 			fmt.Sprintf("recent real traffic success within %s; probe path may differ from chat", usageSuccessGrace),
 			entry.StatusCode)
+		return nil
+	}
+	// Probe/recheck 402 / free-usage is often wrong for brand-new or chat-capable accounts.
+	// Only real usage failures should isolate quota; probe just records the result.
+	if !force && probeLikeSource(source) && (entry.StatusCode == http.StatusPaymentRequired ||
+		entry.Classification == classify.QuotaExhausted ||
+		strings.Contains(strings.ToLower(entry.Reason), "free usage") ||
+		strings.Contains(strings.ToLower(entry.Reason), "402")) {
+		e.audit.Add(source, authID, action, "skipped_probe_402",
+			"probe 402/free-usage not isolating; wait for real usage failure", entry.StatusCode)
 		return nil
 	}
 	// Soft 403 / permission-denied: require consecutive failures (xAI often recovers next try).
@@ -582,6 +610,7 @@ func (e *Engine) ApplyUsageSuccess(authID string) error {
 		return nil
 	}
 	e.markUsageOK(authID)
+	e.noteProbeOK(authID)
 	now := time.Now()
 	email := e.lookupEmail(authID)
 	banned := e.bans.Active(authID, now) || (email != "" && e.bans.Active(email, now)) ||

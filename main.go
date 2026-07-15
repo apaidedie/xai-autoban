@@ -22,7 +22,7 @@ import (
 
 const (
 	pluginName    = "xai-autoban"
-	pluginVersion = "0.5.39"
+	pluginVersion = "0.5.40"
 )
 
 type App struct {
@@ -48,6 +48,8 @@ func NewApp(h host.Client) *App {
 	engine := action.NewEngine(cfg, bans, auditLog, h, persister.ScheduleSave)
 	probeSvc := probe.NewService(cfg, h, engine)
 	probeSvc.Attach(bans, auditLog, persister)
+	// Real usage success clears "巡检失败" labels and isolation.
+	engine.SetProbeMemoHook(probeSvc.RememberProbeResult)
 	app := &App{
 		cfg:     cfg,
 		bans:    bans,
