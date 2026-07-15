@@ -718,26 +718,59 @@ func (h *Handler) updateSettings(raw []byte) pluginapi.ManagementResponse {
 		patch = nested
 	}
 	// Drop non-ops keys that may ride along from list payloads / PublicView.
-	for _, drop := range []string{"management_key", "management_key_configured", "management_key_env", "management_url", "disable_via", "state_file", "op", "payload"} {
+	for _, drop := range []string{"management_key", "management_key_configured", "management_key_env", "management_url", "disable_via", "state_file", "op", "payload", "filter", "q", "page", "page_size", "limit", "auth_id", "auth_ids", "action"} {
 		delete(patch, drop)
 	}
-	cfg, warnings := config.MergePatch(h.Cfg(), patch)
-	h.SetCfg(cfg)
-	if h.Persist != nil {
-		h.Persist.SetSettings(cfg.OpsSettingsView())
-		h.Persist.ScheduleSave()
+	patch = config.CoerceOpsPatch(patch)
+	// Keep only known ops keys so stray query junk cannot count as "applied"
+	clean := map[string]any{}
+	allowed := map[string]struct{}{}
+	for _, k := range config.OpsSettingsKeys {
+		allowed[k] = struct{}{}
 	}
-	h.Audit.Add("manual", "", "settings", "ok", "ops settings updated+persisted", 0)
-	note := "已保存并写入 state 文件（默认 xai-autoban-state.json），重载后仍生效。"
+	for k, v := range patch {
+		if _, ok := allowed[k]; ok {
+			clean[k] = v
+		}
+	}
+	if len(clean) == 0 {
+		return jsonResponse(http.StatusBadRequest, map[string]any{
+			"error":   "empty_patch",
+			"message": "未收到任何可应用的配置字段（query/payload 可能被代理丢弃）。请升级到 0.5.32+。",
+		})
+	}
+	before := h.Cfg()
+	cfg, warnings := config.MergePatch(before, clean)
+	h.SetCfg(cfg)
+	// Read back via Cfg() to ensure SetCfg stuck
+	got := h.Cfg()
+	if h.Persist != nil {
+		h.Persist.SetSettings(got.OpsSettingsView())
+		h.Persist.ScheduleSave()
+		_ = h.Persist.SaveNow()
+	}
+	h.Audit.Add("manual", "", "settings", "ok", fmt.Sprintf("ops settings applied=%d", len(clean)), 0)
+	note := "已保存并写入 state 文件（默认 xai-autoban-state.json）"
 	if h.Persist == nil || h.Persist.Path() == "" {
-		note = "已写入运行时；未配置 state_file，重载后可能回落 yaml。"
+		note = "已写入运行时；未配置 state_file"
 	}
 	return jsonResponse(http.StatusOK, map[string]any{
 		"ok":       true,
-		"settings": cfg.PublicView(),
+		"settings": got.PublicView(),
+		"applied":  len(clean),
+		"keys":     mapKeys(clean),
 		"warnings": warnings,
 		"note":     note,
 	})
+}
+
+func mapKeys(m map[string]any) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 type backupSnapshot struct {

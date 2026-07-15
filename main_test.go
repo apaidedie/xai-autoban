@@ -387,19 +387,19 @@ func TestSettingsPersistAndReload(t *testing.T) {
 	}
 }
 
-func TestResourceOpsSettingsViaPayloadGET(t *testing.T) {
-	patch := map[string]any{
-		"probe_interval_seconds": 1234,
-		"auto_execute":           false,
-		"action_on_429":          "ban",
-	}
-	raw, _ := json.Marshal(patch)
-	// base64url no padding
-	enc := strings.TrimRight(base64.RawURLEncoding.EncodeToString(raw), "=")
+func TestResourceOpsSettingsViaFlatQueryGET(t *testing.T) {
+	// Flat query (production path under CPAMP) — string bools/numbers must coerce.
+	defaultApp.SetConfig(config.Default())
 	resp := defaultApp.mgmt.Handle(pluginapi.ManagementRequest{
 		Method: http.MethodGet,
 		Path:   "/v0/resource/plugins/xai-autoban/ops",
-		Query:  map[string][]string{"op": {"settings"}, "payload": {enc}},
+		Query: map[string][]string{
+			"op":                     {"settings"},
+			"probe_interval_seconds": {"777"},
+			"auto_execute":           {"false"},
+			"probe_on_success":       {"none"},
+			"probe_action":           {"disable"},
+		},
 	})
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status=%d body=%s", resp.StatusCode, string(resp.Body))
@@ -409,23 +409,32 @@ func TestResourceOpsSettingsViaPayloadGET(t *testing.T) {
 	if out["ok"] != true {
 		t.Fatalf("expected ok: %s", string(resp.Body))
 	}
+	if n, _ := out["applied"].(float64); int(n) < 3 {
+		t.Fatalf("applied too small: %v body=%s", out["applied"], string(resp.Body))
+	}
 	settings, _ := out["settings"].(map[string]any)
 	if settings == nil {
 		t.Fatalf("missing settings: %s", string(resp.Body))
 	}
-	// yaml number may be float64
-	iv := settings["probe_interval_seconds"]
-	switch n := iv.(type) {
-	case float64:
-		if int(n) != 1234 {
-			t.Fatalf("probe_interval_seconds=%v", iv)
-		}
-	case int:
-		if n != 1234 {
-			t.Fatalf("probe_interval_seconds=%v", iv)
-		}
-	default:
-		t.Fatalf("probe_interval_seconds type %T=%v", iv, iv)
+	if defaultApp.Config().ProbeIntervalSeconds != 777 {
+		t.Fatalf("runtime interval=%d", defaultApp.Config().ProbeIntervalSeconds)
+	}
+	if defaultApp.Config().AutoExecute {
+		t.Fatal("auto_execute should be false")
+	}
+	if defaultApp.Config().ProbeOnSuccess != "none" {
+		t.Fatalf("probe_on_success=%s", defaultApp.Config().ProbeOnSuccess)
+	}
+}
+
+func TestResourceOpsSettingsEmptyPatchRejected(t *testing.T) {
+	resp := defaultApp.mgmt.Handle(pluginapi.ManagementRequest{
+		Method: http.MethodGet,
+		Path:   "/v0/resource/plugins/xai-autoban/ops",
+		Query:  map[string][]string{"op": {"settings"}},
+	})
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("want 400 empty_patch, got %d %s", resp.StatusCode, string(resp.Body))
 	}
 }
 

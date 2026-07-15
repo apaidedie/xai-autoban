@@ -1,0 +1,31 @@
+{
+  "version": 2,
+  "bans": {},
+  "settings": {
+    "action_cooldown_seconds": 60,
+    "action_on_401": "ban",
+    "action_on_402": "ban",
+    "action_on_403": "ban",
+    "action_on_429": "ban",
+    "audit_max_events": 200,
+    "auto_execute": false,
+    "ban_401_seconds": 86400,
+    "ban_402_seconds": 604800,
+    "ban_403_seconds": 86400,
+    "ban_429_fallback_seconds": 1800,
+    "delete_fallback": "disable",
+    "probe_action": "disable",
+    "probe_base_url": "",
+    "probe_concurrency": 3,
+    "probe_enabled": true,
+    "probe_include_disabled": false,
+    "probe_interval_seconds": 777,
+    "probe_mode": "models",
+    "probe_on_success": "none",
+    "probe_only_disabled": false,
+    "probe_path": "/models",
+    "probe_qps": 2,
+    "probe_timeout_seconds": 20,
+    "scheduler_delegate": "round-robin"
+  }
+}

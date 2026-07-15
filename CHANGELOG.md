@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.32 - 2026-07-15
+
+### Fix
+- **配置假成功**：禁止用列表里的 `settings` 当保存成功；settings 改走扁平 query（不再 pack payload）
+- 空 patch 直接 400；query 布尔/数字类型强制转换
+- 客户端校验 auto_execute / probe_action 等多字段；服务端返回 `applied` 数量
+
 ## 0.5.31 - 2026-07-15
 
 ### Fix

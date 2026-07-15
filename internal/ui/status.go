@@ -541,16 +541,17 @@ function b64url(str){
   return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
 }
 function buildGetOpsURL(op, payload){
-  // Flat query for small ops; base64 payload for settings/import or long query.
+  // Prefer flat query (settings ~15 fields). Only pack import / oversized.
+  // settings 用 payload 时部分代理会丢掉长 query → 空 patch 假成功。
   const flat=buildOpsQuery(op, payload);
-  const needPack=op==='settings'||op==='import'||flat.length>1800;
+  const needPack=op==='import'||flat.length>1800;
   if(!needPack) return '/ops?'+flat;
   const rest=Object.assign({}, payload||{});
   delete rest.op;
   const pack=b64url(JSON.stringify(rest));
   return '/ops?op='+encodeURIComponent(op)+'&payload='+encodeURIComponent(pack);
 }
-// 只走 resource。CPAMP 下 POST resource 常 404，优先 GET（含 settings 的 payload=）。
+// 只走 resource。CPAMP 下 POST resource 常 404，优先 GET。
 async function apiOps(op, extra){
   const payload=Object.assign({}, extra||{}, {op:op});
   const meta=opsMeta(op, payload);
@@ -562,8 +563,8 @@ async function apiOps(op, extra){
       const d=await fn();
       if(isListPayload(d)){ errs.push(label+': got_list_not_op'); return null; }
       if(d && d.error && d.ok!==true){ errs.push(label+': '+(d.message||d.error)); return null; }
-      if(isOpsResult(d) || (d && d.settings)) return d;
-      if(d && !isListPayload(d)) return d;
+      // 严禁用 d.settings 判断成功：列表 /data 也有 settings，会导致假成功
+      if(isOpsResult(d)) return d;
       errs.push(label+': unexpected_payload');
       return null;
     }catch(e){ errs.push(label+': '+(e.message||e)); return null; }
@@ -788,20 +789,38 @@ function collectDraft(){
     action_cooldown_seconds: Number($('f_action_cooldown_seconds').value||0)
   };
 }
+function settingsMismatch(draft, got){
+  if(!got) return '无 settings';
+  const checks=[
+    ['probe_interval_seconds', Number(draft.probe_interval_seconds), Number(got.probe_interval_seconds)],
+    ['probe_timeout_seconds', Number(draft.probe_timeout_seconds), Number(got.probe_timeout_seconds)],
+    ['probe_concurrency', Number(draft.probe_concurrency), Number(got.probe_concurrency)],
+    ['auto_execute', !!draft.auto_execute, got.auto_execute!==false],
+    ['probe_on_success', String(draft.probe_on_success||''), String(got.probe_on_success||'')],
+    ['probe_action', String(draft.probe_action||''), String(got.probe_action||'')],
+    ['probe_mode', String(draft.probe_mode||''), String(got.probe_mode||'')],
+    ['probe_enabled', !!draft.probe_enabled, !!got.probe_enabled],
+  ];
+  for(const [k, want, have] of checks){
+    if(want!==have) return k+' 期望 '+want+' 实际 '+have;
+  }
+  return '';
+}
 async function saveSettings(){
   try{
     setMessage('正在保存配置…');
     const draft=collectDraft();
     const res=await apiMgmt('PUT','/settings',draft);
     if(!res || res.ok!==true || !res.settings){
-      throw new Error('保存未确认成功（未返回 ok/settings）。请升级插件并强刷。');
+      throw new Error('保存未确认成功（未返回 ok/settings）。请升级到 0.5.32+ 并强刷。');
     }
-    // Verify a few fields actually stuck
-    if(Number(res.settings.probe_interval_seconds)!==Number(draft.probe_interval_seconds)){
-      throw new Error('保存后间隔未生效（服务端仍为 '+res.settings.probe_interval_seconds+'）。请升级到 0.5.31+。');
+    if(res.applied!=null && Number(res.applied)<1){
+      throw new Error('服务端未应用任何字段（applied=0）。请升级到 0.5.32+。');
     }
+    const bad=settingsMismatch(draft, res.settings);
+    if(bad) throw new Error('保存后校验失败：'+bad+'。请升级到 0.5.32+ 并强刷。');
     renderSettingsSummary(res.settings);
-    setMessage('配置已保存'+(res.note?(' · '+res.note):''));
+    setMessage('配置已保存'+(res.note?(' · '+res.note):'')+(res.applied!=null?(' · '+res.applied+' 项'):''));
     toast('配置已保存','ok');
     closeDrawer();
     await loadData(true);

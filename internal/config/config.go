@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -337,7 +338,55 @@ func (c PluginConfig) OpsSettingsView() map[string]any {
 	return out
 }
 
+// CoerceOpsPatch normalizes query-string types (bool/int/float) for ops settings.
+func CoerceOpsPatch(patch map[string]any) map[string]any {
+	if patch == nil {
+		return map[string]any{}
+	}
+	boolKeys := map[string]struct{}{
+		"probe_enabled": {}, "probe_include_disabled": {}, "probe_only_disabled": {}, "auto_execute": {},
+	}
+	intKeys := map[string]struct{}{
+		"ban_401_seconds": {}, "ban_402_seconds": {}, "ban_403_seconds": {}, "ban_429_fallback_seconds": {},
+		"probe_interval_seconds": {}, "probe_timeout_seconds": {}, "probe_concurrency": {},
+		"action_cooldown_seconds": {}, "audit_max_events": {},
+	}
+	floatKeys := map[string]struct{}{"probe_qps": {}}
+	out := make(map[string]any, len(patch))
+	for k, v := range patch {
+		if v == nil {
+			continue
+		}
+		s, isStr := v.(string)
+		if !isStr {
+			out[k] = v
+			continue
+		}
+		s = strings.TrimSpace(s)
+		if _, ok := boolKeys[k]; ok {
+			lv := strings.ToLower(s)
+			out[k] = lv == "1" || lv == "true" || lv == "yes" || lv == "on"
+			continue
+		}
+		if _, ok := intKeys[k]; ok {
+			if n, err := strconv.Atoi(s); err == nil {
+				out[k] = n
+				continue
+			}
+		}
+		if _, ok := floatKeys[k]; ok {
+			if n, err := strconv.ParseFloat(s, 64); err == nil {
+				out[k] = n
+				continue
+			}
+		}
+		out[k] = s
+	}
+	return out
+}
+
 func MergePatch(base PluginConfig, patch map[string]any) (PluginConfig, []string) {
+	patch = CoerceOpsPatch(patch)
 	raw, _ := yaml.Marshal(base)
 	var asMap map[string]any
 	_ = yaml.Unmarshal(raw, &asMap)
