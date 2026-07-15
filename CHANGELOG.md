@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.41 - 2026-07-15
+
+### Fix
+- **Probe 对齐 CPA 真实 xAI 路径**：OAuth 凭证走 `cli-chat-proxy.grok.com` + Grok CLI 头（`X-XAI-Token-Auth` / client-version），不再误打 `api.x.ai` 导致假 402/403
+- API Key 凭证仍走 `api.x.ai`
+- `/responses` body 改为官方兼容的 string `input`
+
 ## 0.5.40 - 2026-07-15
 
 ### Fix

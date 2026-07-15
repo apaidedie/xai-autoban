@@ -21,7 +21,131 @@ import (
 	"xai-autoban/internal/xai"
 )
 
-const defaultXAIBaseURL = "https://api.x.ai/v1"
+const (
+	defaultXAIBaseURL      = "https://api.x.ai/v1"
+	// cliChatProxyBaseURL matches CLIProxyAPI OAuth default for non-media chat (/responses).
+	cliChatProxyBaseURL    = "https://cli-chat-proxy.grok.com/v1"
+	xaiTokenAuthHeader     = "X-XAI-Token-Auth"
+	xaiTokenAuthValue      = "xai-grok-cli"
+	xaiClientVersionHeader = "x-grok-client-version"
+	xaiClientVersionValue  = "0.2.93"
+	xaiGrokUserAgent       = "xai-grok-workspace/" + xaiClientVersionValue
+)
+
+// authMaterial is resolved from credential JSON the same way CPA xAI executor picks token/base.
+type authMaterial struct {
+	Token    string
+	BaseURL  string
+	AuthKind string // oauth | api_key | ""
+	UsingAPI *bool
+}
+
+func parseAuthMaterial(raw json.RawMessage) (authMaterial, error) {
+	var obj map[string]any
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return authMaterial{}, err
+	}
+	m := authMaterial{}
+	// Token: api_key preferred for official API; access_token for OAuth.
+	for _, key := range []string{"api_key", "apiKey", "access_token", "accessToken", "token"} {
+		if v, ok := obj[key].(string); ok && strings.TrimSpace(v) != "" {
+			m.Token = strings.TrimSpace(v)
+			if key == "api_key" || key == "apiKey" {
+				m.AuthKind = "api_key"
+			}
+			break
+		}
+	}
+	if nested, ok := obj["token"].(map[string]any); ok {
+		if v, ok := nested["access_token"].(string); ok && strings.TrimSpace(v) != "" && m.Token == "" {
+			m.Token = strings.TrimSpace(v)
+		}
+	}
+	if m.Token == "" {
+		return m, fmt.Errorf("access token not found in credential json")
+	}
+	if v, ok := obj["auth_kind"].(string); ok && strings.TrimSpace(v) != "" {
+		m.AuthKind = strings.ToLower(strings.TrimSpace(v))
+	}
+	if m.AuthKind == "" {
+		if _, hasRT := obj["refresh_token"]; hasRT {
+			m.AuthKind = "oauth"
+		} else if t, _ := obj["type"].(string); strings.EqualFold(t, "xai") {
+			// xai oauth files often only have access_token + refresh_token + email
+			if _, hasRT := obj["refresh_token"]; hasRT {
+				m.AuthKind = "oauth"
+			}
+		}
+	}
+	if v, ok := obj["base_url"].(string); ok {
+		m.BaseURL = strings.TrimRight(strings.TrimSpace(v), "/")
+	}
+	if v, ok := obj["using_api"].(bool); ok {
+		m.UsingAPI = &v
+	} else if s, ok := obj["using_api"].(string); ok {
+		switch strings.ToLower(strings.TrimSpace(s)) {
+		case "1", "true", "yes", "on":
+			b := true
+			m.UsingAPI = &b
+		case "0", "false", "no", "off":
+			b := false
+			m.UsingAPI = &b
+		}
+	}
+	return m, nil
+}
+
+// resolveProbeBaseURL mirrors CPA xaiChatBaseURL:
+// OAuth default → cli-chat-proxy; API key / using_api → api.x.ai (or explicit base_url).
+func resolveProbeBaseURL(m authMaterial, cfgBase string) string {
+	if cfgBase = strings.TrimRight(strings.TrimSpace(cfgBase), "/"); cfgBase != "" {
+		// Explicit plugin config wins only when not the bare default for oauth accounts.
+		if !strings.EqualFold(m.AuthKind, "oauth") {
+			return cfgBase
+		}
+		// For oauth, still allow explicit non-api.x.ai override (custom proxy).
+		if !isDefaultAPIBase(cfgBase) {
+			return cfgBase
+		}
+	}
+	if m.BaseURL != "" && !isDefaultAPIBase(m.BaseURL) {
+		return m.BaseURL
+	}
+	usingAPI := true
+	if m.UsingAPI != nil {
+		usingAPI = *m.UsingAPI
+	} else if strings.EqualFold(m.AuthKind, "oauth") {
+		usingAPI = false
+	}
+	if usingAPI {
+		if m.BaseURL != "" {
+			return m.BaseURL
+		}
+		return defaultXAIBaseURL
+	}
+	return cliChatProxyBaseURL
+}
+
+func isDefaultAPIBase(u string) bool {
+	u = strings.TrimRight(strings.ToLower(strings.TrimSpace(u)), "/")
+	return u == "" || u == "https://api.x.ai/v1" || u == "http://api.x.ai/v1"
+}
+
+func applyProbeHeaders(h http.Header, m authMaterial, base string, jsonBody bool) {
+	h.Set("Authorization", "Bearer "+m.Token)
+	h.Set("Accept", "application/json")
+	if jsonBody {
+		h.Set("Content-Type", "application/json")
+	}
+	// OAuth → cli-chat-proxy requires Grok CLI identity headers (same as CPA executor).
+	if strings.EqualFold(strings.TrimRight(base, "/"), strings.TrimRight(cliChatProxyBaseURL, "/")) ||
+		(strings.EqualFold(m.AuthKind, "oauth") && (m.UsingAPI == nil || !*m.UsingAPI)) {
+		h.Set(xaiTokenAuthHeader, xaiTokenAuthValue)
+		h.Set(xaiClientVersionHeader, xaiClientVersionValue)
+		h.Set("User-Agent", xaiGrokUserAgent)
+		h.Set("Connection", "Keep-Alive")
+	}
+}
 
 type CredentialResult struct {
 	At     time.Time `json:"at"`
@@ -500,23 +624,15 @@ func (p *Service) ProbeOne(cfg config.PluginConfig, host host.Client, f pluginap
 // Default (responses / responses_mini): real POST /v1/responses with grok model.
 // models: lightweight GET /models only.
 func (p *Service) ProbeOneWithJSON(cfg config.PluginConfig, host host.Client, authJSON json.RawMessage) (int, string, error) {
-	token, err := ExtractAccessToken(authJSON)
+	mat, err := parseAuthMaterial(authJSON)
 	if err != nil {
 		return 0, "", err
 	}
-	base := strings.TrimRight(cfg.ProbeBaseURL, "/")
-	if base == "" {
-		base = defaultXAIBaseURL
-	}
+	base := resolveProbeBaseURL(mat, cfg.ProbeBaseURL)
 
 	authH := func(jsonBody bool) http.Header {
-		h := http.Header{
-			"Authorization": {"Bearer " + token},
-			"Accept":        {"application/json"},
-		}
-		if jsonBody {
-			h.Set("Content-Type", "application/json")
-		}
+		h := make(http.Header)
+		applyProbeHeaders(h, mat, base, jsonBody)
 		return h
 	}
 
@@ -576,19 +692,13 @@ func (p *Service) ProbeOneWithJSON(cfg config.PluginConfig, host host.Client, au
 		}
 	}
 
-	// Real Responses API request (same family as production grok traffic).
+	// Real Responses API request — same endpoint + auth path as CPA xAI executor.
 	runResponses := func() (int, string, error) {
+		// Prefer simple string input (official API + chat-proxy both accept).
 		body, _ := json.Marshal(map[string]any{
-			"model": model,
-			"input": []map[string]any{
-				{
-					"role": "user",
-					"content": []map[string]string{
-						{"type": "input_text", "text": "Reply with exactly: OK"},
-					},
-				},
-			},
-			"stream": false,
+			"model":             model,
+			"input":             "Reply with exactly: OK",
+			"stream":            false,
 			"max_output_tokens": 16,
 		})
 		return do(pluginapi.HTTPRequest{

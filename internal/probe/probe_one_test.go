@@ -2,6 +2,7 @@ package probe
 
 import (
 	"encoding/json"
+	"net/http"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -125,16 +126,19 @@ func TestProbeOneResponsesFallbackCompletions(t *testing.T) {
 }
 
 func TestProbeOneResponsesRealBody(t *testing.T) {
-	var gotBody string
+	var gotBody, gotURL string
+	var hdr http.Header
 	stub := &host.Stub{
 		Files:  []pluginapi.HostAuthFileEntry{{ID: "a1", AuthIndex: "1", Name: "xai-1", Provider: "xai"}},
-		JSONBy: map[string]json.RawMessage{"1": json.RawMessage(`{"access_token":"tok"}`)},
+		JSONBy: map[string]json.RawMessage{"1": json.RawMessage(`{"access_token":"tok","refresh_token":"rt","auth_kind":"oauth","type":"xai"}`)},
 		HTTPFn: func(req pluginapi.HTTPRequest) (pluginapi.HTTPResponse, error) {
 			if strings.Contains(req.URL, "/models") {
 				return pluginapi.HTTPResponse{StatusCode: 200, Body: []byte(`{"data":[{"id":"grok-4.5"}]}`)}, nil
 			}
 			if strings.Contains(req.URL, "/responses") {
+				gotURL = req.URL
 				gotBody = string(req.Body)
+				hdr = req.Headers
 				return pluginapi.HTTPResponse{StatusCode: 200, Body: []byte(`{"id":"resp_1","output":[]}`)}, nil
 			}
 			t.Fatalf("url %s", req.URL)
@@ -148,7 +152,41 @@ func TestProbeOneResponsesRealBody(t *testing.T) {
 	if err != nil || st != 200 {
 		t.Fatalf("st=%d err=%v", st, err)
 	}
-	if !strings.Contains(gotBody, `"model"`) || !strings.Contains(gotBody, "input") || !strings.Contains(gotBody, "OK") {
+	if !strings.Contains(gotURL, "cli-chat-proxy.grok.com") {
+		t.Fatalf("oauth probe must use chat-proxy, url=%s", gotURL)
+	}
+	if hdr.Get("X-XAI-Token-Auth") != "xai-grok-cli" {
+		t.Fatalf("missing grok cli headers: %v", hdr)
+	}
+	if !strings.Contains(gotBody, `"model"`) || !strings.Contains(gotBody, "OK") {
 		t.Fatalf("expected real responses body, got %s", gotBody)
+	}
+}
+
+func TestProbeOneAPIKeyUsesOfficialAPI(t *testing.T) {
+	var gotURL string
+	stub := &host.Stub{
+		Files:  []pluginapi.HostAuthFileEntry{{ID: "a1", AuthIndex: "1", Name: "xai-1", Provider: "xai"}},
+		JSONBy: map[string]json.RawMessage{"1": json.RawMessage(`{"api_key":"xai-key-1"}`)},
+		HTTPFn: func(req pluginapi.HTTPRequest) (pluginapi.HTTPResponse, error) {
+			if strings.Contains(req.URL, "/models") {
+				return pluginapi.HTTPResponse{StatusCode: 200, Body: []byte(`{"data":[{"id":"grok-4.5"}]}`)}, nil
+			}
+			if strings.Contains(req.URL, "/responses") {
+				gotURL = req.URL
+				return pluginapi.HTTPResponse{StatusCode: 200, Body: []byte(`{"id":"ok"}`)}, nil
+			}
+			return pluginapi.HTTPResponse{}, nil
+		},
+	}
+	p := NewService(config.Default(), stub, nil)
+	cfg := config.Default()
+	cfg.ProbeMode = "responses_mini"
+	st, _, err := p.ProbeOne(cfg, stub, stub.Files[0])
+	if err != nil || st != 200 {
+		t.Fatalf("st=%d err=%v", st, err)
+	}
+	if !strings.Contains(gotURL, "api.x.ai") {
+		t.Fatalf("api_key probe must use api.x.ai, url=%s", gotURL)
 	}
 }
