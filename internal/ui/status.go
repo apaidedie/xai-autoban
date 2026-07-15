@@ -26,11 +26,11 @@ h1{margin:8px 0 0;font-size:26px;font-weight:800;letter-spacing:-.03em}
 .phd{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line)}
 .phd h2{margin:0;font-size:12px;font-weight:800;letter-spacing:.08em;color:#dbe4f3}
 .hint{color:var(--muted);font-size:12px}
-.cfg-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;padding:12px 14px}
-.cfg-card{background:rgba(7,12,22,.55);border:1px solid var(--line);border-radius:14px;padding:12px 14px;min-height:72px}
+.cfg-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;padding:10px 12px}
+.cfg-card{background:rgba(7,12,22,.55);border:1px solid var(--line);border-radius:12px;padding:10px 12px;min-height:56px}
 .cfg-card.accent{border-color:rgba(59,130,246,.45);box-shadow:0 0 0 1px rgba(59,130,246,.12) inset}
-.cfg-card .l{color:var(--muted);font-size:11px;font-weight:800;letter-spacing:.04em}
-.cfg-card .v{margin-top:8px;font-size:15px;font-weight:800;color:#f8fafc}
+.cfg-card .l{color:var(--muted);font-size:10px;font-weight:800;letter-spacing:.04em}
+.cfg-card .v{margin-top:6px;font-size:14px;font-weight:800;color:#f8fafc}
 .cfg-card .v.on{color:var(--green)}.cfg-card .v.off{color:var(--amber)}
 @media(max-width:1100px){.cfg-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:700px){.cfg-grid{grid-template-columns:1fr 1fr}}
@@ -147,39 +147,57 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
 .hist{display:flex;flex-wrap:wrap;gap:8px;padding:12px 14px}
 .hist button{height:auto;min-width:150px;padding:10px;text-align:left}
 .hist b{display:block}.hist small{display:block;color:#93a4c3;margin-top:2px}
-.qcards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:0 0 12px}
-@media(max-width:1000px){.qcards{grid-template-columns:repeat(3,minmax(0,1fr))}}
-@media(max-width:640px){.qcards{grid-template-columns:1fr 1fr}}
 .qcard{
   text-align:left;height:auto;min-height:84px;padding:14px;border-radius:14px;
   border:1px solid var(--line);background:rgba(12,20,34,.92);
   box-shadow:none;transition:border-color .12s ease,background .12s ease
 }
-.fchip.ghost{opacity:.75}
-.list-head{display:flex;align-items:center;padding:8px 14px;border-bottom:1px solid rgba(148,163,184,.08)}
+.fchip.ghost,.code-chip.ghost{opacity:.8}
+.list-head{display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-bottom:1px solid rgba(148,163,184,.08)}
 .card-list{display:flex;flex-direction:column;gap:8px;padding:10px 12px 12px;max-height:58vh;overflow:auto}
 .rcard{
-  display:grid;grid-template-columns:28px minmax(180px,1.4fr) 100px 90px minmax(100px,.9fr) 90px 120px auto;
-  gap:10px;align-items:center;padding:12px 14px;border-radius:14px;border:1px solid var(--line);
+  display:grid;grid-template-columns:32px minmax(200px,1.5fr) minmax(160px,1fr) auto;
+  gap:12px 14px;align-items:center;padding:12px 14px;border-radius:14px;border:1px solid var(--line);
   background:rgba(8,14,26,.72)
 }
 .rcard:hover{border-color:rgba(96,165,250,.28);background:rgba(15,23,42,.88)}
-.rcard .acc .t{font-weight:750;color:#fff;font-size:13px;line-height:1.3}
+.rcard .acc .t{font-weight:750;color:#fff;font-size:13px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rcard .acc .id{margin-top:4px;font-family:var(--mono);font-size:11px;color:#93a4c3;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rcard .mid{display:flex;flex-direction:column;gap:6px;min-width:0}
+.rcard .mid-top{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.rcard .mid-sub{display:flex;flex-wrap:wrap;align-items:center;gap:8px;color:var(--muted);font-size:12px;line-height:1.35}
+.rcard .mid-sub .sep{opacity:.35}
+.rcard .ops{justify-self:end}
 .rcard .muted{color:var(--muted);font-size:12px}
-@media(max-width:1100px){
-  .rcard{grid-template-columns:28px 1fr auto;grid-template-areas:"ck acc ops" "ck meta ops";row-gap:8px}
-  .rcard .ck{grid-area:ck}.rcard .acc{grid-area:acc}.rcard .ops{grid-area:ops}
-  .rcard .meta{grid-area:meta;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-  .rcard .hide-sm{display:none}
+@media(max-width:900px){
+  .rcard{grid-template-columns:28px 1fr;grid-template-areas:"ck acc" "ck mid" "ops ops";row-gap:8px}
+  .rcard .ck{grid-area:ck}.rcard .acc{grid-area:acc}.rcard .mid{grid-area:mid}.rcard .ops{grid-area:ops;justify-self:stretch}
+  .rcard .ops .acts{justify-content:flex-start}
 }
+.qcards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:0 0 10px}
+.code-strip{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}
+.code-chip{
+  height:36px;padding:0 14px;border-radius:999px;border:1px solid var(--line);
+  background:rgba(12,20,34,.9);color:var(--muted);font-weight:750;font-size:12px;
+  display:inline-flex;align-items:center;gap:8px;cursor:pointer
+}
+.code-chip b{font-size:14px;font-variant-numeric:tabular-nums;color:var(--text)}
+.code-chip:hover{border-color:rgba(148,163,184,.35);color:var(--text)}
+.code-chip.active,.code-chip.on{border-color:rgba(34,211,238,.5);background:rgba(8,47,73,.35);color:#93c5fd}
+.code-chip.s401.active{border-color:rgba(59,130,246,.55);color:#93c5fd}
+.code-chip.s402.active{border-color:rgba(251,191,36,.55);color:#fcd34d}
+.code-chip.s403.active{border-color:rgba(251,113,133,.55);color:#fda4af}
+.code-chip.s429.active{border-color:rgba(167,139,250,.55);color:#ddd6fe}
 .qcard:hover{border-color:rgba(34,211,238,.35);background:rgba(15,23,42,.95)}
 .qcard:focus-visible{outline:2px solid rgba(34,211,238,.65);outline-offset:2px}
 .qcard .ql{color:var(--muted);font-size:11px;font-weight:800;letter-spacing:.06em}
 .qcard .qn{margin-top:6px;font-size:22px;font-weight:850;font-variant-numeric:tabular-nums;line-height:1}
-.qcard .qs{margin-top:6px;color:var(--muted);font-size:11px;font-weight:650;line-height:1.3}
+.qcard .qs{margin-top:6px;color:var(--muted);font-size:11px;font-weight:650;line-height:1.3;min-height:1.3em}
 .qcard.ok .qn{color:var(--green)}.qcard.warn .qn{color:var(--amber)}.qcard.bad .qn{color:var(--red)}.qcard.info .qn{color:var(--cyan)}
-@media(max-width:900px){.qcards{grid-template-columns:1fr 1fr}}
+.qcard.disabled-card .qn{color:#cbd5e1}
+.row-action.primary{background:linear-gradient(180deg,#3b82f6,#2563eb);border-color:#1d4ed8;color:#fff}
+.row-action.primary:hover{background:linear-gradient(180deg,#60a5fa,#3b82f6);border-color:#2563eb;color:#fff}
+@media(max-width:1100px){.qcards{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:700px){h1{font-size:22px}.qcards{grid-template-columns:1fr 1fr}}
 @media (prefers-reduced-motion:reduce){.qcard{transition:none}}
 </style>
@@ -217,39 +235,35 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
   </section>
 
   <div class="qcards" id="overviewCards">
-    <button type="button" class="qcard info" data-jump="all" data-filter="all" title="当前扫描到的 xAI 认证文件总数（含 0）">
+    <button type="button" class="qcard info" data-jump="all" data-filter="all" title="当前扫描到的 xAI 认证文件总数">
       <div class="ql">全部凭证</div><div class="qn" id="ov_all">0</div><div class="qs">认证文件</div>
     </button>
     <button type="button" class="qcard ok" data-jump="healthy" data-filter="healthy" title="未隔离且未禁用，可参与调度">
       <div class="ql">健康</div><div class="qn" id="ov_healthy">0</div><div class="qs">可调度</div>
     </button>
-    <button type="button" class="qcard warn" data-jump="banned" data-filter="banned" title="内存隔离账本中的凭证（401/402/403/429 等）">
-      <div class="ql">当前隔离</div><div class="qn" id="ov_banned">0</div><div class="qs" id="ov_banned_sub">含 401/402/403/429</div>
+    <button type="button" class="qcard warn" data-jump="banned" data-filter="banned" title="内存隔离账本中的凭证">
+      <div class="ql">当前隔离</div><div class="qn" id="ov_banned">0</div><div class="qs" id="ov_banned_sub">调度已跳过</div>
     </button>
-    <button type="button" class="qcard" data-jump="disabled" data-filter="disabled" title="CPA 凭证 disabled=true">
+    <button type="button" class="qcard disabled-card" data-jump="disabled" data-filter="disabled" title="CPA 凭证 disabled=true">
       <div class="ql">已禁用</div><div class="qn" id="c_disabled">0</div><div class="qs">凭证停用</div>
     </button>
-    <button type="button" class="qcard" data-jump="401" data-filter="401" title="未授权 / Token 失效 / 需重新授权">
-      <div class="ql">401 重授权</div><div class="qn" id="ov_401">0</div><div class="qs">需刷新或重登</div>
+    <button type="button" class="qcard info" data-jump="probe" id="ov_probe_card" title="点击立即巡检全部 xAI 凭证">
+      <div class="ql">上次巡检</div><div class="qn" id="ov_probe">—</div><div class="qs" id="ov_probe_sub">点击立即巡检</div>
     </button>
-    <button type="button" class="qcard" data-jump="402" data-filter="402" title="额度不足 / free-usage-exhausted（需在线探测后才准）">
-      <div class="ql">402 无额度</div><div class="qn" id="ov_402">0</div><div class="qs">额度用尽</div>
-    </button>
-    <button type="button" class="qcard" data-jump="403" data-filter="403" title="权限/风控拒绝（需在线探测）">
-      <div class="ql">403</div><div class="qn" id="ov_403">0</div><div class="qs">禁止访问</div>
-    </button>
-    <button type="button" class="qcard" data-jump="429" data-filter="429" title="临时限流（需在线探测）">
-      <div class="ql">429</div><div class="qn" id="ov_429">0</div><div class="qs">限流</div>
-    </button>
-    <button type="button" class="qcard" data-jump="probe" id="ov_probe_card" title="点击立即巡检全部 xAI 凭证">
-      <div class="ql">上次巡检</div><div class="qn" id="ov_probe">0</div><div class="qs" id="ov_probe_sub">点击立即巡检</div>
-    </button>
+  </div>
+  <div class="code-strip" id="codeStrip" role="toolbar" aria-label="状态码筛选">
+    <button type="button" class="code-chip s401" data-filter="401" title="未授权 / Token 失效 / 需重授权">401 重授权 <b id="ov_401">0</b></button>
+    <button type="button" class="code-chip s402" data-filter="402" title="额度不足（需在线探测）">402 无额度 <b id="ov_402">0</b></button>
+    <button type="button" class="code-chip s403" data-filter="403" title="权限/风控拒绝">403 禁止 <b id="ov_403">0</b></button>
+    <button type="button" class="code-chip s429" data-filter="429" title="临时限流">429 限流 <b id="ov_429">0</b></button>
+    <button type="button" class="code-chip ghost" id="clearFilterBtn" data-filter="all">清除筛选</button>
   </div>
   <div id="statusChips" hidden aria-hidden="true">
     <button type="button" data-filter="all"><b id="c_all">-</b></button>
     <button type="button" data-filter="healthy"><b id="c_healthy">-</b></button>
     <button type="button" data-filter="banned"><b id="c_banned">-</b></button>
     <b id="c_401">-</b><b id="c_402">-</b><b id="c_403">-</b><b id="c_429">-</b>
+    <span id="f_401">0</span><span id="f_402">0</span><span id="f_403">0</span><span id="f_429">0</span>
   </div>
   <span id="total" hidden>0</span>
   <span id="count402" hidden>0</span>
@@ -259,21 +273,14 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
   <section class="panel">
     <div class="phd">
       <div>
-        <h2>巡检结果</h2>
-        <div class="hint">点上方指标卡筛选；401–429 用下方状态标签细化</div>
+        <h2>凭证列表</h2>
+        <div class="hint">主指标筛选主状态；色条筛选 401–429</div>
       </div>
       <div class="hint" id="resultCount">0 条</div>
     </div>
 
     <div class="toolbar">
-      <div class="filters" id="listFilters" role="toolbar" aria-label="状态细化">
-        <button type="button" class="fchip" data-filter="401">401 <span id="f_401">0</span></button>
-        <button type="button" class="fchip" data-filter="402">402 <span id="f_402">0</span></button>
-        <button type="button" class="fchip" data-filter="403">403 <span id="f_403">0</span></button>
-        <button type="button" class="fchip" data-filter="429">429 <span id="f_429">0</span></button>
-        <button type="button" class="fchip ghost" id="clearFilterBtn" data-filter="all">清除筛选</button>
-      </div>
-      <div class="tools">
+      <div class="tools" style="width:100%">
         <input id="search" type="search" placeholder="搜索账号 / Auth ID / 原因" autocomplete="off">
         <button class="bp" id="recheckSelected" type="button" onclick="recheckSelected()" disabled>复检所选 (0)</button>
         <button class="bs" id="btnRecheck429" type="button" onclick="recheck429()" disabled>复检 429</button>
@@ -522,7 +529,7 @@ function counts(){const o={401:0,402:0,403:0,429:0}; for(const b of state.bans) 
 function paintChips(){
   const c=state.counts||{};
   const set=(id,v)=>{const el=$(id); if(el) el.textContent=String(v??0)};
-  set('c_all',c.all); set('c_healthy',c.healthy); set('c_banned',c.banned);
+  set('c_all',c.all??0); set('c_healthy',c.healthy??0); set('c_banned',c.banned??0);
   set('c_401',c['401']??0); set('c_402',c['402']??0); set('c_403',c['403']??0); set('c_429',c['429']??0); set('c_disabled',c.disabled??0);
   set('f_401',c['401']??0); set('f_402',c['402']??0); set('f_403',c['403']??0); set('f_429',c['429']??0);
   set('ov_all',c.all??0); set('ov_healthy',c.healthy??0); set('ov_banned',c.banned??0);
@@ -534,10 +541,9 @@ function paintChips(){
     if(c['402']) parts.push('402 '+c['402']);
     if(c['403']) parts.push('403 '+c['403']);
     if(c['429']) parts.push('429 '+c['429']);
-    if(c.disabled) parts.push('禁用 '+c.disabled);
-    sub.textContent=parts.length?parts.join(' · '):'点击查看隔离列表';
+    sub.textContent=parts.length?parts.join(' · '):'调度已跳过';
   }
-  document.querySelectorAll('#overviewCards [data-filter], #listFilters [data-filter], #statusChips [data-filter]').forEach(btn=>{
+  document.querySelectorAll('#overviewCards [data-filter], #codeStrip [data-filter], #statusChips [data-filter]').forEach(btn=>{
     const on=btn.dataset.filter===state.filter;
     btn.classList.toggle('active', on);
     btn.classList.toggle('on', on);
@@ -567,8 +573,8 @@ function jumpOverview(kind){
     return;
   }
   setFilter(kind||'all', false);
-  const table=document.querySelector('.table-wrap');
-  if(table) table.scrollIntoView({behavior:'smooth',block:'start'});
+  const list=document.querySelector('.card-list')||document.querySelector('.panel');
+  if(list) list.scrollIntoView({behavior:'smooth',block:'start'});
 }
 function setFilter(f, toggle){
   if(toggle && state.filter===f) state.filter='all'; else state.filter=f||'all';
@@ -717,25 +723,43 @@ function statusBadge(c){
   if(c.disabled&&c.banned) html+=' <span class="pill">仍隔离</span>';
   return html;
 }
+function needsReauth(c){
+  return !!(c.needs_refresh||c.token_expired||c.classification==='reauth'||c.status_code===401||c.status==='401');
+}
 function rowActions(c){
   const id=esc(c.auth_id);
   const dis=state.mgmtKey?'':'disabled';
   const btns=[];
-  if(c.banned) btns.push('<button class="row-action" data-act="unban" data-id="'+id+'" '+dis+'>解禁</button>');
-  if(!c.banned) btns.push('<button class="row-action" data-act="ban" data-id="'+id+'" '+dis+'>隔离</button>');
-  if(!c.disabled) btns.push('<button class="row-action danger" data-act="disable" data-id="'+id+'" '+dis+'>禁用</button>');
-  if(c.disabled) btns.push('<button class="row-action" data-act="reenable" data-id="'+id+'" '+dis+'>启用</button>');
-  if(c.needs_refresh||c.token_expired||c.classification==='reauth'||c.status_code===401){
-    btns.push('<button class="row-action" data-act="reauth" data-id="'+id+'" '+dis+'>重授权</button>');
+  if(needsReauth(c)){
+    btns.push('<button class="row-action primary" data-act="reauth" data-id="'+id+'" '+dis+'>重授权</button>');
   }
+  if(c.banned) btns.push('<button class="row-action" data-act="unban" data-id="'+id+'" '+dis+'>解禁</button>');
+  else if(!needsReauth(c)) btns.push('<button class="row-action" data-act="ban" data-id="'+id+'" '+dis+'>隔离</button>');
+  if(c.disabled) btns.push('<button class="row-action" data-act="reenable" data-id="'+id+'" '+dis+'>启用</button>');
+  else btns.push('<button class="row-action danger" data-act="disable" data-id="'+id+'" '+dis+'>禁用</button>');
+  if(!c.banned&&needsReauth(c)) btns.push('<button class="row-action" data-act="ban" data-id="'+id+'" '+dis+'>隔离</button>');
   return '<div class="acts">'+btns.join('')+'</div>';
 }
-function probeCell(c){
-  if(!c.last_probe_at) return '<span class="pill">未巡检</span>';
-  const ok=c.last_probe_ok===true;
-  const mark=ok?'成功':'失败';
-  const code=c.last_probe_status?(' · '+c.last_probe_status):'';
-  return '<span class="pill">'+(ok?'成功':'失败')+(c.last_probe_status?(' '+c.last_probe_status):'')+'</span><span class="sub2">'+esc(formatDate(c.last_probe_at))+'</span>';
+function probeText(c){
+  if(!c.last_probe_at) return '未巡检';
+  return (c.last_probe_ok===true?'巡检成功':'巡检失败')+(c.last_probe_status?(' '+c.last_probe_status):'');
+}
+function midCell(c){
+  const parts=[];
+  parts.push(statusBadge(c));
+  if(c.token_expired) parts.push('<span class="pill">Token 过期</span>');
+  else if(c.needs_refresh&&!c.banned) parts.push('<span class="pill">待刷新</span>');
+  if(c.banned&&c.action) parts.push('<span class="pill">'+esc(labelAction(c.action))+'</span>');
+  const reason=reasonLabel(c.reason);
+  const cls=classLabel(c.classification);
+  const detail=[];
+  if(cls) detail.push(esc(cls));
+  if(reason&&reason!=='-'&&reason!==cls) detail.push(esc(reason));
+  if(c.banned&&c.remaining_seconds!=null) detail.push('<span class="remain">剩余 '+esc(formatRemaining(c.remaining_seconds))+'</span>');
+  if(c.last_probe_at||!c.banned) detail.push(esc(probeText(c)));
+  return '<div class="mid"><div class="mid-top">'+parts.join('')+'</div>'+
+    (detail.length?'<div class="mid-sub">'+detail.join('<span class="sep">·</span>')+'</div>':'')+
+    '</div>';
 }
 function render(){
   const list=filtered();
@@ -747,19 +771,10 @@ function render(){
     const name=c.name||c.label||'-';
     const email=c.email||'';
     const title=email||name;
-    const remain=c.banned?formatRemaining(c.remaining_seconds):'-';
-    const actLabel=labelAction(c.action||(c.banned?'ban':'-'));
-    const reason=reasonLabel(c.reason)||'-';
-    const cls=classLabel(c.classification);
-    const reasonCell=cls?(cls+(reason&&reason!=='-'?' · '+reason:'')):reason;
     return '<div class="rcard">'+
       '<div class="ck"><input type="checkbox" data-id="'+esc(c.auth_id)+'" '+(state.selected.has(c.auth_id)?'checked':'')+'></div>'+
       '<div class="acc"><div class="t" title="'+esc(title)+'">'+esc(title)+'</div><div class="id" title="'+esc(c.auth_id)+'">'+esc(c.auth_id)+'</div></div>'+
-      '<div class="meta">'+statusBadge(c)+'</div>'+
-      '<div class="meta hide-sm"><span class="pill">'+esc(actLabel)+'</span></div>'+
-      '<div class="meta muted hide-sm" title="'+esc(c.classification||c.reason||'')+'">'+esc(reasonCell)+'</div>'+
-      '<div class="meta remain hide-sm">'+esc(remain)+'</div>'+
-      '<div class="meta hide-sm">'+probeCell(c)+'</div>'+
+      midCell(c)+
       '<div class="ops">'+rowActions(c)+'</div>'+
     '</div>';
   }).join('');
@@ -943,7 +958,6 @@ if($('toggleKeyBtn')) $('toggleKeyBtn').onclick=()=>{
   if(!input.hidden) input.focus();
 };
 if($('clearFilterBtn')) $('clearFilterBtn').onclick=()=>{state.filter='all'; state.query=''; state.page.page=1; if($('search')) $('search').value=''; paintChips(); loadData(true); setMessage('已清除筛选');};
-// clearFilterBtn also has data-filter=all; ensure listFilters handler works
 $('search').oninput=e=>{
   state.query=e.target.value.trim();
   state.page.page=1;
@@ -955,7 +969,10 @@ if($('prevPageBtn')) $('prevPageBtn').onclick=()=>{ if((state.page.page||1)>1){ 
 if($('nextPageBtn')) $('nextPageBtn').onclick=()=>{ if((state.page.page||1)<(state.page.pages||1)){ state.page.page++; loadData(true);} };
 $('autoRefresh').onchange=()=>{if(state.timer) clearInterval(state.timer); state.timer=$('autoRefresh').checked?setInterval(()=>loadData(true),30000):null;};
 document.querySelectorAll('#statusChips [data-filter]').forEach(btn=>btn.onclick=()=>setFilter(btn.dataset.filter,true));
-document.querySelectorAll('#listFilters [data-filter]').forEach(btn=>btn.onclick=()=>setFilter(btn.dataset.filter,false));
+document.querySelectorAll('#codeStrip [data-filter]').forEach(btn=>{
+  if(btn.id==='clearFilterBtn') return;
+  btn.onclick=()=>setFilter(btn.dataset.filter,false);
+});
 document.querySelectorAll('#overviewCards [data-jump]').forEach(btn=>btn.onclick=()=>jumpOverview(btn.dataset.jump));
 if($('toggleHistBtn')) $('toggleHistBtn').onclick=()=>{
   const wrap=$('histWrap'); const btn=$('toggleHistBtn'); if(!wrap||!btn) return;

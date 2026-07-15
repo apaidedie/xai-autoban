@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.10 - 2026-07-15
+
+### UI
+- Ops console layout: 5 primary metric cards + 401–429 code chip strip
+- Adaptive credential rows (no empty action/reason columns)
+- Reauth as primary action for 401 / token-expired accounts
+- Compact config summary strip
+
 ## 0.5.9 - 2026-07-15
 
 ### Fixes
