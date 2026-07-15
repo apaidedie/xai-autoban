@@ -155,6 +155,12 @@ func (h *Handler) Handle(req pluginapi.ManagementRequest) pluginapi.ManagementRe
 		if body.AuthID == "" {
 			body.AuthID = req.Query.Get("auth_id")
 		}
+		if body.AuthID == "" && req.Headers != nil {
+			body.AuthID = req.Headers.Get("X-XAI-Autoban-Auth-Id")
+			if body.AuthID == "" {
+				body.AuthID = req.Headers.Get("X-Plugin-Auth-Id")
+			}
+		}
 		if strings.TrimSpace(body.AuthID) == "" {
 			return jsonResponse(http.StatusBadRequest, map[string]any{"error": "missing_auth_id"})
 		}
@@ -208,6 +214,18 @@ func (h *Handler) Handle(req pluginapi.ManagementRequest) pluginapi.ManagementRe
 			Force  bool   `json:"force"`
 		}
 		_ = json.Unmarshal(req.Body, &body)
+		if body.AuthID == "" {
+			body.AuthID = req.Query.Get("auth_id")
+		}
+		if body.Action == "" {
+			body.Action = req.Query.Get("action")
+		}
+		if body.AuthID == "" && req.Headers != nil {
+			body.AuthID = firstHeader(req.Headers, "X-XAI-Autoban-Auth-Id", "X-Plugin-Auth-Id")
+		}
+		if body.Action == "" && req.Headers != nil {
+			body.Action = firstHeader(req.Headers, "X-XAI-Autoban-Action", "X-Plugin-Action")
+		}
 		if strings.TrimSpace(body.AuthID) == "" || strings.TrimSpace(body.Action) == "" {
 			return jsonResponse(http.StatusBadRequest, map[string]any{"error": "missing_auth_id_or_action"})
 		}
@@ -253,6 +271,12 @@ func (h *Handler) Handle(req pluginapi.ManagementRequest) pluginapi.ManagementRe
 			Force  bool   `json:"force"`
 		}
 		_ = json.Unmarshal(req.Body, &body)
+		if body.AuthID == "" {
+			body.AuthID = req.Query.Get("auth_id")
+		}
+		if body.AuthID == "" {
+			body.AuthID = firstHeader(req.Headers, "X-XAI-Autoban-Auth-Id", "X-Plugin-Auth-Id")
+		}
 		if strings.TrimSpace(body.AuthID) == "" {
 			return jsonResponse(http.StatusBadRequest, map[string]any{"error": "missing_auth_id"})
 		}
@@ -282,20 +306,12 @@ func (h *Handler) Handle(req pluginapi.ManagementRequest) pluginapi.ManagementRe
 		h.Audit.Add("manual", "", "recheck429", "ok", fmt.Sprintf("checked=%d unbanned=%d relocked=%d", res.Checked, res.Unbanned, res.Relocked), 0)
 		return jsonResponse(http.StatusOK, map[string]any{"ok": true, "result": res, "status": h.CurrentStatus()})
 	case method == http.MethodPost && strings.HasSuffix(path, ("/plugins/"+h.Name)+"/recheck-selected"):
-		var body struct {
-			AuthIDs      []string `json:"auth_ids"`
-			ReenableOnOK *bool    `json:"reenable_on_ok"`
-		}
-		_ = json.Unmarshal(req.Body, &body)
-		reenable := true
-		if body.ReenableOnOK != nil {
-			reenable = *body.ReenableOnOK
-		}
+		authIDs, reenable := parseRecheckSelected(req)
 		if k := extractBearer(req.Headers); k != "" {
 			h.Engine.SetRequestManagementKey(k)
 			defer h.Engine.ClearRequestManagementKey()
 		}
-		res, err := h.Probe.RecheckSelected(body.AuthIDs, reenable)
+		res, err := h.Probe.RecheckSelected(authIDs, reenable)
 		if err != nil {
 			code := http.StatusBadGateway
 			if strings.Contains(err.Error(), "missing_auth_ids") {
@@ -322,21 +338,129 @@ func resolveOpsKey(cfg config.PluginConfig) string {
 	return cfg.ResolveManagementKey()
 }
 
+func firstHeader(h http.Header, keys ...string) string {
+	if h == nil {
+		return ""
+	}
+	for _, k := range keys {
+		if v := strings.TrimSpace(h.Get(k)); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// parseRecheckSelected accepts auth_ids as JSON array, JSON string, comma list, or single auth_id.
+func parseRecheckSelected(req pluginapi.ManagementRequest) (ids []string, reenable bool) {
+	reenable = true
+	var body struct {
+		AuthIDs      []string `json:"auth_ids"`
+		AuthID       string   `json:"auth_id"`
+		ReenableOnOK *bool    `json:"reenable_on_ok"`
+	}
+	_ = json.Unmarshal(req.Body, &body)
+	ids = append(ids, body.AuthIDs...)
+	if body.AuthID != "" {
+		ids = append(ids, body.AuthID)
+	}
+	// Body may have auth_ids as a JSON-encoded string (from GET query merge).
+	var raw map[string]any
+	if json.Unmarshal(req.Body, &raw) == nil {
+		if s, ok := raw["auth_ids"].(string); ok && strings.TrimSpace(s) != "" {
+			ids = append(ids, splitAuthIDs(s)...)
+		}
+		if s, ok := raw["auth_id"].(string); ok && strings.TrimSpace(s) != "" {
+			ids = append(ids, strings.TrimSpace(s))
+		}
+		if b, ok := raw["reenable_on_ok"].(bool); ok {
+			reenable = b
+		}
+		if s, ok := raw["reenable_on_ok"].(string); ok {
+			lv := strings.ToLower(strings.TrimSpace(s))
+			reenable = lv == "1" || lv == "true" || lv == "yes"
+		}
+	}
+	if req.Query != nil {
+		if s := strings.TrimSpace(req.Query.Get("auth_ids")); s != "" {
+			ids = append(ids, splitAuthIDs(s)...)
+		}
+		if s := strings.TrimSpace(req.Query.Get("auth_id")); s != "" {
+			ids = append(ids, s)
+		}
+		if s := strings.TrimSpace(req.Query.Get("reenable_on_ok")); s != "" {
+			lv := strings.ToLower(s)
+			reenable = lv == "1" || lv == "true" || lv == "yes"
+		}
+	}
+	if req.Headers != nil {
+		if s := firstHeader(req.Headers, "X-XAI-Autoban-Auth-Ids", "X-Plugin-Auth-Ids"); s != "" {
+			ids = append(ids, splitAuthIDs(s)...)
+		}
+		if s := firstHeader(req.Headers, "X-XAI-Autoban-Auth-Id", "X-Plugin-Auth-Id"); s != "" {
+			ids = append(ids, s)
+		}
+	}
+	if body.ReenableOnOK != nil {
+		reenable = *body.ReenableOnOK
+	}
+	// dedupe
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out, reenable
+}
+
+func splitAuthIDs(s string) []string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil
+	}
+	if strings.HasPrefix(s, "[") {
+		var arr []string
+		if json.Unmarshal([]byte(s), &arr) == nil {
+			return arr
+		}
+		var anyArr []any
+		if json.Unmarshal([]byte(s), &anyArr) == nil {
+			out := make([]string, 0, len(anyArr))
+			for _, v := range anyArr {
+				out = append(out, strings.TrimSpace(fmt.Sprint(v)))
+			}
+			return out
+		}
+	}
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 func bytesContainsOp(raw []byte) bool {
 	// cheap check before full parse
 	s := strings.ToLower(string(raw))
 	return strings.Contains(s, `"op"`) || strings.Contains(s, `"op":`)
 }
 
-// handleResourceAPI dispatches ops-console mutations without requiring browser admin key.
-// Body: {"op":"unban|unban_all|settings|probe|apply|reauth|recheck429|recheck_selected|import|backup", ...}
-func (h *Handler) handleResourceAPI(req pluginapi.ManagementRequest) pluginapi.ManagementResponse {
-	var body map[string]any
-	_ = json.Unmarshal(req.Body, &body)
+// mergeOpsParams folds query + custom headers into body and normalizes types for GET query ops.
+func mergeOpsParams(body map[string]any, req pluginapi.ManagementRequest) map[string]any {
 	if body == nil {
 		body = map[string]any{}
 	}
-	// Merge query params (GET ?op=unban&auth_id=...) for CPA builds that only route resource GET.
 	if req.Query != nil {
 		for k, vs := range req.Query {
 			if len(vs) == 0 {
@@ -347,6 +471,68 @@ func (h *Handler) handleResourceAPI(req pluginapi.ManagementRequest) pluginapi.M
 			}
 		}
 	}
+	if req.Headers != nil {
+		headerMap := map[string]string{
+			"X-XAI-Autoban-Auth-Id":  "auth_id",
+			"X-XAI-Autoban-Auth-Ids": "auth_ids",
+			"X-XAI-Autoban-Action":   "action",
+			"X-Plugin-Auth-Id":       "auth_id",
+			"X-Plugin-Auth-Ids":      "auth_ids",
+			"X-Plugin-Action":        "action",
+		}
+		for hk, bk := range headerMap {
+			if v := strings.TrimSpace(req.Headers.Get(hk)); v != "" {
+				if _, exists := body[bk]; !exists || body[bk] == "" || body[bk] == nil {
+					body[bk] = v
+				}
+			}
+		}
+	}
+	// Query/header often stringify JSON arrays and bools.
+	if s, ok := body["auth_ids"].(string); ok {
+		s = strings.TrimSpace(s)
+		if s != "" {
+			var arr []any
+			if json.Unmarshal([]byte(s), &arr) == nil {
+				body["auth_ids"] = arr
+			} else {
+				// comma-separated fallback
+				parts := strings.Split(s, ",")
+				out := make([]any, 0, len(parts))
+				for _, p := range parts {
+					p = strings.TrimSpace(p)
+					if p != "" {
+						out = append(out, p)
+					}
+				}
+				if len(out) > 0 {
+					body["auth_ids"] = out
+				}
+			}
+		}
+	}
+	// Single auth_id → auth_ids when bulk ops only look at the array.
+	if _, has := body["auth_ids"]; !has {
+		if id, ok := body["auth_id"].(string); ok && strings.TrimSpace(id) != "" {
+			// keep auth_id; handlers that need array can still use auth_id
+		}
+	}
+	for _, k := range []string{"force", "wait", "reenable_on_ok"} {
+		switch v := body[k].(type) {
+		case string:
+			lv := strings.ToLower(strings.TrimSpace(v))
+			body[k] = lv == "1" || lv == "true" || lv == "yes"
+		}
+	}
+	return body
+}
+
+// handleResourceAPI dispatches ops-console mutations without requiring browser admin key.
+// Body: {"op":"unban|unban_all|settings|probe|apply|reauth|recheck429|recheck_selected|import|backup", ...}
+func (h *Handler) handleResourceAPI(req pluginapi.ManagementRequest) pluginapi.ManagementResponse {
+	var body map[string]any
+	_ = json.Unmarshal(req.Body, &body)
+	body = mergeOpsParams(body, req)
 	op, _ := body["op"].(string)
 	if strings.TrimSpace(op) == "" {
 		op = opHintFromRequest(req)
@@ -361,23 +547,38 @@ func (h *Handler) handleResourceAPI(req pluginapi.ManagementRequest) pluginapi.M
 	}
 	raw, _ := json.Marshal(body)
 	base := "/v0/management/plugins/" + h.Name
+	// Rebuild query with normalized values so recursive handlers can also read auth_id.
+	q := url.Values{}
+	if req.Query != nil {
+		for k, vs := range req.Query {
+			for _, v := range vs {
+				q.Add(k, v)
+			}
+		}
+	}
+	if id, ok := body["auth_id"].(string); ok && strings.TrimSpace(id) != "" {
+		q.Set("auth_id", strings.TrimSpace(id))
+	}
+	if act, ok := body["action"].(string); ok && strings.TrimSpace(act) != "" {
+		q.Set("action", strings.TrimSpace(act))
+	}
 	switch op {
 	case "settings", "update_settings":
 		return h.updateSettings(raw)
 	case "unban":
-		return h.Handle(pluginapi.ManagementRequest{Method: http.MethodPost, Path: base + "/unban", Body: raw, Headers: req.Headers, Query: req.Query})
+		return h.Handle(pluginapi.ManagementRequest{Method: http.MethodPost, Path: base + "/unban", Body: raw, Headers: req.Headers, Query: q})
 	case "unban_all", "unban-all":
-		return h.Handle(pluginapi.ManagementRequest{Method: http.MethodPost, Path: base + "/unban-all", Body: raw, Headers: req.Headers, Query: req.Query})
+		return h.Handle(pluginapi.ManagementRequest{Method: http.MethodPost, Path: base + "/unban-all", Body: raw, Headers: req.Headers, Query: q})
 	case "probe":
-		return h.Handle(pluginapi.ManagementRequest{Method: http.MethodPost, Path: base + "/probe", Body: raw, Headers: req.Headers, Query: req.Query})
+		return h.Handle(pluginapi.ManagementRequest{Method: http.MethodPost, Path: base + "/probe", Body: raw, Headers: req.Headers, Query: q})
 	case "apply", "apply_action", "apply-action":
-		return h.Handle(pluginapi.ManagementRequest{Method: http.MethodPost, Path: base + "/apply-action", Body: raw, Headers: req.Headers, Query: req.Query})
+		return h.Handle(pluginapi.ManagementRequest{Method: http.MethodPost, Path: base + "/apply-action", Body: raw, Headers: req.Headers, Query: q})
 	case "reauth":
-		return h.Handle(pluginapi.ManagementRequest{Method: http.MethodPost, Path: base + "/reauth", Body: raw, Headers: req.Headers, Query: req.Query})
+		return h.Handle(pluginapi.ManagementRequest{Method: http.MethodPost, Path: base + "/reauth", Body: raw, Headers: req.Headers, Query: q})
 	case "recheck429", "bans-recheck-429", "recheck_429":
-		return h.Handle(pluginapi.ManagementRequest{Method: http.MethodPost, Path: base + "/bans-recheck-429", Body: raw, Headers: req.Headers, Query: req.Query})
+		return h.Handle(pluginapi.ManagementRequest{Method: http.MethodPost, Path: base + "/bans-recheck-429", Body: raw, Headers: req.Headers, Query: q})
 	case "recheck_selected", "recheck-selected":
-		return h.Handle(pluginapi.ManagementRequest{Method: http.MethodPost, Path: base + "/recheck-selected", Body: raw, Headers: req.Headers, Query: req.Query})
+		return h.Handle(pluginapi.ManagementRequest{Method: http.MethodPost, Path: base + "/recheck-selected", Body: raw, Headers: req.Headers, Query: q})
 	case "import":
 		// prefer nested snapshot if present
 		if snap, ok := body["snapshot"]; ok {

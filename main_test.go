@@ -280,6 +280,43 @@ func TestResourceDataGETUnbanViaHeader(t *testing.T) {
 	}
 }
 
+func TestResourceOpsGETUnbanAuthIdHeaderOnly(t *testing.T) {
+	defaultApp.bans.ClearAll()
+	now := time.Now()
+	defaultApp.bans.Set("hh1", ban.Entry{StatusCode: 403, ResetAt: now.Add(time.Hour)})
+	hdr := make(http.Header)
+	hdr.Set("X-XAI-Autoban-Op", "unban")
+	hdr.Set("X-XAI-Autoban-Auth-Id", "hh1")
+	resp := defaultApp.mgmt.Handle(pluginapi.ManagementRequest{
+		Method:  http.MethodGet,
+		Path:    "/v0/resource/plugins/xai-autoban/ops",
+		Headers: hdr,
+	})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status=%d body=%s", resp.StatusCode, string(resp.Body))
+	}
+	if defaultApp.bans.Active("hh1", now) {
+		t.Fatal("expected unban via Auth-Id header only")
+	}
+}
+
+func TestResourceOpsRecheckSelectedAuthIdsJSONString(t *testing.T) {
+	// auth_ids arrives as a JSON string (GET query merge) — must not missing_auth_ids
+	defaultApp.bans.ClearAll()
+	resp := defaultApp.mgmt.Handle(pluginapi.ManagementRequest{
+		Method: http.MethodGet,
+		Path:   "/v0/resource/plugins/xai-autoban/ops",
+		Query: map[string][]string{
+			"op":       {"recheck_selected"},
+			"auth_ids": {`["no-such-auth-for-recheck"]`},
+		},
+	})
+	// may fail probe network-wise but must not be missing_auth_ids
+	if resp.StatusCode == http.StatusBadRequest && strings.Contains(string(resp.Body), "missing_auth_ids") {
+		t.Fatalf("auth_ids JSON string not parsed: %s", string(resp.Body))
+	}
+}
+
 func TestImportSnapshot(t *testing.T) {
 	defaultApp.bans.ClearAll()
 	now := time.Now()

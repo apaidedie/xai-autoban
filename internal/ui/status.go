@@ -476,6 +476,15 @@ function buildOpsQuery(op, payload){
   });
   return q.toString();
 }
+function opsMeta(op, payload){
+  const p=payload||{};
+  const meta={op:op};
+  if(p.auth_id) meta.authId=String(p.auth_id);
+  if(Array.isArray(p.auth_ids)) meta.authIds=p.auth_ids.map(String);
+  else if(typeof p.auth_ids==='string' && p.auth_ids) meta.authIds=p.auth_ids;
+  if(p.action) meta.action=String(p.action);
+  return meta;
+}
 function isListPayload(d){
   // GET /data 列表：有 bans/counts，没有 ok/removed/accepted
   return !!(d && (Array.isArray(d.bans)||Array.isArray(d.credentials)) && d.counts && d.ok!==true && d.removed===undefined && d.accepted===undefined && !d.error);
@@ -488,9 +497,18 @@ async function apiResource(path, opts){
   const body=opts&&opts.body;
   const withKey=!!(opts&&opts.withKey);
   const opHdr=(opts&&opts.op)||'';
+  const authId=(opts&&opts.authId)||'';
+  const authIds=opts&&opts.authIds;
+  const action=(opts&&opts.action)||'';
   const headers={};
   if(body!==undefined) headers['Content-Type']='application/json';
   if(opHdr){ headers['X-XAI-Autoban-Op']=String(opHdr); headers['X-Plugin-Op']=String(opHdr); }
+  if(authId){ headers['X-XAI-Autoban-Auth-Id']=String(authId); headers['X-Plugin-Auth-Id']=String(authId); }
+  if(authIds){
+    const s=Array.isArray(authIds)?JSON.stringify(authIds):String(authIds);
+    headers['X-XAI-Autoban-Auth-Ids']=s; headers['X-Plugin-Auth-Ids']=s;
+  }
+  if(action){ headers['X-XAI-Autoban-Action']=String(action); headers['X-Plugin-Action']=String(action); }
   // POST 在 CPAMP 下需要密钥才会用已保存 CPA 密钥或转发 caller auth
   if((withKey || (method!=='GET' && method!=='HEAD')) && SERVER_MGMT_KEY){
     headers['Authorization']='Bearer '+SERVER_MGMT_KEY;
@@ -507,6 +525,7 @@ async function apiResource(path, opts){
 // 只走 resource。顺序：GET /ops → GET /data(+header) → POST /ops → POST /data(+key)
 async function apiOps(op, extra){
   const payload=Object.assign({}, extra||{}, {op:op});
+  const meta=opsMeta(op, payload);
   const heavy=op==='settings'||op==='import';
   const q=buildOpsQuery(op, payload);
   const errs=[];
@@ -516,7 +535,6 @@ async function apiOps(op, extra){
       if(isListPayload(d)){ errs.push(label+': got_list_not_op'); return null; }
       if(d && d.error && d.ok!==true){ errs.push(label+': '+(d.message||d.error)); return null; }
       if(!heavy && !isOpsResult(d) && !isListPayload(d)){
-        // 未知结构也当成功返回（兼容）
         return d;
       }
       if(isOpsResult(d) || heavy) return d;
@@ -526,18 +544,18 @@ async function apiOps(op, extra){
   }
   let d=null;
   if(!heavy){
-    d=await tryOne('GET /ops', ()=>apiResource('/ops?'+q, {op:op}));
+    d=await tryOne('GET /ops', ()=>apiResource('/ops?'+q, meta));
     if(d) return d;
-    d=await tryOne('GET /data', ()=>apiResource('/data?'+q, {op:op}));
+    d=await tryOne('GET /data', ()=>apiResource('/data?'+q, meta));
     if(d) return d;
   }
-  d=await tryOne('POST /ops', ()=>apiResource('/ops',{method:'POST',body:payload,op:op,withKey:!!SERVER_MGMT_KEY}));
+  d=await tryOne('POST /ops', ()=>apiResource('/ops',Object.assign({method:'POST',body:payload,withKey:!!SERVER_MGMT_KEY}, meta)));
   if(d) return d;
-  d=await tryOne('POST /data key', ()=>apiResource('/data',{method:'POST',body:payload,op:op,withKey:true}));
+  d=await tryOne('POST /data key', ()=>apiResource('/data',Object.assign({method:'POST',body:payload,withKey:true}, meta)));
   if(d) return d;
-  d=await tryOne('POST /data nokey', ()=>apiResource('/data',{method:'POST',body:payload,op:op,withKey:false}));
+  d=await tryOne('POST /data nokey', ()=>apiResource('/data',Object.assign({method:'POST',body:payload,withKey:false}, meta)));
   if(d) return d;
-  throw new Error('写操作失败：'+errs.join(' | ')+'。提示：CPAMP 下取消隔离应走 GET /v0/resource/plugins/xai-autoban/ops?op=unban（无需浏览器密钥）。请确认已装 0.5.26+ 并强刷。management_key 仅用于插件进程禁用/删除凭证，填 CPA secret-key。');
+  throw new Error('写操作失败：'+errs.join(' | ')+'。请装 0.5.27+ 并强刷。若仍 missing_auth_id(s)，把凭证 id 发开发者。');
 }
 function mapPathToOp(method,path,body){
   const p=String(path||'');
@@ -788,7 +806,8 @@ function needsReauth(c){
   return !!(c.needs_refresh||c.token_expired||c.classification==='reauth'||c.status_code===401||c.status==='401');
 }
 function rowActions(c){
-  const id=esc(c.auth_id);
+  // encodeURIComponent so dataset.id survives special chars; never HTML-escape the id value.
+  const id=encodeURIComponent(c.auth_id||'');
   const dis=state.busy?'disabled':'';
   const btns=[];
   if(needsReauth(c)){
@@ -843,7 +862,7 @@ function render(){
     const email=c.email||'';
     const title=email||name;
     return '<div class="rcard">'+
-      '<div class="ck"><input type="checkbox" data-id="'+esc(c.auth_id)+'" '+(state.selected.has(c.auth_id)?'checked':'')+'></div>'+
+      '<div class="ck"><input type="checkbox" data-id="'+encodeURIComponent(c.auth_id||'')+'" '+(state.selected.has(c.auth_id)?'checked':'')+'></div>'+
       '<div class="acc"><div class="t" title="'+esc(title)+'">'+esc(title)+'</div><div class="id" title="'+esc(c.auth_id)+'">'+esc(c.auth_id)+'</div></div>'+
       midCell(c)+
       '<div class="ops">'+rowActions(c)+'</div>'+
@@ -853,10 +872,16 @@ function render(){
   empty.hidden=list.length>0;
   empty.textContent=state.filter==='all'&&!state.query?'暂无 xAI 凭证':'没有匹配的凭证 · 可清除筛选';
   document.querySelectorAll('#rows input[type=checkbox]').forEach(input=>input.addEventListener('change',()=>{
-    input.checked?state.selected.add(input.dataset.id):state.selected.delete(input.dataset.id);
+    let id=input.dataset.id||'';
+    try{ id=decodeURIComponent(id); }catch(_){}
+    input.checked?state.selected.add(id):state.selected.delete(id);
     setActionEnabled(!state.busy);
   }));
-  document.querySelectorAll('#rows [data-act]').forEach(btn=>btn.addEventListener('click',()=>runRowAction(btn.dataset.act,btn.dataset.id)));
+  document.querySelectorAll('#rows [data-act]').forEach(btn=>btn.addEventListener('click',()=>{
+    let id=btn.dataset.id||'';
+    try{ id=decodeURIComponent(id); }catch(_){}
+    runRowAction(btn.dataset.act,id);
+  }));
   setActionEnabled(!state.busy);
 }
 async function runRowAction(act,id){

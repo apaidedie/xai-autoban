@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.27 - 2026-07-15
+
+### Fix
+- GET ops 参数：`auth_id` / `auth_ids` 同时走 Header（`X-XAI-Autoban-Auth-Id(s)`），避免 query 丢失
+- `auth_ids` 经 query 变成 JSON 字符串时正确解析（修复 `missing_auth_ids`）
+- 行按钮 `data-id` 用 encodeURIComponent，避免特殊字符凭证 id 损坏
+
 ## 0.5.26 - 2026-07-15
 
 ### Fix
