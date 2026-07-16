@@ -37,18 +37,11 @@ h1{margin:8px 0 0;font-size:26px;font-weight:800;letter-spacing:-.03em}
 .phd{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line)}
 .phd h2{margin:0;font-size:12px;font-weight:800;letter-spacing:.08em;color:#dbe4f3}
 .hint{color:var(--muted);font-size:12px}
-.cfg-sum{display:flex;flex-wrap:wrap;gap:6px 14px;padding:8px 12px;align-items:center;color:var(--muted);font-size:12px;font-weight:650}
-.cfg-sum b{color:#e2e8f0;font-weight:800}
-.cfg-sum .dot{opacity:.35}
-.cfg-details>summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid transparent;user-select:none}
-.cfg-details>summary::-webkit-details-marker{display:none}
-.cfg-details[open]>summary{border-bottom-color:var(--line)}
-.cfg-details .cfg-chev{color:var(--muted);font-size:12px;font-weight:750}
-.cfg-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;padding:8px 12px 12px}
-.cfg-card{background:rgba(7,12,22,.55);border:1px solid var(--line);border-radius:10px;padding:8px 10px;min-height:44px}
+.cfg-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;padding:8px 12px}
+.cfg-card{background:rgba(7,12,22,.55);border:1px solid var(--line);border-radius:10px;padding:8px 10px;min-height:48px}
 .cfg-card.accent{border-color:rgba(59,130,246,.45);box-shadow:0 0 0 1px rgba(59,130,246,.12) inset}
 .cfg-card .l{color:var(--muted);font-size:10px;font-weight:800;letter-spacing:.04em}
-.cfg-card .v{margin-top:5px;font-size:13px;font-weight:800;color:#f8fafc}
+.cfg-card .v{margin-top:6px;font-size:14px;font-weight:800;color:#f8fafc}
 .cfg-card .v.on{color:var(--green)}.cfg-card .v.off{color:var(--amber)}
 @media(max-width:1100px){.cfg-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:700px){.cfg-grid{grid-template-columns:1fr 1fr}}
@@ -213,80 +206,115 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
   .rcard{grid-template-columns:28px 1fr auto;grid-template-areas:"ck acc ops" "mid mid mid";row-gap:6px}
   .rcard .ck{grid-area:ck}.rcard .acc{grid-area:acc}.rcard .mid{grid-area:mid}.rcard .ops{grid-area:ops;justify-self:end}
 }
-/* Single stats strip: all filters in one compact row */
-.stats-strip{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px;padding:2px 0}
-.stat{
-  height:36px;padding:0 11px;border-radius:999px;border:1px solid var(--line);
-  background:rgba(12,20,34,.9);color:var(--muted);font-weight:750;font-size:12px;
-  display:inline-flex;align-items:center;gap:7px;cursor:pointer;white-space:nowrap
+.qcards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:0 0 8px}
+.code-strip{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:0 0 10px}
+@media(max-width:1100px){.code-strip{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:700px){.code-strip{grid-template-columns:1fr 1fr}}
+.code-chip{
+  min-height:76px;padding:12px 14px;border-radius:14px;border:1px solid var(--line);
+  background:rgba(12,20,34,.92);color:var(--muted);font-weight:750;
+  display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:8px;
+  cursor:pointer;text-align:left;height:auto;overflow:hidden
 }
-.stat b{font-size:13px;font-weight:850;font-variant-numeric:tabular-nums;color:var(--text)}
-.stat:hover{border-color:rgba(148,163,184,.35);color:var(--text);background:rgba(15,23,42,.95)}
-.stat.active,.stat.on{border-color:rgba(34,211,238,.55);background:rgba(8,47,73,.4);color:#e0f2fe;box-shadow:0 0 0 1px rgba(34,211,238,.15) inset}
-.stat.ok b{color:var(--green)}.stat.warn b{color:var(--amber)}.stat.bad b{color:var(--red)}.stat.info b{color:var(--cyan)}
-.stat.s401 b{color:#93c5fd}.stat.s402 b{color:#fcd34d}.stat.s403 b{color:#fda4af}.stat.s429 b{color:#ddd6fe}
-.stat.ghost{color:var(--muted);opacity:.85}
-.stat.probe{margin-left:auto}
-@media(max-width:700px){.stat.probe{margin-left:0}}
+.code-chip .cl{
+  font-size:11px;font-weight:800;color:var(--muted);letter-spacing:.04em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;line-height:1.2
+}
+.code-chip b{font-size:22px;font-weight:850;font-variant-numeric:tabular-nums;color:var(--text);line-height:1}
+.code-chip:hover{border-color:rgba(148,163,184,.35);background:rgba(15,23,42,.95);color:var(--text)}
+.code-chip.active,.code-chip.on{border-color:rgba(34,211,238,.5);background:rgba(8,47,73,.35);box-shadow:0 0 0 1px rgba(34,211,238,.18) inset}
+.code-chip.s401 b{color:#93c5fd}.code-chip.s401.active{border-color:rgba(59,130,246,.55)}
+.code-chip.s402 b{color:#fcd34d}.code-chip.s402.active{border-color:rgba(251,191,36,.55)}
+.code-chip.s403 b{color:#fda4af}.code-chip.s403.active{border-color:rgba(251,113,133,.55)}
+.code-chip.s429 b{color:#ddd6fe}.code-chip.s429.active{border-color:rgba(167,139,250,.55)}
+.code-chip.ghost{align-items:center;justify-content:center;color:var(--muted)}
+.code-chip.ghost b{display:none}
+.code-chip.ghost .cl{font-size:13px;letter-spacing:0;font-weight:750;white-space:nowrap}
+.qcard{
+  text-align:left;height:auto;min-height:80px;padding:12px 14px;border-radius:14px;
+  border:1px solid var(--line);background:rgba(12,20,34,.92);
+  box-shadow:none;transition:border-color .12s ease,background .12s ease
+}
+.qcard:hover{border-color:rgba(34,211,238,.35);background:rgba(15,23,42,.95)}
+.qcard:focus-visible{outline:2px solid rgba(34,211,238,.65);outline-offset:2px}
+.qcard .ql{color:var(--muted);font-size:11px;font-weight:800;letter-spacing:.06em;white-space:nowrap}
+.qcard .qn{margin-top:6px;font-size:22px;font-weight:850;font-variant-numeric:tabular-nums;line-height:1}
+.qcard .qs{margin-top:5px;color:var(--muted);font-size:11px;font-weight:650;line-height:1.25;min-height:1.25em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.qcard.ok .qn{color:var(--green)}.qcard.warn .qn{color:var(--amber)}.qcard.bad .qn{color:var(--red)}.qcard.info .qn{color:var(--cyan)}
+.qcard.disabled-card .qn{color:#cbd5e1}
 .row-action{height:28px;padding:0 9px;border-radius:8px;font-size:12px}
 .row-action.primary{background:linear-gradient(180deg,#3b82f6,#2563eb);border-color:#1d4ed8;color:#fff}
 .row-action.primary:hover{background:linear-gradient(180deg,#60a5fa,#3b82f6);border-color:#2563eb;color:#fff}
-h1{font-size:22px}
-@media(max-width:700px){h1{font-size:20px}}
-/* keep legacy class hooks for JS active toggles */
-.qcards,.code-strip{display:contents}
-.qcard,.code-chip{/* superseded by .stat */}
+@media(max-width:1100px){.qcards{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:700px){h1{font-size:22px}.qcards{grid-template-columns:1fr 1fr}}
+@media (prefers-reduced-motion:reduce){.qcard{transition:none}}
 </style>
 </head>
 <body>
 <div class="shell">
   <div class="top">
     <div>
-      <div class="kicker"><i></i>xAI 运维台 · v` + pluginVersion + `</div>
-      <h1>凭证巡检</h1>
-      <p class="sub" id="cfgOneLine">加载配置…</p>
+      <div class="kicker"><i></i>运维台 · xAI 账号巡检</div>
+      <h1>xAI Autoban</h1>
+      <p class="sub">隔离 · 禁用 · 启用 · 复检 · v` + pluginVersion + `</p>
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <div class="live" id="syncState">准备中</div>
-      <button class="bs" id="btnRefresh" type="button" onclick="loadData()" title="刷新">刷新</button>
-      <button class="bp" id="btnProbe" type="button" onclick="runProbe()" disabled>巡检</button>
-      <button class="bs" id="openConfigBtn" type="button">配置</button>
+      <button class="bs" id="btnRefresh" type="button" onclick="loadData()" title="刷新列表与统计">刷新</button>
+      <button class="bp" id="btnProbe" type="button" onclick="runProbe()" disabled>立即巡检</button>
+      <button class="bs" id="openConfigBtn" type="button">编辑配置</button>
     </div>
   </div>
 
   <section class="panel">
-    <details class="cfg-details" id="cfgDetails">
-      <summary>
-        <div class="cfg-sum" id="cfgSumLine"><span>巡检配置</span><span class="dot">·</span><b id="sumProbeEnabled">-</b><span class="dot">·</span><span id="sumInterval">-</span><span class="dot">·</span><b id="sumAutoExec">-</b><span class="dot">·</span><span id="sumProbeAction">-</span></div>
-        <span class="cfg-chev">展开详情</span>
-      </summary>
-      <div class="cfg-grid" id="cfgPills">
-        <div class="cfg-card"><div class="l">定时巡检</div><div class="v" id="sumProbeEnabled2">-</div></div>
-        <div class="cfg-card"><div class="l">间隔</div><div class="v" id="sumInterval2">-</div></div>
-        <div class="cfg-card accent"><div class="l">自动执行</div><div class="v" id="sumAutoExec2">-</div></div>
-        <div class="cfg-card"><div class="l">问题策略</div><div class="v" id="sumProbeAction2">-</div></div>
-        <div class="cfg-card"><div class="l">成功策略</div><div class="v" id="sumOnSuccess">-</div></div>
-        <div class="cfg-card"><div class="l">探测模式</div><div class="v" id="sumMode">-</div></div>
-      </div>
-    </details>
+    <div class="phd">
+      <h2>当前巡检配置</h2>
+      <div class="hint">主配置入口 · 点右上角「编辑配置」修改（插件管理仅负责启用与服务端密钥）</div>
+    </div>
+    <div class="cfg-grid" id="cfgPills">
+      <div class="cfg-card"><div class="l">定时巡检</div><div class="v" id="sumProbeEnabled">-</div></div>
+      <div class="cfg-card"><div class="l">间隔</div><div class="v" id="sumInterval">-</div></div>
+      <div class="cfg-card accent"><div class="l">自动执行</div><div class="v" id="sumAutoExec">-</div></div>
+      <div class="cfg-card"><div class="l">问题策略</div><div class="v" id="sumProbeAction">-</div></div>
+      <div class="cfg-card"><div class="l">成功策略</div><div class="v" id="sumOnSuccess">-</div></div>
+      <div class="cfg-card"><div class="l">探测模式</div><div class="v" id="sumMode">-</div></div>
+    </div>
   </section>
 
-  <div class="stats-strip" id="overviewCards" role="toolbar" aria-label="筛选">
-    <button type="button" class="stat info" data-jump="all" data-filter="all" title="全部 xAI 凭证">全部 <b id="ov_all">0</b></button>
-    <button type="button" class="stat ok" data-jump="healthy" data-filter="healthy" title="可调度">健康 <b id="ov_healthy">0</b></button>
-    <button type="button" class="stat warn" data-jump="banned" data-filter="banned" title="隔离账本">隔离 <b id="ov_banned">0</b></button>
-    <button type="button" class="stat" data-jump="disabled" data-filter="disabled" title="CPA 已关闭">禁用 <b id="c_disabled">0</b></button>
-    <button type="button" class="stat s401" data-filter="401" title="状态码 401">401 <b id="ov_401">0</b></button>
-    <button type="button" class="stat s402" data-filter="402" title="状态码 402">402 <b id="ov_402">0</b></button>
-    <button type="button" class="stat s403" data-filter="403" title="状态码 403">403 <b id="ov_403">0</b></button>
-    <button type="button" class="stat s429" data-filter="429" title="状态码 429">429 <b id="ov_429">0</b></button>
-    <button type="button" class="stat ghost" id="clearFilterBtn" data-filter="all" title="清除筛选">清除</button>
-    <button type="button" class="stat probe info" data-jump="probe" id="ov_probe_card" title="立即巡检">巡检 <b id="ov_probe">—</b></button>
+  <div class="qcards" id="overviewCards">
+    <button type="button" class="qcard info" data-jump="all" data-filter="all" title="当前扫描到的 xAI 认证文件总数">
+      <div class="ql">全部凭证</div><div class="qn" id="ov_all">0</div><div class="qs">认证文件</div>
+    </button>
+    <button type="button" class="qcard ok" data-jump="healthy" data-filter="healthy" title="未隔离且未禁用，可参与调度">
+      <div class="ql">健康</div><div class="qn" id="ov_healthy">0</div><div class="qs">可调度</div>
+    </button>
+    <button type="button" class="qcard warn" data-jump="banned" data-filter="banned" title="插件隔离账本（调度跳过）。下方 401–429 为状态码计数，口径不同。">
+      <div class="ql">当前隔离</div><div class="qn" id="ov_banned">0</div><div class="qs" id="ov_banned_sub">隔离账本 · 调度跳过</div>
+    </button>
+    <button type="button" class="qcard disabled-card" data-jump="disabled" data-filter="disabled" title="已关闭的 CPA 凭证">
+      <div class="ql">已禁用</div><div class="qn" id="c_disabled">0</div><div class="qs">关闭凭证</div>
+    </button>
+    <button type="button" class="qcard info" data-jump="probe" id="ov_probe_card" title="点击立即巡检全部 xAI 凭证">
+      <div class="ql">上次巡检</div><div class="qn" id="ov_probe">—</div><div class="qs" id="ov_probe_sub">点击立即巡检</div>
+    </button>
   </div>
-  <div id="codeStrip" hidden aria-hidden="true"></div>
-  <span id="ov_banned_sub" hidden></span>
-  <span id="ov_probe_sub" hidden></span>
-  <span id="sumInterval_legacy" hidden></span>
+  <div class="code-strip" id="codeStrip" role="toolbar" aria-label="状态码筛选">
+    <button type="button" class="code-chip s401" data-filter="401" title="401 重授权">
+      <span class="cl">401 · 重授权</span><b id="ov_401">0</b>
+    </button>
+    <button type="button" class="code-chip s402" data-filter="402" title="402 无额度">
+      <span class="cl">402 · 无额度</span><b id="ov_402">0</b>
+    </button>
+    <button type="button" class="code-chip s403" data-filter="403" title="403 禁止">
+      <span class="cl">403 · 禁止</span><b id="ov_403">0</b>
+    </button>
+    <button type="button" class="code-chip s429" data-filter="429" title="429 限流">
+      <span class="cl">429 · 限流</span><b id="ov_429">0</b>
+    </button>
+    <button type="button" class="code-chip ghost" id="clearFilterBtn" data-filter="all" title="清除筛选">
+      <span class="cl">清除筛选</span>
+    </button>
+  </div>
   <div id="statusChips" hidden aria-hidden="true">
     <button type="button" data-filter="all"><b id="c_all">-</b></button>
     <button type="button" data-filter="healthy"><b id="c_healthy">-</b></button>
@@ -729,26 +757,27 @@ function paintChips(){
     // Keep isolation ledger meaning; do not paste 40x counts here (different口径).
     sub.textContent='隔离账本 · 调度跳过';
   }
-  document.querySelectorAll('#overviewCards [data-filter], #statusChips [data-filter]').forEach(btn=>{
+  document.querySelectorAll('#overviewCards [data-filter], #codeStrip [data-filter], #statusChips [data-filter]').forEach(btn=>{
     const on=btn.dataset.filter===state.filter;
     btn.classList.toggle('active', on);
     btn.classList.toggle('on', on);
   });
 }
 function paintOverviewProbe(probe){
-  const n=$('ov_probe'), card=$('ov_probe_card');
+  const n=$('ov_probe'), sub=$('ov_probe_sub'), card=$('ov_probe_card');
   if(!n) return;
   probe=probe||{};
-  const ok=probe.last_ok, fail=probe.last_fail;
+  const ok=probe.last_ok, fail=probe.last_fail, err=probe.last_err;
   if(probe.last_run && probe.last_run.indexOf('0001')!==0){
     n.textContent=String((ok||0))+'/'+String((ok||0)+(fail||0));
-    if(card){
-      card.className='stat probe'+(fail>0?' bad':(ok>0?' ok':' info'));
-      card.title='上次巡检 '+(probe.last_run?formatDate(probe.last_run):'')+(fail>0?(' · 失败 '+fail):'');
-    }
+    let line=(probe.last_run?formatDate(probe.last_run):'')+(err?(' · '+err):'');
+    if(probe.auto_execute===false) line=(line?line+' · ':'')+'只输出';
+    if(sub) sub.textContent=line||'点击立即巡检';
+    if(card) card.className='qcard'+(fail>0?' bad':(ok>0?' ok':' info'));
   }else{
     n.textContent='—';
-    if(card){ card.className='stat probe info'; card.title=probe.enabled?'定时已开 · 点此立即巡检':'点此立即巡检'; }
+    if(sub) sub.textContent=probe.enabled?'定时已开 · 尚未执行':'定时关闭 · 点击立即巡检';
+    if(card) card.className='qcard info';
   }
 }
 function jumpOverview(kind){
@@ -789,33 +818,17 @@ function reasonLabel(r){return ({payment_required:'额度不足',forbidden:'禁�
 function classLabel(c){return ({rate_limited:'限流',quota_exhausted:'额度用尽',reauth:'需重新授权',permission_denied:'权限拒绝',model_unavailable:'模型不可用',probe_error:'巡检错误',healthy:'健康',token_expired:'Token 过期',needs_refresh:'待刷新'})[c]||c||''}
 function labelAction(a){return ({ban:'隔离',disable:'禁用',delete:'删除',none:'不处理',unban:'释放',reenable:'启用',unban_and_reenable:'释放并启用',reauth:'重授权'})[a]||a||'-'}
 
-function setTxt(id, v, cls){
-  const el=$(id); if(!el) return;
-  el.textContent=v;
-  if(cls!==undefined) el.className=cls;
-}
 function renderSettingsSummary(s){
   state.settings=s||{};
-  const on=!!s.probe_enabled;
+  const pe=$('sumProbeEnabled');
+  if(pe){ pe.textContent=s.probe_enabled?'已打开':'关闭'; pe.className=s.probe_enabled?'v on':'v off'; }
+  if($('sumInterval')) $('sumInterval').textContent=(s.probe_interval_seconds||'-')+'s';
   const auto=s.auto_execute!==false;
-  const pe=on?'已打开':'关闭';
-  const iv=(s.probe_interval_seconds||'-')+'s';
-  const ae=auto?'自动执行':'只输出';
-  const act=labelAction(s.probe_action);
-  const suc=labelAction(s.probe_on_success);
-  const mode=s.probe_mode||'-';
-  setTxt('sumProbeEnabled', pe, on?'on':'off');
-  setTxt('sumProbeEnabled2', pe, on?'v on':'v off');
-  setTxt('sumInterval', iv);
-  setTxt('sumInterval2', iv);
-  setTxt('sumAutoExec', ae, auto?'on':'off');
-  setTxt('sumAutoExec2', ae, auto?'v on':'v off');
-  setTxt('sumProbeAction', act);
-  setTxt('sumProbeAction2', act);
-  setTxt('sumOnSuccess', suc);
-  setTxt('sumMode', mode);
-  const one=$('cfgOneLine');
-  if(one) one.textContent=pe+' · 间隔 '+iv+' · '+ae+' · 失败'+act+' · 成功'+suc+' · '+mode;
+  const ae=$('sumAutoExec');
+  if(ae){ ae.textContent=auto?'自动执行':'只输出'; ae.className=auto?'v on':'v off'; }
+  if($('sumProbeAction')) $('sumProbeAction').textContent=labelAction(s.probe_action);
+  if($('sumOnSuccess')) $('sumOnSuccess').textContent=labelAction(s.probe_on_success);
+  if($('sumMode')) $('sumMode').textContent=s.probe_mode||'-';
 }
 function renderHistory(list){
   state.history=list||[];
