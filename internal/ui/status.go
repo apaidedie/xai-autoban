@@ -227,6 +227,7 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
 .code-chip.s402 b{color:#fcd34d}.code-chip.s402.active{border-color:rgba(251,191,36,.55)}
 .code-chip.s403 b{color:#fda4af}.code-chip.s403.active{border-color:rgba(251,113,133,.55)}
 .code-chip.s429 b{color:#ddd6fe}.code-chip.s429.active{border-color:rgba(167,139,250,.55)}
+.code-chip.s-api b{color:#67e8f9}.code-chip.s-api.active{border-color:rgba(34,211,238,.55);background:rgba(8,47,73,.35)}
 .code-chip.ghost{align-items:center;justify-content:center;color:var(--muted)}
 .code-chip.ghost b{display:none}
 .code-chip.ghost .cl{font-size:13px;letter-spacing:0;font-weight:750;white-space:nowrap}
@@ -311,8 +312,8 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
     <button type="button" class="code-chip s429" data-filter="429" title="429 限流">
       <span class="cl">429 · 限流</span><b id="ov_429">0</b>
     </button>
-    <button type="button" class="code-chip ghost" id="clearFilterBtn" data-filter="all" title="清除筛选">
-      <span class="cl">清除筛选</span>
+    <button type="button" class="code-chip s-api" data-filter="using_api" id="usingApiFilterBtn" title="已开启 CPA「使用 API 模式」的凭证（点击筛选；再点可取消）">
+      <span class="cl">API · 模式</span><b id="ov_using_api">0</b>
     </button>
   </div>
   <div id="statusChips" hidden aria-hidden="true">
@@ -517,7 +518,7 @@ function setActionEnabled(ok){
   if(sh) sh.textContent=n?('已选 '+n):'';
   const sf=$('selectFilterBtn');
   if(sf){
-    const fl={all:'全部',healthy:'健康',banned:'隔离',disabled:'已禁用','401':'401','402':'402','403':'403','429':'429'}[state.filter]||state.filter;
+    const fl={all:'全部',healthy:'健康',banned:'隔离',disabled:'已禁用',using_api:'API 模式','401':'401','402':'402','403':'403','429':'429'}[state.filter]||state.filter;
     sf.textContent=state.filter&&state.filter!=='all'?('全选 · '+fl):'全选当前筛选';
   }
 }
@@ -752,6 +753,7 @@ function paintChips(){
   set('f_401',c['401']??0); set('f_402',c['402']??0); set('f_403',c['403']??0); set('f_429',c['429']??0);
   set('ov_all',c.all??0); set('ov_healthy',c.healthy??0); set('ov_banned',c.banned??0);
   set('ov_401',c['401']??0); set('ov_402',c['402']??0); set('ov_403',c['403']??0); set('ov_429',c['429']??0);
+  set('ov_using_api', c.using_api??0);
   const sub=$('ov_banned_sub');
   if(sub){
     // Keep isolation ledger meaning; do not paste 40x counts here (different口径).
@@ -790,7 +792,10 @@ function jumpOverview(kind){
   if(list) list.scrollIntoView({behavior:'smooth',block:'start'});
 }
 function setFilter(f, toggle){
-  if(toggle && state.filter===f) state.filter='all'; else state.filter=f||'all';
+  // Toggle off when clicking the same filter again (incl. API 模式).
+  if(toggle && state.filter===f) state.filter='all';
+  else if(!toggle && state.filter===f) state.filter='all';
+  else state.filter=f||'all';
   state.page.page=1;
   paintChips();
   loadData(true);
@@ -1047,13 +1052,14 @@ function midCell(c){
 }
 function render(){
   const list=filtered();
-  const filterLabel={all:'全部',healthy:'健康',banned:'隔离',disabled:'已禁用','401':'401','402':'402','403':'403','429':'429'}[state.filter]||state.filter;
+  const filterLabel={all:'全部',healthy:'健康',banned:'隔离',disabled:'已禁用',using_api:'API 模式','401':'401','402':'402','403':'403','429':'429'}[state.filter]||state.filter;
   const p=state.page||{};
   $('resultCount').textContent=(p.total!=null?p.total:list.length)+' 条'+(state.filter&&state.filter!=='all'?(' · '+filterLabel):'')+(p.pages>1?(' · '+ (p.page||1)+'/'+p.pages):'');
   const lh=$('listHint');
   if(lh){
     if(state.filter==='banned') lh.textContent='筛选：隔离账本';
     else if(state.filter==='disabled') lh.textContent='筛选：已禁用';
+    else if(state.filter==='using_api') lh.textContent='筛选：已开启 API 模式 · 再点卡片可取消';
     else if(['401','402','403','429'].includes(state.filter)) lh.textContent='筛选：'+filterLabel+'（状态码口径，可与隔离账本不同）';
     else lh.textContent='点击上方卡片筛选 · 勾选后复检或批量操作';
   }
@@ -1145,7 +1151,7 @@ async function bulkAct(act){
 }
 async function selectCurrentFilter(){
   if(state.busy) return;
-  const fl={all:'全部',healthy:'健康',banned:'隔离',disabled:'已禁用','401':'401','402':'402','403':'403','429':'429'}[state.filter]||state.filter;
+  const fl={all:'全部',healthy:'健康',banned:'隔离',disabled:'已禁用',using_api:'API 模式','401':'401','402':'402','403':'403','429':'429'}[state.filter]||state.filter;
   try{
     setBusy(true,'拉取筛选 ID');
     setMessage('正在获取「'+fl+'」全部凭证 ID…');
@@ -1314,7 +1320,8 @@ async function handleImportFile(file){
 }
 
 if($('importFile')) $('importFile').onchange=e=>{ const f=e.target.files&&e.target.files[0]; if(f) handleImportFile(f); };
-if($('clearFilterBtn')) $('clearFilterBtn').onclick=()=>{state.filter='all'; state.query=''; state.page.page=1; if($('search')) $('search').value=''; paintChips(); loadData(true); setMessage('已清除筛选');};
+// API 模式 chip: setFilter toggles off when clicked again.
+if($('usingApiFilterBtn')) $('usingApiFilterBtn').onclick=()=>setFilter('using_api', true);
 $('search').oninput=e=>{
   state.query=e.target.value.trim();
   state.page.page=1;
@@ -1329,8 +1336,8 @@ if($('nextPageBtn')) $('nextPageBtn').onclick=()=>{ if((state.page.page||1)<(sta
 $('autoRefresh').onchange=()=>{if(state.timer) clearInterval(state.timer); state.timer=$('autoRefresh').checked?setInterval(()=>loadData(true),30000):null;};
 document.querySelectorAll('#statusChips [data-filter]').forEach(btn=>btn.onclick=()=>setFilter(btn.dataset.filter,true));
 document.querySelectorAll('#codeStrip [data-filter]').forEach(btn=>{
-  if(btn.id==='clearFilterBtn') return;
-  btn.onclick=()=>setFilter(btn.dataset.filter,false);
+  if(btn.id==='usingApiFilterBtn') return;
+  btn.onclick=()=>setFilter(btn.dataset.filter,true);
 });
 document.querySelectorAll('#overviewCards [data-jump]').forEach(btn=>btn.onclick=()=>jumpOverview(btn.dataset.jump));
 if($('toggleHistBtn')) $('toggleHistBtn').onclick=()=>{

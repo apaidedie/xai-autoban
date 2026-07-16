@@ -54,6 +54,8 @@ type StatusCounts struct {
 	Code403  int `json:"403"`
 	Code429  int `json:"429"`
 	Disabled int `json:"disabled"`
+	// UsingAPI: credentials with CPA using_api=true (from sampled auth JSON).
+	UsingAPI int `json:"using_api"`
 }
 
 type ProbeResult struct {
@@ -369,6 +371,9 @@ func countCredentials(items []Info) StatusCounts {
 		if item.Disabled {
 			c.Disabled++
 		}
+		if item.UsingAPI != nil && *item.UsingAPI {
+			c.UsingAPI++
+		}
 		if item.Banned {
 			c.Banned++
 			switch item.StatusCode {
@@ -463,6 +468,8 @@ func normalizeStatusFilter(v string) string {
 		return "all"
 	case "healthy", "banned", "disabled", "401", "402", "403", "429":
 		return v
+	case "using_api", "api", "api_mode":
+		return "using_api"
 	default:
 		return "all"
 	}
@@ -518,6 +525,8 @@ func matchCredentialFilter(c Info, filter string) bool {
 		return c.Banned
 	case "disabled":
 		return c.Disabled
+	case "using_api", "api", "api_mode":
+		return c.UsingAPI != nil && *c.UsingAPI
 	case "401", "402", "403", "429":
 		return c.Banned && strconv.Itoa(c.StatusCode) == filter
 	default:

@@ -83,13 +83,15 @@ func TestBuildFullUsingAPIAndSoft403(t *testing.T) {
 	now := time.Now()
 	files := []pluginapi.HostAuthFileEntry{
 		{ID: "a1", AuthIndex: "1", Name: "xai-1", Provider: "xai"},
+		{ID: "a2", AuthIndex: "2", Name: "xai-2", Provider: "xai"},
 	}
 	jsonBy := map[string]json.RawMessage{
 		"a1": json.RawMessage(`{"access_token":"t","using_api":true}`),
+		"a2": json.RawMessage(`{"access_token":"t","using_api":false}`),
 	}
 	soft := map[string]int{"a1": 2}
-	items, _ := BuildFull(files, nil, nil, jsonBy, soft, 3, now)
-	if len(items) != 1 {
+	items, counts := BuildFull(files, nil, nil, jsonBy, soft, 3, now)
+	if len(items) != 2 {
 		t.Fatalf("items=%d", len(items))
 	}
 	if items[0].UsingAPI == nil || !*items[0].UsingAPI {
@@ -97,6 +99,13 @@ func TestBuildFullUsingAPIAndSoft403(t *testing.T) {
 	}
 	if items[0].Soft403Streak != 2 || items[0].Soft403Need != 3 {
 		t.Fatalf("streak=%d need=%d", items[0].Soft403Streak, items[0].Soft403Need)
+	}
+	if counts.UsingAPI != 1 {
+		t.Fatalf("using_api count=%d", counts.UsingAPI)
+	}
+	apiOnly := Filter(items, "using_api", "")
+	if len(apiOnly) != 1 || apiOnly[0].AuthID != "a1" {
+		t.Fatalf("filter using_api: %+v", apiOnly)
 	}
 }
 

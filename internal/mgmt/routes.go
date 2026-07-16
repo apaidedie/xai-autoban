@@ -693,8 +693,12 @@ func (h *Handler) listAuthIDs(body map[string]any, q url.Values) pluginapi.Manag
 	for k, v := range h.Probe.LastResults() {
 		probeLast[k] = creds.ProbeResult{At: v.At, OK: v.OK, Status: v.Status, Error: v.Error}
 	}
-	// No AuthGet sampling for id listing — status codes come from ban ledger + disabled flags.
-	allCreds, _ := creds.BuildWithJSON(files, snapshot, probeLast, nil, now)
+	// using_api filter needs auth JSON; other filters use ban/disabled only.
+	var jsonByID map[string]json.RawMessage
+	if strings.EqualFold(strings.TrimSpace(filter), "using_api") || strings.EqualFold(strings.TrimSpace(filter), "api") {
+		jsonByID = sampleAuthJSON(h.Host, files, 2000)
+	}
+	allCreds, _ := creds.BuildWithJSON(files, snapshot, probeLast, jsonByID, now)
 	matched := creds.Filter(allCreds, filter, search)
 	total := len(matched)
 	truncated := false
@@ -975,8 +979,14 @@ func (h *Handler) CurrentStatusPaged(query url.Values) StatusInfo {
 	for k, v := range h.Probe.LastResults() {
 		probeLast[k] = creds.ProbeResult{At: v.At, OK: v.OK, Status: v.Status, Error: v.Error}
 	}
-	// Best-effort local token flags for first page-ish set (cap AuthGet to avoid slow UI).
-	jsonByID := sampleAuthJSON(h.Host, files, 40)
+	pq := pageQueryFromValues(query)
+	// Load auth JSON for token flags + using_api counts. Cap keeps status page responsive;
+	// when filtering by using_api, raise cap so the list is more complete.
+	sampleLimit := 400
+	if pq.Filter == "using_api" {
+		sampleLimit = 2000
+	}
+	jsonByID := sampleAuthJSON(h.Host, files, sampleLimit)
 	var soft403 map[string]int
 	softNeed := 0
 	if h.Engine != nil {
@@ -984,8 +994,6 @@ func (h *Handler) CurrentStatusPaged(query url.Values) StatusInfo {
 		softNeed = h.Engine.Soft403Need()
 	}
 	allCreds, counts := creds.BuildFull(files, snapshot, probeLast, jsonByID, soft403, softNeed, now)
-
-	pq := pageQueryFromValues(query)
 	pageCreds, page := creds.Page(allCreds, pq)
 
 	st := StatusInfo{
