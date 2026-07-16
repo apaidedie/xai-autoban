@@ -35,9 +35,14 @@ type Info struct {
 	LastProbeAt      string `json:"last_probe_at,omitempty"`
 	LastProbeOK      *bool  `json:"last_probe_ok,omitempty"`
 	LastProbeStatus  int    `json:"last_probe_status,omitempty"`
-	TokenExpired     bool   `json:"token_expired,omitempty"`
-	NeedsRefresh     bool   `json:"needs_refresh,omitempty"`
-	HasRefreshToken  bool   `json:"has_refresh_token,omitempty"`
+	// UsingAPI: CPA「使用 API 模式」; nil when unknown (no JSON sample).
+	UsingAPI *bool `json:"using_api,omitempty"`
+	// Soft403Streak / Soft403Need: soft 403 consecutive failures toward isolate.
+	Soft403Streak   int  `json:"soft_403_streak,omitempty"`
+	Soft403Need     int  `json:"soft_403_need,omitempty"`
+	TokenExpired    bool `json:"token_expired,omitempty"`
+	NeedsRefresh    bool `json:"needs_refresh,omitempty"`
+	HasRefreshToken bool `json:"has_refresh_token,omitempty"`
 }
 
 type StatusCounts struct {
@@ -62,8 +67,13 @@ func Build(files []pluginapi.HostAuthFileEntry, banSnap map[string]ban.Entry, pr
 	return BuildWithJSON(files, banSnap, probeLast, nil, now)
 }
 
-// BuildWithJSON is like Build but can enrich TokenExpired/NeedsRefresh from auth JSON by id.
+// BuildWithJSON is like Build but can enrich TokenExpired/NeedsRefresh/using_api from auth JSON by id.
 func BuildWithJSON(files []pluginapi.HostAuthFileEntry, banSnap map[string]ban.Entry, probeLast map[string]ProbeResult, jsonByID map[string]json.RawMessage, now time.Time) ([]Info, StatusCounts) {
+	return BuildFull(files, banSnap, probeLast, jsonByID, nil, 0, now)
+}
+
+// BuildFull enriches credentials with auth JSON + optional soft-403 streak snapshot.
+func BuildFull(files []pluginapi.HostAuthFileEntry, banSnap map[string]ban.Entry, probeLast map[string]ProbeResult, jsonByID map[string]json.RawMessage, soft403 map[string]int, soft403Need int, now time.Time) ([]Info, StatusCounts) {
 	items := make([]Info, 0)
 	seen := make(map[string]struct{})
 
@@ -125,6 +135,7 @@ func BuildWithJSON(files []pluginapi.HostAuthFileEntry, banSnap map[string]ban.E
 		if raw, ok := lookupJSON(jsonByID, id, f); ok {
 			applyTokenJSON(&item, raw, now)
 		}
+		applySoft403(&item, id, f, soft403, soft403Need)
 
 		item.Status = DeriveStatus(item)
 		items = append(items, item)
@@ -201,6 +212,7 @@ func BuildWithJSON(files []pluginapi.HostAuthFileEntry, banSnap map[string]ban.E
 			item.LastProbeStatus = pr.Status
 		}
 		applyLocalFlags(&item)
+		applySoft403(&item, id, pluginapi.HostAuthFileEntry{ID: id, Email: entry.Email}, soft403, soft403Need)
 		item.Status = DeriveStatus(item)
 		items = append(items, item)
 	}
@@ -247,6 +259,53 @@ func applyTokenJSON(item *Info, raw json.RawMessage, now time.Time) {
 		item.NeedsRefresh = true
 	} else if local.NeedsRefresh {
 		item.NeedsRefresh = true
+	}
+	if v, ok := parseUsingAPIFlag(raw); ok {
+		item.UsingAPI = &v
+	}
+}
+
+func parseUsingAPIFlag(raw json.RawMessage) (bool, bool) {
+	var obj map[string]any
+	if err := json.Unmarshal(raw, &obj); err != nil || obj == nil {
+		return false, false
+	}
+	if v, ok := obj["using_api"].(bool); ok {
+		return v, true
+	}
+	if s, ok := obj["using_api"].(string); ok {
+		switch strings.ToLower(strings.TrimSpace(s)) {
+		case "true", "1", "yes":
+			return true, true
+		case "false", "0", "no":
+			return false, true
+		}
+	}
+	return false, false
+}
+
+func applySoft403(item *Info, id string, f pluginapi.HostAuthFileEntry, soft403 map[string]int, need int) {
+	if item == nil || len(soft403) == 0 {
+		return
+	}
+	n := 0
+	found := false
+	for _, k := range []string{id, f.ID, f.AuthIndex, f.Name, strings.ToLower(strings.TrimSpace(f.Email)), strings.ToLower(strings.TrimSpace(item.Email))} {
+		if k == "" {
+			continue
+		}
+		if v, ok := soft403[k]; ok && v > 0 {
+			n = v
+			found = true
+			break
+		}
+	}
+	if !found {
+		return
+	}
+	item.Soft403Streak = n
+	if need > 0 {
+		item.Soft403Need = need
 	}
 }
 

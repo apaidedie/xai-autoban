@@ -2,7 +2,7 @@
 
 CLIProxyAPI 原生插件：自动隔离异常 xAI 凭据，支持策略配置、定时/手动巡检、禁用/删除、refresh 重授权与运维台。
 
-版本：**0.5.47**
+版本：**0.5.48**
 
 ## 工作原理（简要）
 
@@ -39,6 +39,7 @@ CLIProxyAPI 原生插件：自动隔离异常 xAI 凭据，支持策略配置、
 ## 功能
 
 - 运维台：筛选 / 全选当前筛选 / 批量释放·隔离·禁用·启用·**API 模式**·删除 / 复检 / 巡检配置
+- 列表字段：API 模式 / 软 403 进度 / 最近巡检
 - `auto_using_api`：探测/复检 OAuth 失败时可选自动开 API 模式（默认仅 403）
 - Management 真删除（失败则禁用/隔离 + `pending_delete`）
 - reauth：`refresh_token` → `auth.x.ai`
@@ -62,7 +63,8 @@ internal/
   schedule/ 选号跳过隔离
   ui/       运维台 HTML/JS
   usage/    实时 usage 成功/失败
-docs/superpowers/        # 设计与实现计划（历史档案 + 现行 spec）
+docs/superpowers/        # 现行设计/计划
+docs/archive/            # 历史 plan/spec
 scripts/                 # build.sh / build.ps1
 registry.json            # 插件商店
 ```

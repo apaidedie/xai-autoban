@@ -977,7 +977,13 @@ func (h *Handler) CurrentStatusPaged(query url.Values) StatusInfo {
 	}
 	// Best-effort local token flags for first page-ish set (cap AuthGet to avoid slow UI).
 	jsonByID := sampleAuthJSON(h.Host, files, 40)
-	allCreds, counts := creds.BuildWithJSON(files, snapshot, probeLast, jsonByID, now)
+	var soft403 map[string]int
+	softNeed := 0
+	if h.Engine != nil {
+		soft403 = h.Engine.Soft403StreakSnapshot()
+		softNeed = h.Engine.Soft403Need()
+	}
+	allCreds, counts := creds.BuildFull(files, snapshot, probeLast, jsonByID, soft403, softNeed, now)
 
 	pq := pageQueryFromValues(query)
 	pageCreds, page := creds.Page(allCreds, pq)

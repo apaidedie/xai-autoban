@@ -965,6 +965,7 @@ function rowActions(c){
   else if(!needsReauth(c)) btns.push('<button class="row-action" data-act="ban" data-id="'+id+'" '+dis+'>隔离</button>');
   if(c.disabled) btns.push('<button class="row-action" data-act="reenable" data-id="'+id+'" '+dis+'>启用</button>');
   else btns.push('<button class="row-action danger" data-act="disable" data-id="'+id+'" '+dis+'>禁用</button>');
+  if(c.using_api!==true && !c.disabled) btns.push('<button class="row-action" data-act="using_api" data-id="'+id+'" '+dis+' title="开启 API 模式">API</button>');
   if(!c.banned&&needsReauth(c)) btns.push('<button class="row-action" data-act="ban" data-id="'+id+'" '+dis+'>隔离</button>');
   return '<div class="acts">'+btns.join('')+'</div>';
 }
@@ -980,6 +981,12 @@ function probeText(c){
 function midCell(c){
   const parts=[];
   parts.push(statusBadge(c));
+  if(c.using_api===true) parts.push('<span class="pill" title="CPA 使用 API 模式">API 模式</span>');
+  else if(c.using_api===false) parts.push('<span class="pill" title="OAuth / Web 路径">OAuth</span>');
+  if(c.soft_403_streak>0){
+    const need=c.soft_403_need||3;
+    parts.push('<span class="pill" title="软 403 连续失败，达到阈值后才隔离">软403 '+c.soft_403_streak+'/'+need+'</span>');
+  }
   if(c.token_expired) parts.push('<span class="pill">Token 过期</span>');
   else if(c.needs_refresh&&!c.banned) parts.push('<span class="pill">待刷新</span>');
   // Avoid redundant「隔离」pill when already status-coded; show only non-default actions.

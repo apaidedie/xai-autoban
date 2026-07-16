@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.48 - 2026-07-16
+
+### Feat / Chore
+- 运维列表展示：**API 模式** / **软403 n/need** / 最近巡检（原有）；行内 API 快捷按钮
+- 拆分 `internal/action/using_api.go`；`action`/`creds` 单测补强
+- Release：去掉 `release.published` 双触发；注释防空资产竞态；默认版本 0.5.48
+- 历史 plan/spec 移入 `docs/archive/`
+
 ## 0.5.47 - 2026-07-16
 
 ### Feat / Fix

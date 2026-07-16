@@ -1,6 +1,7 @@
 package creds
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -75,6 +76,27 @@ func TestDeriveCredentialStatusPriority(t *testing.T) {
 	c := Info{Disabled: true, Banned: true, StatusCode: 401}
 	if DeriveStatus(c) != "disabled" {
 		t.Fatal("disabled should win")
+	}
+}
+
+func TestBuildFullUsingAPIAndSoft403(t *testing.T) {
+	now := time.Now()
+	files := []pluginapi.HostAuthFileEntry{
+		{ID: "a1", AuthIndex: "1", Name: "xai-1", Provider: "xai"},
+	}
+	jsonBy := map[string]json.RawMessage{
+		"a1": json.RawMessage(`{"access_token":"t","using_api":true}`),
+	}
+	soft := map[string]int{"a1": 2}
+	items, _ := BuildFull(files, nil, nil, jsonBy, soft, 3, now)
+	if len(items) != 1 {
+		t.Fatalf("items=%d", len(items))
+	}
+	if items[0].UsingAPI == nil || !*items[0].UsingAPI {
+		t.Fatalf("using_api=%v", items[0].UsingAPI)
+	}
+	if items[0].Soft403Streak != 2 || items[0].Soft403Need != 3 {
+		t.Fatalf("streak=%d need=%d", items[0].Soft403Streak, items[0].Soft403Need)
 	}
 }
 

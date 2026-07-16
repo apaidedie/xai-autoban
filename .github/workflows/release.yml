@@ -1,17 +1,19 @@
 name: Release
 
+# Prefer: push tag vX.Y.Z OR workflow_dispatch.
+# Avoid: manual `gh release create` before CI finishes (empty assets race).
+# softprops updates an existing release when re-run for the same tag.
+
 on:
   push:
     tags:
       - "v*"
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       version:
-        description: "Version without v prefix (e.g. 0.3.0)"
+        description: "Version without v prefix (e.g. 0.5.48)"
         required: true
-        default: "0.5.47"
+        default: "0.5.48"
 
 permissions:
   contents: write
@@ -64,6 +66,7 @@ jobs:
             VERSION="${GITHUB_REF_NAME#v}"
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Build plugin
         env:
@@ -128,6 +131,9 @@ jobs:
         with:
           tag_name: ${{ steps.ver.outputs.tag }}
           name: ${{ steps.ver.outputs.tag }}
+          # Re-running for same tag updates assets (no empty race with pre-created release).
+          make_latest: true
+          fail_on_unmatched_files: true
           generate_release_notes: true
           body: |
             CLIProxyAPI 插件商店兼容发布。
@@ -138,6 +144,8 @@ jobs:
             当前 CI 发布 Linux/Windows（CPA Docker/常见部署）。macOS 可本地 CGO 构建。
 
             安装：在 CPA `plugins.store-sources` 添加本仓库 `registry.json`，管理中心插件商店安装。
+
+            发版建议：只推 `v*` tag 或 `workflow_dispatch`；勿在 CI 完成前手动 `gh release create`。
           files: |
             release/*.zip
             release/checksums.txt
