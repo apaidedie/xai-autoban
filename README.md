@@ -38,11 +38,34 @@ CLIProxyAPI 原生插件：自动隔离异常 xAI 凭据，支持策略配置、
 
 ## 功能
 
-- 运维台：筛选 / 全选当前筛选 / 批量释放·隔离·禁用·启用·删除 / 复检 / 巡检配置
+- 运维台：筛选 / 全选当前筛选 / 批量释放·隔离·禁用·启用·**API 模式**·删除 / 复检 / 巡检配置
+- `auto_using_api`：探测/复检 OAuth 失败时可选自动开 API 模式（默认仅 403）
 - Management 真删除（失败则禁用/隔离 + `pending_delete`）
 - reauth：`refresh_token` → `auth.x.ai`
-- 配置持久化：`xai-autoban-state.json`（默认）
+- 配置持久化：`xai-autoban-state.json`（默认；本地运行产物，已 gitignore）
 - 兼容 **CPA-Manager-Plus**（resource GET 写通道）
+
+## 目录结构
+
+```
+main.go / abi_cgo.go     # 插件入口与 CGO ABI
+internal/
+  action/   隔离动作、禁用/删除/using_api、Management 客户端
+  ban/      隔离账本
+  classify/ 上游语义分类
+  config/   配置默认值与归一化
+  creds/    运维台凭证列表投影
+  host/     CPA host 回调
+  mgmt/     管理路由 + CPAMP resource ops
+  probe/    巡检 / 复检 / auto using_api
+  reauth/   refresh_token 刷新
+  schedule/ 选号跳过隔离
+  ui/       运维台 HTML/JS
+  usage/    实时 usage 成功/失败
+docs/superpowers/        # 设计与实现计划（历史档案 + 现行 spec）
+scripts/                 # build.sh / build.ps1
+registry.json            # 插件商店
+```
 
 ### 与 cpa-auth-inspect
 

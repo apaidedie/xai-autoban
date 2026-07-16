@@ -58,8 +58,8 @@ type PluginConfig struct {
 	ProbeOnlyDisabled bool `yaml:"probe_only_disabled"`
 	// AutoExecute mirrors CPA-Manager-Plus Codex inspection:
 	// false = report-only (只输出结果), true = apply probe_action / probe_on_success.
-	AutoExecute           bool   `yaml:"auto_execute"`
-	ActionCooldownSeconds int    `yaml:"action_cooldown_seconds"`
+	AutoExecute           bool `yaml:"auto_execute"`
+	ActionCooldownSeconds int  `yaml:"action_cooldown_seconds"`
 	// FailStreak403: soft 403/permission-denied needs this many consecutive failures
 	// before isolate (xAI often returns transient 403 then succeeds). Hard bans
 	// (suspended/deactivated) still isolate immediately. Default 3.
@@ -67,11 +67,11 @@ type PluginConfig struct {
 	// FailStreakWindowSeconds: reset streak if gap between failures exceeds this. Default 1800.
 	FailStreakWindowSeconds int `yaml:"fail_streak_window_seconds"`
 	// AutoUsingAPI: off | on_403 (default) | on_fail — auto enable CPA using_api on probe/recheck.
-	AutoUsingAPI   string `yaml:"auto_using_api"`
-	DeleteFallback string `yaml:"delete_fallback"`
-	SchedulerDelegate     string `yaml:"scheduler_delegate"`
-	StateFile             string `yaml:"state_file"`
-	AuditMaxEvents        int    `yaml:"audit_max_events"`
+	AutoUsingAPI      string `yaml:"auto_using_api"`
+	DeleteFallback    string `yaml:"delete_fallback"`
+	SchedulerDelegate string `yaml:"scheduler_delegate"`
+	StateFile         string `yaml:"state_file"`
+	AuditMaxEvents    int    `yaml:"audit_max_events"`
 	// DisableVia: host_auth (default, via host.auth.save) or management_api (CPA Management PATCH /auth-files/status).
 	DisableVia                           string `yaml:"disable_via"`
 	ManagementURL                        string `yaml:"management_url"`
@@ -83,31 +83,31 @@ type PluginConfig struct {
 
 func Default() PluginConfig {
 	return PluginConfig{
-		Ban401Seconds:                        86400,
-		Ban402Seconds:                        604800,
-		Ban403Seconds:                        86400,
-		Ban429FallbackSeconds:                1800,
-		ActionOn401:                          actionBan,
-		ActionOn402:                          actionBan,
-		ActionOn403:                          actionBan,
-		ActionOn429:                          actionBan,
-		ProbeEnabled:                         true,
-		ProbeIntervalSeconds:                 600,
-		ProbeTimeoutSeconds:                  20,
-		ProbeConcurrency:                     3,
-		ProbeQPS:                             2,
-		ProbeMode:                            "responses_mini",
-		ProbeBaseURL:                         "",
-		ProbePath:                            "/models",
-		ProbeAction:                          actionBan,
-		ProbeOnSuccess:                       successUnban,
-		AutoExecute:                          true,
-		ActionCooldownSeconds:                60,
-		FailStreak403:                        3,
-		FailStreakWindowSeconds:              1800,
-		AutoUsingAPI:                         AutoUsingAPIOn403,
-		DeleteFallback:                       actionDisable,
-		SchedulerDelegate:                    pluginapi.SchedulerBuiltinRoundRobin,
+		Ban401Seconds:           86400,
+		Ban402Seconds:           604800,
+		Ban403Seconds:           86400,
+		Ban429FallbackSeconds:   1800,
+		ActionOn401:             actionBan,
+		ActionOn402:             actionBan,
+		ActionOn403:             actionBan,
+		ActionOn429:             actionBan,
+		ProbeEnabled:            true,
+		ProbeIntervalSeconds:    600,
+		ProbeTimeoutSeconds:     20,
+		ProbeConcurrency:        3,
+		ProbeQPS:                2,
+		ProbeMode:               "responses_mini",
+		ProbeBaseURL:            "",
+		ProbePath:               "/models",
+		ProbeAction:             actionBan,
+		ProbeOnSuccess:          successUnban,
+		AutoExecute:             true,
+		ActionCooldownSeconds:   60,
+		FailStreak403:           3,
+		FailStreakWindowSeconds: 1800,
+		AutoUsingAPI:            AutoUsingAPIOn403,
+		DeleteFallback:          actionDisable,
+		SchedulerDelegate:       pluginapi.SchedulerBuiltinRoundRobin,
 		// Default state path: bans + ops-console settings overlay (survives reload).
 		StateFile:                            "xai-autoban-state.json",
 		AuditMaxEvents:                       200,

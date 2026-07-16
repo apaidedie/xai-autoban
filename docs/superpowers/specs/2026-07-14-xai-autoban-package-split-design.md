@@ -1,8 +1,10 @@
 # xai-autoban 中等拆包设计
 
+> **HISTORICAL.** 包拆分已完成（`internal/*`）。文中版本号为当时快照，以 `main.go` / `registry.json` 为准。
+
 **Date:** 2026-07-14  
 **Version in scope:** 0.5.8（行为与版本号不变）  
-**Status:** Approved (user: ok)  
+**Status:** Historical (implemented)  
 **Approach:** 方案 1 — 按领域细拆 `internal/*`
 
 ## 1. Goals and non-goals

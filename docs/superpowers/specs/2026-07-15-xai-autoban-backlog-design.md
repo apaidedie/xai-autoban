@@ -1,8 +1,12 @@
 # xai-autoban Backlog Hardening Design
 
+> **HISTORICAL (2026-07-15).** Items below were largely shipped by v0.5.41–0.5.47.  
+> Do not treat “build broken / fake delete / missing build.ps1” as current state.  
+> Current product version: see `main.go` / `registry.json` / README.
+
 **Date:** 2026-07-15  
-**Status:** Approved  
-**Version stays:** 0.5.8 (behavior upgrades only; no store version bump required unless release process needs it)
+**Status:** Historical (implemented)  
+**Version note (then):** 0.5.8
 
 ## Goal
 
