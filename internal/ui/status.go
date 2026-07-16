@@ -48,30 +48,32 @@ h1{margin:8px 0 0;font-size:26px;font-weight:800;letter-spacing:-.03em}
 .cfg-card .v.on{color:var(--green)}.cfg-card .v.off{color:var(--amber)}
 @media(max-width:1100px){.cfg-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:700px){.cfg-grid{grid-template-columns:1fr 1fr}}
-.toolbar{display:flex;flex-direction:column;gap:8px;padding:10px 14px;border-bottom:1px solid rgba(148,163,184,.08)}
-.filters{display:flex;flex-wrap:wrap;gap:6px}
-.fchip{height:30px;border-radius:999px;padding:0 12px;font-size:12px;font-weight:750;background:rgba(7,12,22,.55);border:1px solid var(--line);color:var(--muted)}
-.fchip:hover{color:var(--text);border-color:rgba(148,163,184,.35)}
-.fchip.on{background:rgba(59,130,246,.16);border-color:rgba(96,165,250,.45);color:#93c5fd}
+.toolbar{padding:12px 14px 10px;border-bottom:1px solid rgba(148,163,184,.08)}
 .tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-.tools input[type=search]{flex:1;min-width:200px}
+.tools input[type=search]{flex:1 1 220px;min-width:180px}
+.tools-end{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-left:auto}
+.sel-bar{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin-top:8px;padding:6px 10px;border-radius:10px;background:rgba(7,12,22,.4);border:1px solid rgba(148,163,184,.08)}
+.sel-bar .sel-inline{display:inline-flex;align-items:center;gap:6px;color:#cbd5e1;font-size:12px;font-weight:700;cursor:pointer;user-select:none}
+.sel-bar .sel-inline input{accent-color:var(--cyan)}
+.sel-bar .sel-link{height:28px;padding:0 10px;border-radius:8px;border:0;background:transparent;color:var(--muted);font-size:12px;font-weight:750}
+.sel-bar .sel-link:hover{color:var(--text);background:rgba(51,65,85,.45)}
+.sel-bar .sel-link:disabled{opacity:.35;cursor:not-allowed}
+.sel-bar .sel-count{margin-left:auto;font-size:12px;font-weight:800;color:var(--cyan);font-variant-numeric:tabular-nums;min-height:1em}
+.sel-bar .sel-hint{color:var(--muted);font-size:11px;font-weight:650}
 .more{position:relative}
 .more>summary{list-style:none;cursor:pointer;display:inline-flex;align-items:center;height:38px;padding:0 12px;border-radius:11px}
 .more>summary::-webkit-details-marker{display:none}
-.more-menu{position:absolute;right:0;top:42px;z-index:20;min-width:200px;padding:8px;border-radius:12px;border:1px solid var(--line);background:rgba(15,23,42,.98);box-shadow:0 16px 40px rgba(0,0,0,.45);display:flex;flex-direction:column;gap:2px}
-.more-menu .more-sec{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:8px 10px 4px}
-.more-menu .more-sec:first-child{padding-top:2px}
-.more-menu .more-div{height:1px;margin:6px 6px;background:rgba(148,163,184,.12)}
+.more-menu{position:absolute;right:0;top:42px;z-index:20;min-width:188px;padding:6px;border-radius:12px;border:1px solid var(--line);background:rgba(15,23,42,.98);box-shadow:0 16px 40px rgba(0,0,0,.45);display:flex;flex-direction:column;gap:2px}
 .more-menu button,.more-menu label{height:34px;justify-content:flex-start;text-align:left;background:transparent;border:0;width:100%;border-radius:8px;padding:0 10px;display:inline-flex;align-items:center;color:var(--text);font-weight:700;font-size:13px;cursor:pointer}
 .more-menu button:hover{background:rgba(51,65,85,.8)}
 .more-menu button.danger{color:#fda4af}
-.more-menu button.danger:hover{background:rgba(244,63,94,.18)}
+.more-menu button.danger:hover{background:rgba(244,63,94,.14)}
 .more-menu button:disabled{opacity:.4;cursor:not-allowed}
+.more-menu .more-div{height:1px;margin:4px 6px;background:rgba(148,163,184,.1)}
 .auth-row{border-top:0!important;padding:6px 14px!important}
 .auth-row.auth-ok{padding:6px 14px!important;opacity:.9}
 .auth-row.auth-ok input{display:none}
-.msg-row{padding:4px 14px 8px!important;border-top:0!important}
-.msg-row .msg{min-height:16px}
+
 .qcard.s401{border-color:rgba(59,130,246,.22)}.qcard.s402{border-color:rgba(251,191,36,.22)}.qcard.s403{border-color:rgba(251,113,133,.22)}.qcard.s429{border-color:rgba(167,139,250,.22)}
 .qcard.active,.qcard.on{border-color:rgba(34,211,238,.5);box-shadow:0 0 0 1px rgba(34,211,238,.18) inset}
 .hist-wrap{max-height:0;overflow:hidden;opacity:0;transition:max-height .18s ease,opacity .15s ease,padding .15s ease}
@@ -103,19 +105,21 @@ button:hover{background:rgba(51,65,85,.95)}button:disabled{opacity:.35;cursor:no
 .bp{background:linear-gradient(180deg,#3b82f6,#2563eb);border-color:#1d4ed8;color:#fff}
 .bd{background:rgba(244,63,94,.18);border-color:rgba(251,113,133,.4);color:#fecdd3}
 .bg{background:transparent}.bs{background:rgba(15,23,42,.7)}
-.msg{min-height:18px;color:var(--muted);font-size:12.5px;font-weight:700}
+.msg-row{padding:2px 14px 6px!important;border-top:0!important}
+.msg{min-height:16px;color:var(--muted);font-size:12px;font-weight:650}
 .msg.err{color:#fda4af}
-.progress-panel{display:none;margin:0 14px 12px;padding:10px 12px;border-radius:12px;border:1px solid rgba(148,163,184,.12);background:rgba(15,23,42,.45)}
+.progress-panel{display:none;margin:0 14px 12px;padding:12px 14px;border-radius:14px;border:1px solid rgba(148,163,184,.1);background:linear-gradient(180deg,rgba(15,23,42,.7),rgba(8,14,26,.75))}
 .progress-panel.on{display:block}
 .progress-meta{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;font-size:12px;font-weight:800}
-.progress-meta .pl{color:var(--muted)}
-.progress-meta .pc{color:var(--cyan);font-family:var(--mono)}
-.progress{height:6px;border-radius:999px;background:rgba(148,163,184,.12);overflow:hidden}
+.progress-meta .pl{color:#cbd5e1}
+.progress-meta .pc{color:var(--cyan);font-family:var(--mono);font-variant-numeric:tabular-nums}
+.progress{height:6px;border-radius:999px;background:rgba(148,163,184,.1);overflow:hidden}
 .progress>i{display:block;height:100%;width:0;border-radius:999px;background:linear-gradient(90deg,var(--cyan),var(--blue));transition:width .15s ease}
-.op-result{margin-top:10px;padding:10px 12px;border-radius:10px;font-size:12.5px;font-weight:750;line-height:1.5;border:1px solid rgba(148,163,184,.16);background:rgba(2,6,23,.45);color:#e2e8f0;white-space:pre-wrap}
-.op-result.ok{border-color:rgba(52,211,153,.35);background:rgba(6,78,59,.35);color:#bbf7d0}
-.op-result.err{border-color:rgba(251,113,133,.4);background:rgba(127,29,29,.35);color:#fecdd3}
-.op-result.warn{border-color:rgba(251,191,36,.35);background:rgba(120,53,15,.35);color:#fde68a}
+/* Soft result panel — fits dark theme; not a jarring alert box */
+.op-result{margin-top:10px;padding:10px 12px;border-radius:10px;font-size:12px;font-weight:650;line-height:1.55;border:1px solid rgba(148,163,184,.12);background:rgba(2,6,23,.35);color:#cbd5e1;white-space:pre-wrap;max-height:160px;overflow:auto}
+.op-result.ok{border-color:rgba(34,211,238,.22);background:rgba(8,47,73,.28);color:#a5f3fc}
+.op-result.warn{border-color:rgba(148,163,184,.16);background:rgba(30,41,59,.4);color:#e2e8f0}
+.op-result.err{border-color:rgba(251,113,133,.22);background:rgba(69,10,10,.22);color:#fecdd3}
 .toast{
   position:fixed;right:18px;bottom:18px;z-index:80;max-width:min(420px,92vw);
   padding:12px 14px;border-radius:12px;border:1px solid var(--line);
@@ -178,7 +182,6 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
 .hist button{height:auto;min-width:150px;padding:10px;text-align:left}
 .hist b{display:block}.hist small{display:block;color:#93a4c3;margin-top:2px}
 .fchip.ghost,.code-chip.ghost{opacity:.8}
-.list-head{display:flex;align-items:center;justify-content:space-between;padding:6px 14px;border-bottom:1px solid rgba(148,163,184,.08)}
 .card-list{display:flex;flex-direction:column;gap:6px;padding:8px 10px 10px;max-height:62vh;overflow:auto}
 .rcard{
   display:grid;grid-template-columns:28px minmax(180px,1.4fr) minmax(200px,1.2fr) auto;
@@ -324,28 +327,35 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
     <div class="phd">
       <div>
         <h2>凭证列表</h2>
-        <div class="hint">主卡=健康/隔离/禁用；下方=状态码计数（口径可不同）</div>
+        <div class="hint" id="listHint">点击上方卡片筛选 · 勾选后复检或批量操作</div>
       </div>
       <div class="hint" id="resultCount">0 条</div>
     </div>
 
     <div class="toolbar">
-      <div class="tools" style="width:100%">
+      <div class="tools">
         <input id="search" type="search" placeholder="搜索账号 / Auth ID / 原因" autocomplete="off">
-        <button class="bp" id="recheckSelected" type="button" onclick="recheckSelected()" disabled title="对勾选的凭证做上游复检（任意状态，含已禁用）">复检所选 (0)</button>
-        <details class="more">
-          <summary class="bs">操作</summary>
-          <div class="more-menu">
-            <div class="more-sec">所选</div>
-            <button type="button" id="unbanSelected" onclick="bulkAct('unban')" disabled>释放所选</button>
-            <button type="button" id="banSelected" onclick="bulkAct('ban')" disabled>隔离所选</button>
-            <button type="button" id="disableSelected" onclick="bulkAct('disable')" disabled>禁用所选</button>
-            <button type="button" id="reenableSelected" onclick="bulkAct('reenable')" disabled>启用所选</button>
-            <button type="button" class="danger" id="deleteSelected" onclick="bulkAct('delete')" disabled>删除所选</button>
-            <div class="more-div"></div>
-            <label class="chk"><input id="autoRefresh" type="checkbox" checked> 30 秒自动刷新</label>
-          </div>
-        </details>
+        <div class="tools-end">
+          <button class="bp" id="recheckSelected" type="button" onclick="recheckSelected()" disabled title="对勾选凭证做上游复检">复检所选 (0)</button>
+          <details class="more">
+            <summary class="bs">操作</summary>
+            <div class="more-menu">
+              <button type="button" id="unbanSelected" onclick="bulkAct('unban')" disabled>释放所选</button>
+              <button type="button" id="banSelected" onclick="bulkAct('ban')" disabled>隔离所选</button>
+              <button type="button" id="disableSelected" onclick="bulkAct('disable')" disabled>禁用所选</button>
+              <button type="button" id="reenableSelected" onclick="bulkAct('reenable')" disabled>启用所选</button>
+              <button type="button" class="danger" id="deleteSelected" onclick="bulkAct('delete')" disabled>删除所选</button>
+              <div class="more-div"></div>
+              <label class="chk"><input id="autoRefresh" type="checkbox" checked> 30 秒自动刷新</label>
+            </div>
+          </details>
+        </div>
+      </div>
+      <div class="sel-bar">
+        <label class="sel-inline"><input id="selectPage" type="checkbox"> 本页全选</label>
+        <button type="button" class="sel-link" id="selectFilterBtn" title="勾选当前筛选下全部凭证（跨页，最多 800）">全选当前筛选</button>
+        <button type="button" class="sel-link" id="clearSelectedBtn" title="清空勾选">清除</button>
+        <span class="sel-count" id="selectedHint"></span>
       </div>
     </div>
 
@@ -359,13 +369,6 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
       <div class="op-result" id="opResult" hidden></div>
     </div>
 
-    <div class="list-head">
-      <label class="chk"><input id="selectPage" type="checkbox"> 本页全选</label>
-      <button class="bg" id="selectFilterBtn" type="button" title="勾选当前筛选下的全部凭证（跨页，最多 800）">全选当前筛选</button>
-      <button class="bg" id="clearSelectedBtn" type="button" title="清空勾选">清除选择</button>
-      <span class="hint" id="listHint"></span>
-      <span class="hint" id="selectedHint"></span>
-    </div>
     <div class="card-list" id="rows"></div>
     <div id="empty" class="empty" hidden>没有匹配的凭证</div>
     <div class="pager" id="pager">
@@ -491,15 +494,18 @@ function setActionEnabled(ok){
     ['unbanSelected','banSelected','disableSelected','reenableSelected','deleteSelected','recheckSelected'].forEach(id=>{const el=$(id); if(el) el.disabled=n===0;});
     if($('clearSelectedBtn')) $('clearSelectedBtn').disabled=n===0;
   }
-  if($('unbanSelected')) $('unbanSelected').textContent='释放所选 ('+n+')';
-  if($('deleteSelected')) $('deleteSelected').textContent='删除所选 ('+n+')';
-  if($('recheckSelected')) $('recheckSelected').textContent='复检所选 ('+n+')';
+  if($('unbanSelected')) $('unbanSelected').textContent=n?('释放所选 ('+n+')'):'释放所选';
+  if($('deleteSelected')) $('deleteSelected').textContent=n?('删除所选 ('+n+')'):'删除所选';
+  if($('banSelected')) $('banSelected').textContent=n?('隔离所选 ('+n+')'):'隔离所选';
+  if($('disableSelected')) $('disableSelected').textContent=n?('禁用所选 ('+n+')'):'禁用所选';
+  if($('reenableSelected')) $('reenableSelected').textContent=n?('启用所选 ('+n+')'):'启用所选';
+  if($('recheckSelected')) $('recheckSelected').textContent=n?('复检所选 ('+n+')'):'复检所选';
   const sh=$('selectedHint');
-  if(sh) sh.textContent=n?('已选 '+n+' 条'):'';
+  if(sh) sh.textContent=n?('已选 '+n):'';
   const sf=$('selectFilterBtn');
   if(sf){
     const fl={all:'全部',healthy:'健康',banned:'隔离',disabled:'已禁用','401':'401','402':'402','403':'403','429':'429'}[state.filter]||state.filter;
-    sf.textContent='全选当前筛选'+(state.filter&&state.filter!=='all'?(' · '+fl):'');
+    sf.textContent=state.filter&&state.filter!=='all'?('全选 · '+fl):'全选当前筛选';
   }
 }
 function setAuthUI(){
@@ -984,12 +990,13 @@ function render(){
   const list=filtered();
   const filterLabel={all:'全部',healthy:'健康',banned:'隔离',disabled:'已禁用','401':'401','402':'402','403':'403','429':'429'}[state.filter]||state.filter;
   const p=state.page||{};
-  $('resultCount').textContent=(p.total!=null?p.total:list.length)+' 条 · '+filterLabel+(p.pages>1?(' · 第 '+(p.page||1)+'/'+p.pages+' 页'):'');
+  $('resultCount').textContent=(p.total!=null?p.total:list.length)+' 条'+(state.filter&&state.filter!=='all'?(' · '+filterLabel):'')+(p.pages>1?(' · '+ (p.page||1)+'/'+p.pages):'');
   const lh=$('listHint');
   if(lh){
-    if(state.filter==='banned') lh.textContent='显示隔离账本';
-    else if(['401','402','403','429'].includes(state.filter)) lh.textContent='状态码筛选 · 与「当前隔离」口径不同';
-    else lh.textContent='';
+    if(state.filter==='banned') lh.textContent='筛选：隔离账本';
+    else if(state.filter==='disabled') lh.textContent='筛选：已禁用';
+    else if(['401','402','403','429'].includes(state.filter)) lh.textContent='筛选：'+filterLabel+'（状态码口径，可与隔离账本不同）';
+    else lh.textContent='点击上方卡片筛选 · 勾选后复检或批量操作';
   }
   paintPager();
   $('rows').innerHTML=list.map(c=>{
@@ -1187,11 +1194,13 @@ async function recheckSelected(){
       done=Math.min(i+part.length, ids.length);
       setProgress(done, ids.length, '复检所选');
     }
-    const msg='复检完成 · 检 '+checked+' · 成功 '+okN+' · 失败 '+failed+' · 释放 '+unbanned+' · 启用 '+reenabled+' · 跳过 '+skipped+' · 进度 '+done+'/'+ids.length;
+    const msg='复检完成 · 检 '+checked+' · 成功 '+okN+' · 失败 '+failed+' · 释放 '+unbanned+' · 启用 '+reenabled+' · 跳过 '+skipped;
     const detail=msg+(errs.length?('\n'+errs.join('\n')):'');
-    setMessage(msg, failed>0);
+    setMessage(msg);
     finishProgress(ids.length, ids.length, '复检完成');
-    setOpResult(detail, failed>0?(okN>0?'warn':'err'):'ok');
+    // streak/grace 等探测噪声用中性样式，避免大块刺眼红底
+    const soft=failed>0 && (okN>0 || /streak\/grace|not isolated|skipped_/i.test(detail));
+    setOpResult(detail, failed>0?(soft?'warn':'err'):'ok');
     state.selected.clear();
     await loadData(true);
   }catch(e){ setMessage(e.message,true); setOpResult(e.message,'err'); }

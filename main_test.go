@@ -176,11 +176,13 @@ func TestStatusPageUsesManagementKeyFlow(t *testing.T) {
 		"PLUGIN_VERSION",
 		"释放所选",
 		"btnRefresh",
-		"more-sec",
+		"操作",
 		"progressPanel",
 		"opResult",
 		"progressCount",
 		"setOpResult",
+		"sel-bar",
+		"tools-end",
 	} {
 		if !strings.Contains(page, required) {
 			t.Fatalf("page missing %q", required)
