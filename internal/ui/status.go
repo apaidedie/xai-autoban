@@ -152,7 +152,8 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
 .bhealthy{color:#6ee7b7;background:rgba(16,185,129,.12);border-color:rgba(52,211,153,.28)}
 .bdisabled{color:#cbd5e1;background:rgba(148,163,184,.12);border-color:rgba(148,163,184,.28)}
 .bbanned{color:#fde68a;background:rgba(245,158,11,.12);border-color:rgba(245,158,11,.25)}
-.pill{display:inline-flex;height:24px;align-items:center;padding:0 9px;border-radius:999px;background:rgba(148,163,184,.1);border:1px solid rgba(148,163,184,.16);font-size:12px;font-weight:750}
+.pill{display:inline-flex;height:22px;align-items:center;padding:0 8px;border-radius:999px;background:rgba(148,163,184,.1);border:1px solid rgba(148,163,184,.16);font-size:11px;font-weight:700}
+.pill.dim{opacity:.85;font-weight:650;color:#94a3b8}
 .remain{font-family:var(--mono);font-weight:800;color:#fff;font-size:12px}
 .acts{display:flex;flex-wrap:wrap;gap:6px}
 .row-action{height:30px;padding:0 10px;border-radius:9px;font-size:12px;background:#1e293b;border-color:#475569}
@@ -942,67 +943,75 @@ async function loadData(silent=false){
     render();
   }catch(e){ $('syncState').textContent='异常'; $('syncState').className='live err'; setMessage(e.message,true); toast(e.message,'err'); }
 }
-function statusBadge(c){
-  const st=c.status||(c.disabled?'disabled':(c.banned?String(c.status_code||'banned'):'healthy'));
-  const map={healthy:['bhealthy','健康'],disabled:['bdisabled','已禁用'],'401':['b401','401'],'402':['b402','402'],'403':['b403','403'],'429':['b429','429'],banned:['bbanned','隔离']};
-  const [cls,label]=map[st]||['bbanned',st];
-  let html='<span class="badge '+cls+'">'+esc(label)+'</span>';
-  if(c.disabled&&c.banned) html+=' <span class="pill">仍隔离</span>';
-  return html;
+// One primary badge: 健康 | 禁用 | 隔离 | 401/402/403/429
+function primaryStatus(c){
+  if(c.disabled) return {cls:'bdisabled', label:'禁用'};
+  if(c.banned){
+    const code=Number(c.status_code||0);
+    if([401,402,403,429].includes(code)) return {cls:'b'+code, label:String(code)};
+    return {cls:'bbanned', label:'隔离'};
+  }
+  if(c.token_expired||c.status==='401'||c.status_code===401) return {cls:'b401', label:'401'};
+  return {cls:'bhealthy', label:'健康'};
 }
 function needsReauth(c){
   return !!(c.needs_refresh||c.token_expired||c.classification==='reauth'||c.status_code===401||c.status==='401');
 }
 function rowActions(c){
-  // encodeURIComponent so dataset.id survives special chars; never HTML-escape the id value.
   const id=encodeURIComponent(c.auth_id||'');
   const dis=state.busy?'disabled':'';
   const btns=[];
-  if(needsReauth(c)){
-    btns.push('<button class="row-action primary" data-act="reauth" data-id="'+id+'" '+dis+'>重授权</button>');
-  }
+  if(needsReauth(c)) btns.push('<button class="row-action primary" data-act="reauth" data-id="'+id+'" '+dis+'>重授权</button>');
   if(c.banned) btns.push('<button class="row-action" data-act="unban" data-id="'+id+'" '+dis+'>释放</button>');
   else if(!needsReauth(c)) btns.push('<button class="row-action" data-act="ban" data-id="'+id+'" '+dis+'>隔离</button>');
   if(c.disabled) btns.push('<button class="row-action" data-act="reenable" data-id="'+id+'" '+dis+'>启用</button>');
   else btns.push('<button class="row-action danger" data-act="disable" data-id="'+id+'" '+dis+'>禁用</button>');
   if(c.using_api!==true && !c.disabled) btns.push('<button class="row-action" data-act="using_api" data-id="'+id+'" '+dis+' title="开启 API 模式">API</button>');
-  if(!c.banned&&needsReauth(c)) btns.push('<button class="row-action" data-act="ban" data-id="'+id+'" '+dis+'>隔离</button>');
   return '<div class="acts">'+btns.join('')+'</div>';
 }
-function probeText(c){
-  if(!c.last_probe_at) return '未巡检';
-  if(c.last_probe_ok===true) return '巡检成功'+(c.last_probe_status?(' '+c.last_probe_status):'');
-  // Healthy account + old probe fail: do not look like current status
-  if(!c.banned && !c.disabled){
-    return '上次巡检异常'+(c.last_probe_status?(' '+c.last_probe_status):'')+'（当前可用）';
-  }
-  return '巡检失败'+(c.last_probe_status?(' '+c.last_probe_status):'');
+// Strip noise from reason for one-line subtitle.
+function shortWhy(c){
+  let cls=classLabel(c.classification);
+  let r=String(c.reason||'');
+  r=r.replace(/\s*[·•|]\s*streak\s*\d+/ig,'').replace(/\s*\(HTTP\s*\d+\)/ig,'').replace(/\s*·\s*/g,' ').trim();
+  // Drop English duplicates of Chinese class
+  const rl=reasonLabel(r);
+  if(cls && (rl==='-'||!rl||rl===r && /permission|denied|forbidden|exhausted|rate/i.test(r))) return cls;
+  if(cls && rl && rl!==cls && rl!=='-') return cls;
+  if(cls) return cls;
+  if(rl&&rl!=='-') return rl;
+  return '';
 }
 function midCell(c){
-  const parts=[];
-  parts.push(statusBadge(c));
-  if(c.using_api===true) parts.push('<span class="pill" title="CPA 使用 API 模式">API 模式</span>');
-  else if(c.using_api===false) parts.push('<span class="pill" title="OAuth / Web 路径">OAuth</span>');
-  if(c.soft_403_streak>0){
-    const need=c.soft_403_need||3;
-    parts.push('<span class="pill" title="软 403 连续失败，达到阈值后才隔离">软403 '+c.soft_403_streak+'/'+need+'</span>');
+  const p=primaryStatus(c);
+  const tags=['<span class="badge '+p.cls+'" title="主状态">'+esc(p.label)+'</span>'];
+  // At most 2 secondary pills — no 已禁用+禁用+隔离 triple stack
+  if(c.disabled&&c.banned) tags.push('<span class="pill dim" title="CPA 已关，且插件仍在隔离账本">兼隔离</span>');
+  if(c.using_api===true) tags.push('<span class="pill dim" title="使用 API 模式">API</span>');
+  if(!c.banned && c.soft_403_streak>0){
+    tags.push('<span class="pill dim" title="软 403 连击，满额才隔离">'+c.soft_403_streak+'/'+(c.soft_403_need||3)+'</span>');
+  } else if(!c.banned && c.token_expired){
+    tags.push('<span class="pill dim">过期</span>');
+  } else if(!c.banned && c.needs_refresh && p.label!=='401'){
+    tags.push('<span class="pill dim">待刷新</span>');
   }
-  if(c.token_expired) parts.push('<span class="pill">Token 过期</span>');
-  else if(c.needs_refresh&&!c.banned) parts.push('<span class="pill">待刷新</span>');
-  // Avoid redundant「隔离」pill when already status-coded; show only non-default actions.
-  if(c.banned&&c.action&&c.action!=='ban') parts.push('<span class="pill">'+esc(labelAction(c.action))+'</span>');
-  else if(c.banned) parts.push('<span class="pill">隔离</span>');
-  const reason=reasonLabel(c.reason);
-  const cls=classLabel(c.classification);
-  const detail=[];
-  if(cls) detail.push(esc(cls));
-  if(reason&&reason!=='-'&&reason!==cls) detail.push(esc(reason));
-  if(c.banned&&c.remaining_seconds!=null&&c.remaining_seconds>=0) detail.push('<span class="remain">剩余 '+esc(formatRemaining(c.remaining_seconds))+'</span>');
-  const pt=probeText(c);
-  if(c.last_probe_at) detail.push(esc(pt));
-  else if(!c.banned) detail.push(esc(pt));
-  return '<div class="mid"><div class="mid-top">'+parts.join('')+'</div>'+
-    (detail.length?'<div class="mid-sub">'+detail.join('<span class="sep">·</span>')+'</div>':'')+
+  // One subtitle line only
+  const sub=[];
+  const why=shortWhy(c);
+  if(why) sub.push(esc(why));
+  if(c.banned&&c.remaining_seconds!=null&&c.remaining_seconds>=0){
+    sub.push('<span class="remain">'+esc(formatRemaining(c.remaining_seconds))+'</span>');
+  }
+  if(c.last_probe_at){
+    if(c.last_probe_ok===true && !c.banned && !c.disabled) sub.push('探测OK');
+    else if(c.last_probe_ok===false && c.last_probe_status){
+      // Skip if same as primary code already shown
+      if(!(c.banned && Number(c.status_code)===Number(c.last_probe_status)))
+        sub.push('探测'+c.last_probe_status);
+    }
+  }
+  return '<div class="mid"><div class="mid-top">'+tags.join('')+'</div>'+
+    (sub.length?'<div class="mid-sub">'+sub.join('<span class="sep">·</span>')+'</div>':'')+
     '</div>';
 }
 function render(){

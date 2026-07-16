@@ -298,7 +298,7 @@ func (p *Service) RecheckSelected(authIDs []string, reenableOnOK bool) (RecheckS
 				if nowBanned && !wasBanned {
 					res.Errors = append(res.Errors, key+": "+msg)
 				} else {
-					res.Errors = append(res.Errors, key+": "+msg+" (streak/grace, not isolated yet)")
+					res.Errors = append(res.Errors, key+": "+msg+"（连击/宽限中，尚未隔离）")
 				}
 			}
 		}(id)
