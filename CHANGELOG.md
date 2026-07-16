@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.9 - 2026-07-16
+
+### Chore (P2)
+- 拆分 `internal/ui`：`status.go` + `status_css.go` + `status_body.go` + `ops_script.go`（避免 `*_js.go` 被当作 GOOS=js）
+- 拆分 `internal/mgmt/status_build.go`（状态组装）与 `routes.go`
+- 新增 `internal/mgmt/handler_test.go`：settings、列表、list_ids、unban、path match
+
 ## 1.0.8 - 2026-07-16
 
 ### UX / Safety (P1)
