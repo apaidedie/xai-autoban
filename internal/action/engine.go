@@ -319,8 +319,19 @@ func (e *Engine) ApplyFailure(authID, source string, entry ban.Entry, force bool
 	return e.ApplyAction(authID, action, source, entry, force)
 }
 
-// soft403NeedsStreak: transient permission denials only (not suspended/banned accounts).
+// soft403NeedsStreak: transient HTTP 403 permission denials only.
+// Never applies to 401/402/429 or quota_exhausted (even if reason text looks similar).
 func soft403NeedsStreak(entry ban.Entry) bool {
+	if entry.Classification == classify.QuotaExhausted || entry.StatusCode == http.StatusPaymentRequired {
+		return false
+	}
+	if entry.StatusCode == http.StatusUnauthorized || entry.StatusCode == http.StatusTooManyRequests {
+		return false
+	}
+	// Status set and not 403 → not soft 403 (e.g. legacy mis-tags).
+	if entry.StatusCode != 0 && entry.StatusCode != http.StatusForbidden {
+		return false
+	}
 	if entry.StatusCode != http.StatusForbidden && entry.Classification != classify.PermissionDenied {
 		return false
 	}

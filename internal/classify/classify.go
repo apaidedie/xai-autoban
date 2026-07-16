@@ -165,7 +165,22 @@ func Probe(input Input) Result {
 		}
 	}
 
-	if status == http.StatusPaymentRequired || status == http.StatusForbidden || containsAny(blob,
+	// Payment required / quota HTTP 402 — not soft permission 403.
+	if status == http.StatusPaymentRequired {
+		action := ActionDisable
+		if disabled {
+			action = ActionKeep
+		}
+		return Result{
+			Classification:    QuotaExhausted,
+			RecommendedAction: action,
+			Reason:            "payment required (HTTP 402)",
+			Isolate:           true,
+			StatusCode:        http.StatusPaymentRequired,
+		}
+	}
+
+	if status == http.StatusForbidden || containsAny(blob,
 		"permission-denied",
 		"chat endpoint is denied",
 		"deactivated",

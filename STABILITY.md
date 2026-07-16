@@ -159,13 +159,14 @@ Stable `op` names include: `settings`, `unban`, `unban_all`, `probe`, `apply`, `
 
 Ship **1.0.0** only when all are true:
 
-- [ ] This file reviewed and linked from README as the operator contract
-- [ ] No open P0: “isolates healthy accounts under normal traffic” bugs
-- [ ] Tests green on CI for: soft 403 streak, usage success unban, probe 402 no-isolate, `auto_using_api` gate, using_api write verify, delete fallback
-- [ ] Ops list shows: isolation/disabled, using_api, soft-403 progress, last probe (done in 0.5.48+)
-- [ ] Disable + using_api write paths documented with Management key requirements
-- [ ] Release workflow produces checksums for linux/windows without empty-asset races
-- [ ] Version strings identical: `main.go` / `registry.json` / Release tag
+- [x] This file reviewed and linked from README as the operator contract
+- [ ] No open P0: “isolates healthy accounts under normal traffic” bugs *(monitor in production)*
+- [x] Tests green on CI for: soft 403 streak, usage success unban, probe 402 no-isolate, `auto_using_api` gate, using_api write verify, delete fallback  
+      → `internal/action/stability_contract_test.go`, `internal/usage/handle_test.go`, `internal/probe/using_api_test.go`, `internal/classify` 402→quota
+- [x] Ops list shows: isolation/disabled, using_api, soft-403 progress, last probe (0.5.48+)
+- [x] Disable + using_api write paths documented with Management key requirements (this file §1 + README)
+- [x] Release workflow produces checksums for linux/windows without empty-asset races (tag / workflow_dispatch)
+- [ ] Version strings identical: `main.go` / `registry.json` / Release tag *(each release)*
 - [ ] CHANGELOG **1.0.0** section states: *Stable contract per STABILITY.md*
 - [ ] Optional freeze window: one **0.9.x** release with “config freeze, bugfix only”
 

@@ -1,9 +1,16 @@
 # Changelog
 
-## Unreleased
+## 0.5.49 - 2026-07-16
+
+### Fix
+- HTTP **402** 不再误标为 `permission_denied` / 软 403 连击；归为 `quota_exhausted`，usage 可立即隔离
+- 软 403 streak 仅作用于真正的 403 permission
+
+### Test
+- STABILITY 契约单测：`stability_contract_test.go`、`usage/handle_test.go`（软 403、usage 释放、probe 402 不隔离、using_api 校验、删除回退）
 
 ### Docs
-- 新增 [STABILITY.md](./STABILITY.md)：Pre-1.0 稳定性契约、配置冻结表、1.0 发布清单
+- [STABILITY.md](./STABILITY.md) 清单勾选 CI 测试项
 
 ## 0.5.48 - 2026-07-16
 

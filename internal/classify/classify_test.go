@@ -21,6 +21,13 @@ func TestProbeReauth(t *testing.T) {
 	}
 }
 
+func TestProbeHTTP402IsQuotaNotPermission(t *testing.T) {
+	r := Probe(Input{Status: 402})
+	if r.Classification != QuotaExhausted || !r.Isolate || r.StatusCode != 402 {
+		t.Fatalf("%+v", r)
+	}
+}
+
 func TestProbeQuotaOn429(t *testing.T) {
 	body := `{"code":"subscription:free-usage-exhausted","error":"You've used all the included free usage for model x"}`
 	r := Probe(Input{Status: 429, Body: body})
