@@ -153,7 +153,6 @@ func TestStatusPageUsesManagementKeyFlow(t *testing.T) {
 		"健康",
 		"已禁用",
 		"statusChips",
-		"复检 429",
 		"toast",
 		"progressBar",
 		"setBusy",

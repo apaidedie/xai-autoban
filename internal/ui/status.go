@@ -333,21 +333,16 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
       <div class="tools" style="width:100%">
         <input id="search" type="search" placeholder="搜索账号 / Auth ID / 原因" autocomplete="off">
         <button class="bp" id="recheckSelected" type="button" onclick="recheckSelected()" disabled title="对勾选的凭证做上游复检（任意状态，含已禁用）">复检所选 (0)</button>
-        <button class="bs" id="btnRecheck429" type="button" onclick="recheck429()" disabled title="只处理当前 429 隔离账本：恢复则释放，仍限流则续隔">复检 429</button>
         <details class="more">
-          <summary class="bs">更多</summary>
+          <summary class="bs">操作</summary>
           <div class="more-menu">
-            <div class="more-sec">所选批量</div>
+            <div class="more-sec">所选</div>
             <button type="button" id="unbanSelected" onclick="bulkAct('unban')" disabled>释放所选</button>
             <button type="button" id="banSelected" onclick="bulkAct('ban')" disabled>隔离所选</button>
             <button type="button" id="disableSelected" onclick="bulkAct('disable')" disabled>禁用所选</button>
             <button type="button" id="reenableSelected" onclick="bulkAct('reenable')" disabled>启用所选</button>
-            <div class="more-div"></div>
-            <div class="more-sec">危险操作</div>
             <button type="button" class="danger" id="deleteSelected" onclick="bulkAct('delete')" disabled>删除所选</button>
             <div class="more-div"></div>
-            <div class="more-sec">全局</div>
-            <button type="button" id="unbanAll" onclick="unbanAll()" disabled>全部释放</button>
             <label class="chk"><input id="autoRefresh" type="checkbox" checked> 30 秒自动刷新</label>
           </div>
         </details>
@@ -489,7 +484,7 @@ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 
 function setActionEnabled(ok){
   const can=!!ok && !state.busy;
-  const ids=['btnProbe','btnRefresh','btnRecheck429','unbanSelected','banSelected','disableSelected','reenableSelected','deleteSelected','recheckSelected','unbanAll','saveConfigBtn','selectFilterBtn','clearSelectedBtn'];
+  const ids=['btnProbe','btnRefresh','unbanSelected','banSelected','disableSelected','reenableSelected','deleteSelected','recheckSelected','saveConfigBtn','selectFilterBtn','clearSelectedBtn'];
   ids.forEach(id=>{const el=$(id); if(el) el.disabled=!can;});
   const n=state.selected.size;
   if(can){
@@ -1111,18 +1106,6 @@ function clearSelection(){
   setMessage('已清除选择');
 }
 async function unbanSelected(){ return bulkAct('unban'); }
-async function unbanAll(){
-  if(state.busy||!confirm('确认释放全部隔离？')) return;
-  try{
-    setBusy(true,'全部释放'); setProgress(0,1,'全部释放');
-    await apiMgmt('POST','/unban-all',{});
-    finishProgress(1,1,'全部释放');
-    const msg='已全部释放';
-    setMessage(msg); setOpResult(msg,'ok');
-    await loadData(true);
-  }catch(e){ setMessage(e.message,true); setOpResult(e.message,'err'); }
-  finally{ setBusy(false); }
-}
 async function pollProbeUntilDone(){
   let idle=0, lastDone=-1;
   for(;;){
@@ -1167,22 +1150,6 @@ async function runProbe(){
     if(acc && acc.already_running) setMessage('已有巡检在进行，接入进度…');
     if(acc && acc.accepted===false && acc.error) throw new Error(acc.error);
     await pollProbeUntilDone();
-    await loadData(true);
-  }catch(e){ setMessage(e.message,true); setOpResult(e.message,'err'); }
-  finally{ setBusy(false); }
-}
-async function recheck429(){
-  if(state.busy||!confirm('仅复检当前 429 隔离凭证？\n恢复则释放隔离，仍限流则续隔窗口。')) return;
-  try{
-    setBusy(true,'429 复检'); setProgress(0,1,'429 复检');
-    setMessage('429 复检中… 0/1');
-    const res=await apiMgmt('POST','/bans-recheck-429',{force:true});
-    finishProgress(1,1,'429 复检完成');
-    const r=res.result||{};
-    const msg='429 复检完成 · 检 '+(r.checked||0)+' · 释放 '+(r.unbanned||0)+' · 续隔 '+(r.relocked||0)+' · 跳过 '+(r.skipped||0)+' · 失败 '+(r.failed||0);
-    setMessage(msg);
-    setOpResult(msg, (r.failed||0)>0?'warn':'ok');
-    state.filter='429'; state.page.page=1; paintChips();
     await loadData(true);
   }catch(e){ setMessage(e.message,true); setOpResult(e.message,'err'); }
   finally{ setBusy(false); }
