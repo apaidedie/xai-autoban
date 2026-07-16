@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Docs
+- 新增 [STABILITY.md](./STABILITY.md)：Pre-1.0 稳定性契约、配置冻结表、1.0 发布清单
+
 ## 0.5.48 - 2026-07-16
 
 ### Feat / Chore
