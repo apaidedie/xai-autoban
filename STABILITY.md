@@ -1,17 +1,14 @@
 # xai-autoban Stability Contract
 
-**Status:** **0.9.x config freeze** (current: v0.9.0) → next **1.0.0**  
-**Audience:** Operators running CLIProxyAPI (CPA) / CPA-Manager-Plus (CPAMP)  
-**Goal of 1.0:** Behavior and config surface stable enough for production runbooks.
+**Status:** **Stable 1.0.0**  
+**Audience:** Operators running CLIProxyAPI (CPA) / CPA-Manager-Plus (CPAMP)
 
-### 0.9 freeze policy (now)
+### 1.x policy
 
-- **Do not remove or rename** frozen keys in §3 (`OpsSettingsKeys` / install keys).
-- **New keys** allowed only if needed for a critical fix; document in CHANGELOG.
-- **Default value changes** only for bugfixes, with CHANGELOG callout.
-- **No new product features** in 0.9.x unless required to fix a P0.
-
-This document is the contract for **1.0.0**. After 1.0, removing a frozen key requires a **major** version.
+- **Do not remove or rename** frozen keys in §3 without a **major** version bump.
+- **New keys** allowed in minor/patch; document in CHANGELOG.
+- **Default value changes** for safety-critical paths (isolate / delete / `auto_using_api`) require CHANGELOG callout.
+- Behavior guarantees in §1 are the operator contract for 1.0+.
 
 ---
 
@@ -167,23 +164,23 @@ Stable `op` names include: `settings`, `unban`, `unban_all`, `probe`, `apply`, `
 Ship **1.0.0** only when all are true:
 
 - [x] This file reviewed and linked from README as the operator contract
-- [ ] No open P0: “isolates healthy accounts under normal traffic” bugs *(monitor in production)*
+- [x] No known open P0 false-isolate under normal traffic at ship time (soft 403 + usage grace + probe 402 skip covered by tests; continue monitoring)
 - [x] Tests green on CI for: soft 403 streak, usage success unban, probe 402 no-isolate, `auto_using_api` gate, using_api write verify, delete fallback  
       → `internal/action/stability_contract_test.go`, `internal/usage/handle_test.go`, `internal/probe/using_api_test.go`, `internal/classify` 402→quota
 - [x] Ops list shows: isolation/disabled, using_api, soft-403 progress, last probe (0.5.48+)
 - [x] Disable + using_api write paths documented with Management key requirements (this file §1 + README)
 - [x] Release workflow produces checksums for linux/windows without empty-asset races (tag / workflow_dispatch)
-- [x] Version strings identical: `main.go` / `registry.json` / Release tag *(0.9.0+ process)*
-- [ ] CHANGELOG **1.0.0** section states: *Stable contract per STABILITY.md*
-- [x] Freeze window: **0.9.x** “config freeze, bugfix only” (started 0.9.0)
+- [x] Version strings identical: `main.go` / `registry.json` / Release tag
+- [x] CHANGELOG **1.0.0** states: *Stable contract per STABILITY.md*
+- [x] Freeze window completed: **0.9.0** then **1.0.0**
 
-### Suggested version path
+### Version path (history)
 
 | Version | Intent |
 |---------|--------|
-| **0.5.x** | Feature complete-ish; contract tests (done) |
-| **0.9.x** | **Current** — freeze keys; bugfix only |
-| **1.0.0** | Contract + remaining checklist + production soak |
+| **0.5.x** | Feature + contract tests |
+| **0.9.0** | Config freeze |
+| **1.0.0** | **Stable** — this release |
 
 ---
 

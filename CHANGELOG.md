@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.0.0 - 2026-07-16
+
+### Stable
+- **Stable contract per [STABILITY.md](./STABILITY.md)** — guarantees, non-guarantees, frozen config keys, ops vocabulary
+- Production-ready xAI autoban for CLIProxyAPI / CPA-Manager-Plus
+- Config freeze from 0.9.0 continues under 1.x policy (no remove/rename of frozen keys without major)
+
+### Includes (cumulative)
+- Usage melt + heal; scheduler skip isolation ledger
+- Probe/recheck aligned with CPA (OAuth cli-chat-proxy / API api.x.ai)
+- Soft 403 streak; probe 402 no-isolate; real usage 402 isolates
+- Manual + auto `using_api` (default `on_403`); write-back verify
+- Ops console: filter, bulk actions, API mode, list fields, CPAMP resource ops
+- Contract CI suite + frozen ops key guard
+
 ## 0.9.0 - 2026-07-16
 
 ### Freeze
