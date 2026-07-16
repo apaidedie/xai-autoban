@@ -197,13 +197,26 @@ func NewService(cfg config.PluginConfig, host host.Client, engine *action.Engine
 
 func (p *Service) UpdateConfig(cfg config.PluginConfig) {
 	p.mu.Lock()
-	was := p.running
+	oldInterval := p.cfg.ProbeIntervalSeconds
+	wasRunning := p.running
 	p.cfg = cfg
+	needStart := cfg.ProbeEnabled && !wasRunning
+	needStop := !cfg.ProbeEnabled && wasRunning
+	// Only restart loop when interval changes while already running — avoids
+	// resetting the wait timer on every ops settings save / reconfigure.
+	needRestart := cfg.ProbeEnabled && wasRunning && cfg.ProbeIntervalSeconds != oldInterval && cfg.ProbeIntervalSeconds > 0
 	p.mu.Unlock()
-	if was {
+
+	if needStop {
 		p.Stop()
+		return
 	}
-	if cfg.ProbeEnabled {
+	if needRestart {
+		p.Stop()
+		p.Start()
+		return
+	}
+	if needStart {
 		p.Start()
 	}
 }
@@ -217,8 +230,11 @@ func (p *Service) Start() {
 	p.stopCh = make(chan struct{})
 	p.running = true
 	interval := time.Duration(p.cfg.ProbeIntervalSeconds) * time.Second
+	if interval < 30*time.Second {
+		interval = 30 * time.Second
+	}
 	go p.loop(interval, p.stopCh)
-	slog.Info("xai-autoban: probe loop started", "interval_seconds", p.cfg.ProbeIntervalSeconds)
+	slog.Info("xai-autoban: probe loop started", "interval_seconds", int(interval/time.Second))
 }
 
 func (p *Service) Stop() {
@@ -234,21 +250,42 @@ func (p *Service) Stop() {
 }
 
 func (p *Service) loop(interval time.Duration, stop <-chan struct{}) {
+	// First run soon after enable (not full interval) so "已打开" is observable quickly.
+	firstDelay := 45 * time.Second
+	if firstDelay > interval {
+		firstDelay = interval
+	}
+	first := time.NewTimer(firstDelay)
+	select {
+	case <-stop:
+		if !first.Stop() {
+			select {
+			case <-first.C:
+			default:
+			}
+		}
+		return
+	case <-first.C:
+		p.runScheduled()
+	}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
-	// initial delay: one interval
 	for {
 		select {
 		case <-stop:
 			return
 		case <-ticker.C:
-			if _, err := p.RunOnceTrigger(false, "scheduled"); err != nil {
-				if strings.Contains(err.Error(), "already running") {
-					slog.Info("xai-autoban: skip scheduled probe (already in flight)")
-				} else {
-					slog.Warn("xai-autoban: probe run failed", "error", err)
-				}
-			}
+			p.runScheduled()
+		}
+	}
+}
+
+func (p *Service) runScheduled() {
+	if _, err := p.RunOnceTrigger(false, "scheduled"); err != nil {
+		if strings.Contains(err.Error(), "already running") {
+			slog.Info("xai-autoban: skip scheduled probe (already in flight)")
+		} else {
+			slog.Warn("xai-autoban: probe run failed", "error", err)
 		}
 	}
 }
@@ -259,8 +296,8 @@ func (p *Service) beginProbe() (int64, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.jobRunning {
-		// Stale lock: no finish after 3h (process stall / lost goroutine).
-		if !p.jobStarted.IsZero() && time.Since(p.jobStarted) > 3*time.Hour {
+		// Stale lock: no finish after 45m (large fleet + timeouts still should finish sooner).
+		if !p.jobStarted.IsZero() && time.Since(p.jobStarted) > 45*time.Minute {
 			slog.Warn("xai-autoban: clearing stale probe lock", "age", time.Since(p.jobStarted).String(), "job_id", p.jobID)
 			p.jobRunning = false
 			p.jobErr = "stale job cleared"
@@ -931,14 +968,23 @@ func (p *Service) HistorySnapshot() []Run {
 func (p *Service) Status() map[string]any {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	lastRun := ""
+	if !p.lastRun.IsZero() {
+		lastRun = p.lastRun.Format(time.RFC3339)
+	}
+	jobAge := 0
+	if p.jobRunning && !p.jobStarted.IsZero() {
+		jobAge = int(time.Since(p.jobStarted).Seconds())
+	}
 	return map[string]any{
 		"enabled":      p.cfg.ProbeEnabled,
-		"running":      p.running,
+		"running":      p.running, // scheduled loop alive
 		"job_running":  p.jobRunning,
 		"job_id":       p.jobID,
 		"job_done":     p.jobDone,
 		"job_total":    p.jobTotal,
-		"last_run":     p.lastRun.Format(time.RFC3339),
+		"job_age_sec":  jobAge,
+		"last_run":     lastRun,
 		"last_ok":      p.lastOK,
 		"last_fail":    p.lastFail,
 		"last_err":     p.lastErr,

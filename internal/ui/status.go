@@ -770,17 +770,33 @@ function paintOverviewProbe(probe){
   if(!n) return;
   probe=probe||{};
   const ok=probe.last_ok, fail=probe.last_fail, err=probe.last_err;
-  if(probe.last_run && probe.last_run.indexOf('0001')!==0){
+  const hasLast=probe.last_run && String(probe.last_run).indexOf('0001')!==0 && String(probe.last_run).length>4;
+  if(probe.job_running){
+    const done=probe.job_done||0, total=probe.job_total||0;
+    n.textContent=(total>0?(done+'/'+total):'…');
+    if(sub) sub.textContent='巡检进行中'+(probe.job_age_sec?(' · '+Math.floor(probe.job_age_sec/60)+' 分'):'');
+    if(card) card.className='qcard warn';
+    return;
+  }
+  if(hasLast){
     n.textContent=String((ok||0))+'/'+String((ok||0)+(fail||0));
     let line=(probe.last_run?formatDate(probe.last_run):'')+(err?(' · '+err):'');
     if(probe.auto_execute===false) line=(line?line+' · ':'')+'只输出';
     if(sub) sub.textContent=line||'点击立即巡检';
     if(card) card.className='qcard'+(fail>0?' bad':(ok>0?' ok':' info'));
-  }else{
-    n.textContent='—';
-    if(sub) sub.textContent=probe.enabled?'定时已开 · 尚未执行':'定时关闭 · 点击立即巡检';
-    if(card) card.className='qcard info';
+    return;
   }
+  n.textContent='—';
+  if(probe.enabled){
+    if(probe.running){
+      if(sub) sub.textContent='定时已开 · 等待首次（约 45 秒内启动）';
+    }else{
+      if(sub) sub.textContent='定时已开 · 调度未启动（保存配置或点立即巡检）';
+    }
+  }else{
+    if(sub) sub.textContent='定时关闭 · 点击立即巡检';
+  }
+  if(card) card.className='qcard info';
 }
 function jumpOverview(kind){
   if(kind==='probe'){
