@@ -35,6 +35,8 @@ type Handler struct {
 	Probe   *probe.Service
 	Persist *persist.Persister
 	Host    host.Client
+	// Meta caches using_api flags across status/list calls (large fleets).
+	Meta *creds.MetaCache
 }
 
 func (h *Handler) Registration() pluginapi.ManagementRegistrationResponse {
@@ -693,12 +695,20 @@ func (h *Handler) listAuthIDs(body map[string]any, q url.Values) pluginapi.Manag
 	for k, v := range h.Probe.LastResults() {
 		probeLast[k] = creds.ProbeResult{At: v.At, OK: v.OK, Status: v.Status, Error: v.Error}
 	}
-	// using_api filter needs auth JSON; other filters use ban/disabled only.
-	var jsonByID map[string]json.RawMessage
-	if strings.EqualFold(strings.TrimSpace(filter), "using_api") || strings.EqualFold(strings.TrimSpace(filter), "api") {
-		jsonByID = sampleAuthJSON(h.Host, files, 2000)
+	// using_api filter: cache first, then fetch missing only.
+	allCreds, _ := creds.BuildWithJSON(files, snapshot, probeLast, nil, now)
+	if h.Meta != nil {
+		h.Meta.Apply(allCreds)
 	}
-	allCreds, _ := creds.BuildWithJSON(files, snapshot, probeLast, jsonByID, now)
+	if strings.EqualFold(strings.TrimSpace(filter), "using_api") || strings.EqualFold(strings.TrimSpace(filter), "api") {
+		jsonByID := creds.SampleMissingAuthJSON(h.Host, files, 2000, h.Meta)
+		if len(jsonByID) > 0 {
+			allCreds, _ = creds.BuildWithJSON(files, snapshot, probeLast, jsonByID, now)
+			if h.Meta != nil {
+				h.Meta.Apply(allCreds)
+			}
+		}
+	}
 	matched := creds.Filter(allCreds, filter, search)
 	total := len(matched)
 	truncated := false
@@ -980,20 +990,38 @@ func (h *Handler) CurrentStatusPaged(query url.Values) StatusInfo {
 		probeLast[k] = creds.ProbeResult{At: v.At, OK: v.OK, Status: v.Status, Error: v.Error}
 	}
 	pq := pageQueryFromValues(query)
-	// Load auth JSON for token flags + using_api counts. Cap keeps status page responsive;
-	// when filtering by using_api, raise cap so the list is more complete.
-	sampleLimit := 400
-	if pq.Filter == "using_api" {
-		sampleLimit = 2000
-	}
-	jsonByID := sampleAuthJSON(h.Host, files, sampleLimit)
 	var soft403 map[string]int
 	softNeed := 0
 	if h.Engine != nil {
 		soft403 = h.Engine.Soft403StreakSnapshot()
 		softNeed = h.Engine.Soft403Need()
 	}
-	allCreds, counts := creds.BuildFull(files, snapshot, probeLast, jsonByID, soft403, softNeed, now)
+	// Fast path: build list, apply using_api cache, then only AuthGet missing / token sample.
+	allCreds, counts := creds.BuildFull(files, snapshot, probeLast, nil, soft403, softNeed, now)
+	if h.Meta == nil {
+		h.Meta = creds.NewMetaCache(15 * time.Minute)
+	}
+	h.Meta.Apply(allCreds)
+	sampleLimit := 120
+	if pq.Filter == "using_api" {
+		sampleLimit = 2000
+	}
+	// Prefer fetching only cache misses for using_api; always sample a small set for token flags.
+	jsonByID := creds.SampleMissingAuthJSON(h.Host, files, sampleLimit, h.Meta)
+	if len(jsonByID) < 40 {
+		// Ensure some raw JSON for token expiry on first page accounts.
+		more := creds.SampleAuthJSON(h.Host, files, 40, h.Meta)
+		for k, v := range more {
+			if _, ok := jsonByID[k]; !ok {
+				jsonByID[k] = v
+			}
+		}
+	}
+	if len(jsonByID) > 0 {
+		allCreds, counts = creds.BuildFull(files, snapshot, probeLast, jsonByID, soft403, softNeed, now)
+		h.Meta.Apply(allCreds)
+	}
+	creds.RecountUsingAPI(allCreds, &counts)
 	pageCreds, page := creds.Page(allCreds, pq)
 
 	st := StatusInfo{
@@ -1080,39 +1108,7 @@ func collectXAIAuthFiles(cli host.Client) ([]pluginapi.HostAuthFileEntry, error)
 	return out, nil
 }
 
-// sampleAuthJSON loads up to limit credential JSON blobs for local token flags.
+// sampleAuthJSON is retained for tests / callers; prefers concurrent cache-aware loader.
 func sampleAuthJSON(cli host.Client, files []pluginapi.HostAuthFileEntry, limit int) map[string]json.RawMessage {
-	out := map[string]json.RawMessage{}
-	if cli == nil || limit <= 0 {
-		return out
-	}
-	n := 0
-	for _, f := range files {
-		if n >= limit {
-			break
-		}
-		index := f.AuthIndex
-		if index == "" {
-			index = f.Name
-		}
-		if index == "" {
-			continue
-		}
-		got, err := cli.AuthGet(index)
-		if err != nil || len(got.JSON) == 0 {
-			continue
-		}
-		key := xai.AuthKey(f)
-		if key != "" {
-			out[key] = got.JSON
-		}
-		if f.ID != "" {
-			out[f.ID] = got.JSON
-		}
-		if f.AuthIndex != "" {
-			out[f.AuthIndex] = got.JSON
-		}
-		n++
-	}
-	return out
+	return creds.SampleAuthJSON(cli, files, limit, nil)
 }

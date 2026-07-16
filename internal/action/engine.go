@@ -47,6 +47,8 @@ type Engine struct {
 	requestMgmtKey string
 	// onProbeMemo updates last probe result display (wired to probe.Service).
 	onProbeMemo func(authID string, ok bool, status int, errMsg string)
+	// onUsingAPI updates using_api meta cache after successful write.
+	onUsingAPI func(authID, fileName, index string, enabled bool)
 }
 
 func (e *Engine) SetRequestManagementKey(key string) {
@@ -72,6 +74,13 @@ func (e *Engine) SetProbeMemoHook(fn func(authID string, ok bool, status int, er
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.onProbeMemo = fn
+}
+
+// SetUsingAPIHook updates cache after SetUsingAPI succeeds.
+func (e *Engine) SetUsingAPIHook(fn func(authID, fileName, index string, enabled bool)) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.onUsingAPI = fn
 }
 
 func (e *Engine) noteProbeOK(authID string) {
@@ -114,8 +123,14 @@ func (e *Engine) markUsageOK(authID string) {
 }
 
 func (e *Engine) recentUsageOK(authID string) bool {
+	return e.RecentUsageOK(authID)
+}
+
+// RecentUsageOK reports whether real traffic succeeded within the grace window.
+// Probe may skip these accounts to cut load on large fleets.
+func (e *Engine) RecentUsageOK(authID string) bool {
 	authID = strings.TrimSpace(authID)
-	if authID == "" {
+	if authID == "" || e == nil {
 		return false
 	}
 	e.mu.Lock()
@@ -126,6 +141,9 @@ func (e *Engine) recentUsageOK(authID string) bool {
 	}
 	return time.Since(t) < usageSuccessGrace
 }
+
+// UsageSuccessGrace returns the probe-skip / false-positive grace duration.
+func UsageSuccessGrace() time.Duration { return usageSuccessGrace }
 
 func probeLikeSource(source string) bool {
 	s := strings.ToLower(strings.TrimSpace(source))

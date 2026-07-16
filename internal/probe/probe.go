@@ -447,6 +447,7 @@ func (p *Service) runOnceBody(force bool, trigger string) (Result, error) {
 		return Result{}, err
 	}
 	targets := make([]pluginapi.HostAuthFileEntry, 0)
+	skippedRecent := 0
 	for _, f := range files {
 		if !xai.IsAuth(f) {
 			continue
@@ -458,10 +459,24 @@ func (p *Service) runOnceBody(force bool, trigger string) (Result, error) {
 		} else if !cfg.ProbeIncludeDisabled && f.Disabled {
 			continue
 		}
+		// Skip accounts with recent real usage success (ground truth) unless forced.
+		// Cuts probe load on large fleets; isolation still cleared by usage path.
+		if !force && p.engine != nil {
+			key := xai.AuthKey(f)
+			if key != "" && p.engine.RecentUsageOK(key) {
+				skippedRecent++
+				continue
+			}
+			if f.Email != "" && p.engine.RecentUsageOK(strings.ToLower(strings.TrimSpace(f.Email))) {
+				skippedRecent++
+				continue
+			}
+		}
 		targets = append(targets, f)
 	}
 	res := Result{
 		Checked:     len(targets),
+		Skipped:     skippedRecent,
 		ReportOnly:  !cfg.AutoExecute,
 		AutoExecute: cfg.AutoExecute,
 		ProbeAction: cfg.ProbeAction,

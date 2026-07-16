@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.7 - 2026-07-16
+
+### Perf / Correctness (P0)
+- **using_api 元数据缓存**（15 分钟 TTL）+ 并发 AuthGet；状态页优先读缓存，仅补拉缺失
+- **Probe 跳过**最近真实 usage 成功的账号（30 分钟宽限，force 巡检不跳过）
+- 手动/自动改 using_api 后立即写入缓存
+
 ## 1.0.6 - 2026-07-16
 
 ### Fix

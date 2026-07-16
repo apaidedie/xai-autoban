@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"time"
 
 	"xai-autoban/cpasdk/pluginabi"
 	"xai-autoban/cpasdk/pluginapi"
@@ -12,6 +13,7 @@ import (
 	"xai-autoban/internal/audit"
 	"xai-autoban/internal/ban"
 	"xai-autoban/internal/config"
+	"xai-autoban/internal/creds"
 	"xai-autoban/internal/host"
 	"xai-autoban/internal/mgmt"
 	"xai-autoban/internal/persist"
@@ -22,7 +24,7 @@ import (
 
 const (
 	pluginName    = "xai-autoban"
-	pluginVersion = "1.0.6"
+	pluginVersion = "1.0.7"
 )
 
 type App struct {
@@ -50,6 +52,10 @@ func NewApp(h host.Client) *App {
 	probeSvc.Attach(bans, auditLog, persister)
 	// Real usage success clears "巡检失败" labels and isolation.
 	engine.SetProbeMemoHook(probeSvc.RememberProbeResult)
+	meta := creds.NewMetaCache(15 * time.Minute)
+	engine.SetUsingAPIHook(func(authID, fileName, index string, enabled bool) {
+		meta.PutUsingAPI([]string{authID, fileName, index}, enabled)
+	})
 	app := &App{
 		cfg:     cfg,
 		bans:    bans,
@@ -70,6 +76,7 @@ func NewApp(h host.Client) *App {
 		Probe:   probeSvc,
 		Persist: persister,
 		Host:    h,
+		Meta:    meta,
 	}
 	return app
 }

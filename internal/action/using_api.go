@@ -64,6 +64,9 @@ func (e *Engine) SetUsingAPI(authID string, enabled bool) error {
 			slog.Warn("xai-autoban: management using_api patch failed, trying host save",
 				"auth_id", authID, "name", fileName, "enabled", enabled, "error", err)
 		} else if vErr := e.verifyUsingAPI(hostClient, index, enabled); vErr == nil {
+			if e.onUsingAPI != nil {
+				e.onUsingAPI(authID, fileName, index, enabled)
+			}
 			slog.Info("xai-autoban: set using_api via management",
 				"auth_id", authID, "name", fileName, "using_api", enabled)
 			return nil
@@ -78,6 +81,9 @@ func (e *Engine) SetUsingAPI(authID string, enabled bool) error {
 	}
 	if vErr := e.verifyUsingAPI(hostClient, index, enabled); vErr != nil {
 		return vErr
+	}
+	if e.onUsingAPI != nil {
+		e.onUsingAPI(authID, fileName, index, enabled)
 	}
 	slog.Info("xai-autoban: set using_api via host.auth.save",
 		"auth_id", authID, "name", fileName, "using_api", enabled)
