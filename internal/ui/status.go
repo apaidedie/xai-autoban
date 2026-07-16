@@ -344,6 +344,7 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
               <button type="button" id="banSelected" onclick="bulkAct('ban')" disabled>隔离所选</button>
               <button type="button" id="disableSelected" onclick="bulkAct('disable')" disabled>禁用所选</button>
               <button type="button" id="reenableSelected" onclick="bulkAct('reenable')" disabled>启用所选</button>
+              <button type="button" id="usingApiSelected" onclick="bulkAct('using_api')" disabled title="开启 CPA「使用 API 模式」(using_api)，OAuth 403 时可试">API 模式所选</button>
               <button type="button" class="danger" id="deleteSelected" onclick="bulkAct('delete')" disabled>删除所选</button>
               <div class="more-div"></div>
               <label class="chk"><input id="autoRefresh" type="checkbox" checked> 30 秒自动刷新</label>
@@ -420,6 +421,13 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
       </div>
       <label class="chk" style="margin-bottom:8px"><input id="f_probe_include_disabled" type="checkbox"> 巡检包含已禁用凭证</label>
       <label class="chk" style="margin-bottom:10px"><input id="f_probe_only_disabled" type="checkbox"> 仅巡检已禁用凭证</label>
+      <div class="fg"><label>自动 API 模式</label>
+        <select id="f_auto_using_api" title="OAuth 探测失败时是否自动开启 CPA 使用 API 模式">
+          <option value="on_403">仅 403 时自动（推荐）</option>
+          <option value="on_fail">401/402/403 自动</option>
+          <option value="off">关闭（仅手动）</option>
+        </select>
+      </div>
     </div>
     <div class="sec">
       <h4>自动执行（对齐 Codex 巡检）</h4>
@@ -487,11 +495,11 @@ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 
 function setActionEnabled(ok){
   const can=!!ok && !state.busy;
-  const ids=['btnProbe','btnRefresh','unbanSelected','banSelected','disableSelected','reenableSelected','deleteSelected','recheckSelected','saveConfigBtn','selectFilterBtn','clearSelectedBtn'];
+  const ids=['btnProbe','btnRefresh','unbanSelected','banSelected','disableSelected','reenableSelected','usingApiSelected','deleteSelected','recheckSelected','saveConfigBtn','selectFilterBtn','clearSelectedBtn'];
   ids.forEach(id=>{const el=$(id); if(el) el.disabled=!can;});
   const n=state.selected.size;
   if(can){
-    ['unbanSelected','banSelected','disableSelected','reenableSelected','deleteSelected','recheckSelected'].forEach(id=>{const el=$(id); if(el) el.disabled=n===0;});
+    ['unbanSelected','banSelected','disableSelected','reenableSelected','usingApiSelected','deleteSelected','recheckSelected'].forEach(id=>{const el=$(id); if(el) el.disabled=n===0;});
     if($('clearSelectedBtn')) $('clearSelectedBtn').disabled=n===0;
   }
   if($('unbanSelected')) $('unbanSelected').textContent=n?('释放所选 ('+n+')'):'释放所选';
@@ -499,6 +507,7 @@ function setActionEnabled(ok){
   if($('banSelected')) $('banSelected').textContent=n?('隔离所选 ('+n+')'):'隔离所选';
   if($('disableSelected')) $('disableSelected').textContent=n?('禁用所选 ('+n+')'):'禁用所选';
   if($('reenableSelected')) $('reenableSelected').textContent=n?('启用所选 ('+n+')'):'启用所选';
+  if($('usingApiSelected')) $('usingApiSelected').textContent=n?('API 模式所选 ('+n+')'):'API 模式所选';
   if($('recheckSelected')) $('recheckSelected').textContent=n?('复检所选 ('+n+')'):'复检所选';
   const sh=$('selectedHint');
   if(sh) sh.textContent=n?('已选 '+n):'';
@@ -829,6 +838,7 @@ function fillDrawer(s){
   $('f_probe_mode').value=s.probe_mode||'responses_mini';
   if($('f_probe_include_disabled')) $('f_probe_include_disabled').checked=!!s.probe_include_disabled;
   if($('f_probe_only_disabled')) $('f_probe_only_disabled').checked=!!s.probe_only_disabled;
+  if($('f_auto_using_api')) $('f_auto_using_api').value=s.auto_using_api||'on_403';
   $('f_delete_fallback').value=s.delete_fallback||'disable';
   $('f_action_on_401').value=s.action_on_401||'ban';
   $('f_action_on_402').value=s.action_on_402||'ban';
@@ -860,6 +870,7 @@ function collectDraft(){
     probe_mode: $('f_probe_mode').value,
     probe_include_disabled: !!($('f_probe_include_disabled')&&$('f_probe_include_disabled').checked),
     probe_only_disabled: !!($('f_probe_only_disabled')&&$('f_probe_only_disabled').checked),
+    auto_using_api: ($('f_auto_using_api')&&$('f_auto_using_api').value)||'on_403',
     probe_on_success: state.success,
     probe_action: state.fail,
     auto_execute: !!state.autoExecute,
@@ -882,6 +893,7 @@ function settingsMismatch(draft, got){
     ['probe_action', String(draft.probe_action||''), String(got.probe_action||'')],
     ['probe_mode', String(draft.probe_mode||''), String(got.probe_mode||'')],
     ['probe_enabled', !!draft.probe_enabled, !!got.probe_enabled],
+    ['auto_using_api', String(draft.auto_using_api||'on_403'), String(got.auto_using_api||'on_403')],
   ];
   for(const [k, want, have] of checks){
     if(want!==have) return k+' 期望 '+want+' 实际 '+have;
@@ -1028,7 +1040,7 @@ function render(){
 }
 async function runRowAction(act,id){
   if(!id||state.busy) return;
-  const labels={unban:'释放',ban:'隔离',disable:'禁用',reenable:'启用',reauth:'重授权'};
+  const labels={unban:'释放',ban:'隔离',disable:'禁用',reenable:'启用',reauth:'重授权',using_api:'API 模式'};
   if(!confirm('确认对凭证执行「'+(labels[act]||act)+'」？\n'+id)) return;
   try{
     setBusy(true, labels[act]||act);
@@ -1051,8 +1063,8 @@ async function bulkAct(act){
   if(state.busy) return;
   const ids=[...state.selected];
   if(!ids.length){ setMessage('请先勾选凭证',true); setOpResult('请先勾选凭证','err'); return; }
-  const labels={unban:'释放',ban:'隔离',disable:'禁用',reenable:'启用',reauth:'重授权',delete:'删除'};
-  const danger=act==='delete'?'\n\n删除将调用 Management 删除凭证；失败则按删除回退策略禁用/隔离。不可轻易撤销。':'';
+  const labels={unban:'释放',ban:'隔离',disable:'禁用',reenable:'启用',reauth:'重授权',delete:'删除',using_api:'API 模式'};
+  const danger=act==='delete'?'\n\n删除将调用 Management 删除凭证；失败则按删除回退策略禁用/隔离。不可轻易撤销。':(act==='using_api'?'\n\n将开启 CPA「使用 API 模式」(using_api=true)，并清除隔离记录。':'');
   if(!confirm('确认对所选 '+ids.length+' 条执行「'+(labels[act]||act)+'」？'+danger)) return;
   if(act==='delete' && !confirm('再次确认：删除所选 '+ids.length+' 条凭证？')) return;
   try{

@@ -3,6 +3,7 @@ package host
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"xai-autoban/cpasdk/pluginabi"
 	"xai-autoban/cpasdk/pluginapi"
@@ -141,6 +142,22 @@ func (s *Stub) AuthGet(authIndex string) (pluginapi.HostAuthGetResponse, error) 
 
 func (s *Stub) AuthSave(name string, body json.RawMessage) (pluginapi.HostAuthSaveResponse, error) {
 	s.Saves = append(s.Saves, pluginapi.HostAuthSaveRequest{Name: name, JSON: body})
+	// Reflect save into JSONBy so AuthGet verify paths work in tests.
+	if s.JSONBy == nil {
+		s.JSONBy = map[string]json.RawMessage{}
+	}
+	for _, f := range s.Files {
+		if f.Name == name || f.ID == name || f.AuthIndex == name ||
+			f.Name+".json" == name || strings.TrimSuffix(f.Name, ".json") == strings.TrimSuffix(name, ".json") {
+			idx := f.AuthIndex
+			if idx == "" {
+				idx = f.Name
+			}
+			if idx != "" {
+				s.JSONBy[idx] = body
+			}
+		}
+	}
 	return pluginapi.HostAuthSaveResponse{Name: name}, nil
 }
 

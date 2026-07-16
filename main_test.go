@@ -1087,6 +1087,47 @@ func TestManagementUnban(t *testing.T) {
 	}
 }
 
+func TestApplyActionUsingAPI(t *testing.T) {
+	defaultApp.bans.ClearAll()
+	defaultApp.bans.Set("auth-api", ban.Entry{StatusCode: 403, Reason: "forbidden", BannedAt: time.Now(), ResetAt: time.Now().Add(time.Hour), Action: action.Ban, Source: "probe"})
+	stub := &host.Stub{
+		Files: []pluginapi.HostAuthFileEntry{{ID: "auth-api", AuthIndex: "11", Name: "xai-oauth.json", Provider: "xai"}},
+		JSONBy: map[string]json.RawMessage{
+			"11": json.RawMessage(`{"access_token":"tok","refresh_token":"rt","auth_kind":"oauth","using_api":false}`),
+		},
+	}
+	prev := defaultApp.host
+	defaultApp.host = stub
+	defaultApp.engine = action.NewEngine(config.Default(), defaultApp.bans, audit.New(20), stub, nil)
+	defaultApp.rebindMgmt()
+	t.Cleanup(func() {
+		defaultApp.host = prev
+		defaultApp.engine = action.NewEngine(config.Default(), defaultApp.bans, audit.New(20), defaultApp.host, func() { defaultApp.persist.ScheduleSave() })
+	})
+
+	resp := defaultApp.mgmt.Handle(pluginapi.ManagementRequest{
+		Method: http.MethodPost,
+		Path:   "/v0/management/plugins/xai-autoban/apply-action",
+		Body:   []byte(`{"auth_id":"auth-api","action":"using_api","force":true}`),
+	})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status %d body=%s", resp.StatusCode, string(resp.Body))
+	}
+	if len(stub.Saves) != 1 {
+		t.Fatalf("expected host save for using_api, got %d", len(stub.Saves))
+	}
+	var obj map[string]any
+	if err := json.Unmarshal(stub.Saves[0].JSON, &obj); err != nil {
+		t.Fatal(err)
+	}
+	if obj["using_api"] != true {
+		t.Fatalf("expected using_api true: %#v", obj)
+	}
+	if defaultApp.bans.Active("auth-api", time.Now()) {
+		t.Fatal("using_api should clear isolation")
+	}
+}
+
 func TestApplyActionReenable(t *testing.T) {
 	defaultApp.bans.ClearAll()
 	stub := &host.Stub{

@@ -250,6 +250,61 @@ func (m *managementDisabler) patchAuthStatus(do HTTPDoer, cfg config.PluginConfi
 	return nil
 }
 
+// setUsingAPIWithKey sets using_api via PATCH /auth-files/fields (and attributes when supported).
+func (m *managementDisabler) setUsingAPIWithKey(authID, authIndex string, enabled bool, key string) error {
+	m.mu.Lock()
+	cfg := m.cfg
+	do := m.httpDo
+	m.mu.Unlock()
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return errManagementKeyMissing
+	}
+	if do == nil {
+		do = directManagementHTTP
+	}
+	// Only patch using_api (+ base_url when enabling). Do not replace whole attributes map.
+	fields := map[string]any{
+		"using_api": enabled,
+	}
+	if enabled {
+		fields["base_url"] = "https://api.x.ai/v1"
+	}
+	candidates := []string{authID}
+	if !strings.HasSuffix(strings.ToLower(authID), ".json") {
+		candidates = append(candidates, authID+".json")
+	} else {
+		candidates = append(candidates, strings.TrimSuffix(authID, filepath.Ext(authID)))
+	}
+	var last error
+	for _, name := range candidates {
+		if err := m.patchAuthFields(do, cfg, key, name, fields); err != nil {
+			last = err
+			continue
+		}
+		return nil
+	}
+	if strings.TrimSpace(authIndex) != "" {
+		if file, found, listErr := m.findAuthFile(do, cfg, key, authID, authIndex); listErr == nil && found {
+			name := strings.TrimSpace(file.Name)
+			if name == "" {
+				name = file.ID
+			}
+			if name != "" {
+				if err := m.patchAuthFields(do, cfg, key, name, fields); err == nil {
+					return nil
+				} else {
+					last = err
+				}
+			}
+		}
+	}
+	if last == nil {
+		last = fmt.Errorf("using_api patch failed")
+	}
+	return last
+}
+
 // patchAuthNoteWithKey writes note via PATCH /auth-files/fields (keeps Auth.Disabled).
 // Unlike host.auth.save, fields patch does not rebuild Auth as StatusActive.
 func (m *managementDisabler) patchAuthNoteWithKey(authID, authIndex, note, key string) error {

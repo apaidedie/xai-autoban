@@ -448,6 +448,7 @@ func (p *Service) runOnceBody(force bool, trigger string) (Result, error) {
 	}
 	var lastStart time.Time
 	var finished int
+	triedUsingAPI := map[string]struct{}{}
 
 	for _, file := range targets {
 		wg.Add(1)
@@ -499,6 +500,24 @@ func (p *Service) runOnceBody(force bool, trigger string) (Result, error) {
 				return
 			}
 			status, body, perr := p.ProbeOneWithJSON(cfg, host, authJSON)
+			// Auto using_api: gated by auto_using_api config; at most once per key per run.
+			if perr != nil && p.engine != nil {
+				doHeal := false
+				if mat, merr := parseAuthMaterial(authJSON); merr == nil {
+					mu.Lock()
+					_, tried := triedUsingAPI[key]
+					if ShouldAutoUsingAPI(cfg, status, mat, tried) {
+						triedUsingAPI[key] = struct{}{}
+						doHeal = true
+					}
+					mu.Unlock()
+				}
+				if doHeal {
+					if healed, st2, body2, err2 := p.tryEnableUsingAPIAndReprobe(cfg, host, f, key, authJSON); healed {
+						status, body, perr = st2, body2, err2
+					}
+				}
+			}
 			mu.Lock()
 			defer mu.Unlock()
 			if perr != nil {
@@ -813,6 +832,41 @@ func pickModel(body string) string {
 		return ids[0]
 	}
 	return ""
+}
+
+// tryEnableUsingAPIAndReprobe flips using_api then re-probes once.
+// Caller must gate with ShouldAutoUsingAPI and mark the per-run tried map first.
+// healed=true only when write succeeded and re-probe ran (or AuthGet after write failed).
+// Write failure → healed=false (caller keeps original probe outcome).
+func (p *Service) tryEnableUsingAPIAndReprobe(cfg config.PluginConfig, host host.Client, f pluginapi.HostAuthFileEntry, key string, authJSON json.RawMessage) (bool, int, string, error) {
+	if p.engine == nil {
+		return false, 0, "", nil
+	}
+	if setErr := p.engine.SetUsingAPI(key, true); setErr != nil {
+		slog.Warn("xai-autoban: auto using_api failed", "auth_id", key, "error", setErr)
+		if p.audit != nil {
+			p.audit.Add("probe", key, action.UsingAPI, "error", setErr.Error(), 0)
+		}
+		return false, 0, "", setErr
+	}
+	index := f.AuthIndex
+	if index == "" {
+		index = f.Name
+	}
+	got, getErr := host.AuthGet(index)
+	if getErr != nil {
+		return true, 0, "", getErr
+	}
+	st, body, perr := p.ProbeOneWithJSON(cfg, host, got.JSON)
+	if perr == nil && st >= 200 && st < 300 {
+		slog.Info("xai-autoban: using_api heal succeeded", "auth_id", key, "status", st)
+		if p.audit != nil {
+			p.audit.Add("probe", key, action.UsingAPI, "ok", "auto using_api heal", st)
+		}
+	} else {
+		slog.Info("xai-autoban: using_api enabled, re-probe still failed", "auth_id", key, "status", st, "error", perr)
+	}
+	return true, st, body, perr
 }
 
 // ExtractAccessToken returns the bearer token from credential JSON (api_key or access_token).

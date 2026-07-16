@@ -2,7 +2,7 @@
 
 CLIProxyAPI 原生插件：自动隔离异常 xAI 凭据，支持策略配置、定时/手动巡检、禁用/删除、refresh 重授权与运维台。
 
-版本：**0.5.45**
+版本：**0.5.47**
 
 ## 工作原理（简要）
 
@@ -31,6 +31,10 @@ CLIProxyAPI 原生插件：自动隔离异常 xAI 凭据，支持策略配置、
 | API Key | `https://api.x.ai/v1` | Bearer |
 
 默认 `probe_mode=responses_mini`：真实 `POST /responses`；可选 `models` 轻量列表。
+
+| 配置 | 默认 | 说明 |
+|------|------|------|
+| `auto_using_api` | `on_403` | 探测/复检时是否自动开 CPA「使用 API 模式」：`off` / `on_403` / `on_fail`（401/402/403） |
 
 ## 功能
 

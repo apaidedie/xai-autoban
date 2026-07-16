@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.5.47 - 2026-07-16
+
+### Feat / Fix
+- `auto_using_api` 配置：`off` | `on_403`（默认）| `on_fail`；运维台可改
+- Probe/复检自动开 API 模式：默认仅 403；每 run 每账号最多 1 次
+- `SetUsingAPI` 写后 `AuthGet` 校验；Management 未反映则回退 host save
+- 手动「API 模式」仍不受 auto 限制
+
+## 0.5.46 - 2026-07-16
+
+### Feat
+- 支持开启 CPA「使用 API 模式」：`apply-action` / 操作菜单 **API 模式所选**（`using_api=true`）
+- Management `auth-files/fields` 优先，失败回退 `host.auth.save`
+- Probe / 复检所选：OAuth 401/402/403 时自动尝试 `using_api` 并重探一次
+- 开启 API 模式时清除该账号隔离记录
+
 ## 0.5.45 - 2026-07-15
 
 ### UI

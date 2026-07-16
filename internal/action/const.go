@@ -1,10 +1,12 @@
 package action
 
 const (
-	Ban     = "ban"
-	Disable = "disable"
-	Delete  = "delete"
-	Reauth  = "reauth"
+	Ban      = "ban"
+	Disable  = "disable"
+	Delete   = "delete"
+	Reauth   = "reauth"
+	// UsingAPI enables CPA "使用 API 模式" (using_api) for xAI OAuth files.
+	UsingAPI = "using_api"
 
 	SuccessNone             = "none"
 	SuccessUnban            = "unban"

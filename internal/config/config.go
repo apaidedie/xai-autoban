@@ -26,6 +26,11 @@ const (
 	defaultManagementKeyEnv    = "CPA_MANAGEMENT_KEY"
 	defaultMgmtTimeoutSec      = 10
 	defaultMgmtAuthCooldownSec = 600
+
+	// Auto using_api (probe/recheck only).
+	AutoUsingAPIOff    = "off"
+	AutoUsingAPIOn403  = "on_403"
+	AutoUsingAPIOnFail = "on_fail"
 )
 
 type PluginConfig struct {
@@ -60,8 +65,10 @@ type PluginConfig struct {
 	// (suspended/deactivated) still isolate immediately. Default 3.
 	FailStreak403 int `yaml:"fail_streak_403"`
 	// FailStreakWindowSeconds: reset streak if gap between failures exceeds this. Default 1800.
-	FailStreakWindowSeconds int    `yaml:"fail_streak_window_seconds"`
-	DeleteFallback          string `yaml:"delete_fallback"`
+	FailStreakWindowSeconds int `yaml:"fail_streak_window_seconds"`
+	// AutoUsingAPI: off | on_403 (default) | on_fail — auto enable CPA using_api on probe/recheck.
+	AutoUsingAPI   string `yaml:"auto_using_api"`
+	DeleteFallback string `yaml:"delete_fallback"`
 	SchedulerDelegate     string `yaml:"scheduler_delegate"`
 	StateFile             string `yaml:"state_file"`
 	AuditMaxEvents        int    `yaml:"audit_max_events"`
@@ -98,6 +105,7 @@ func Default() PluginConfig {
 		ActionCooldownSeconds:                60,
 		FailStreak403:                        3,
 		FailStreakWindowSeconds:              1800,
+		AutoUsingAPI:                         AutoUsingAPIOn403,
 		DeleteFallback:                       actionDisable,
 		SchedulerDelegate:                    pluginapi.SchedulerBuiltinRoundRobin,
 		// Default state path: bans + ops-console settings overlay (survives reload).
@@ -163,6 +171,7 @@ func Normalize(cfg PluginConfig) (PluginConfig, []string) {
 	if cfg.FailStreakWindowSeconds <= 0 {
 		cfg.FailStreakWindowSeconds = def.FailStreakWindowSeconds
 	}
+	cfg.AutoUsingAPI = normalizeAutoUsingAPI(cfg.AutoUsingAPI, def.AutoUsingAPI, &warnings)
 	if cfg.AuditMaxEvents <= 0 {
 		cfg.AuditMaxEvents = def.AuditMaxEvents
 	}
@@ -242,6 +251,22 @@ func normalizeSuccess(value, fallback string, warnings *[]string) string {
 	}
 }
 
+func normalizeAutoUsingAPI(value, fallback string, warnings *[]string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case AutoUsingAPIOff, "false", "0", "no", "disabled":
+		return AutoUsingAPIOff
+	case AutoUsingAPIOn403, "true", "1", "yes", "403", "on":
+		return AutoUsingAPIOn403
+	case AutoUsingAPIOnFail, "all", "fail", "any":
+		return AutoUsingAPIOnFail
+	case "":
+		return fallback
+	default:
+		*warnings = append(*warnings, fmt.Sprintf("invalid auto_using_api=%q; using %s", value, fallback))
+		return fallback
+	}
+}
+
 func (c PluginConfig) DurationForStatus(status int) time.Duration {
 	switch status {
 	case 401:
@@ -298,6 +323,7 @@ func (c PluginConfig) PublicView() map[string]any {
 		"action_cooldown_seconds":                  c.ActionCooldownSeconds,
 		"fail_streak_403":                          c.FailStreak403,
 		"fail_streak_window_seconds":               c.FailStreakWindowSeconds,
+		"auto_using_api":                           c.AutoUsingAPI,
 		"delete_fallback":                          c.DeleteFallback,
 		"scheduler_delegate":                       c.SchedulerDelegate,
 		"state_file":                               c.StateFile,
@@ -342,7 +368,7 @@ var OpsSettingsKeys = []string{
 	"probe_concurrency", "probe_qps", "probe_mode", "probe_base_url", "probe_path",
 	"probe_action", "probe_on_success", "probe_include_disabled", "probe_only_disabled",
 	"auto_execute", "action_cooldown_seconds", "fail_streak_403", "fail_streak_window_seconds",
-	"delete_fallback", "scheduler_delegate", "audit_max_events",
+	"auto_using_api", "delete_fallback", "scheduler_delegate", "audit_max_events",
 }
 
 // OpsSettingsView returns only ops-console fields suitable for state-file overlay.
