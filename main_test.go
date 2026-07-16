@@ -151,7 +151,7 @@ func TestStatusPageUsesManagementKeyFlow(t *testing.T) {
 		"巡检历史",
 		"data-filter",
 		"健康",
-		"已禁用",
+		"禁用",
 		"statusChips",
 		"toast",
 		"progressBar",
@@ -183,6 +183,9 @@ func TestStatusPageUsesManagementKeyFlow(t *testing.T) {
 		"setOpResult",
 		"sel-bar",
 		"tools-end",
+		"stats-strip",
+		"cfg-details",
+		"row-more",
 	} {
 		if !strings.Contains(page, required) {
 			t.Fatalf("page missing %q", required)
