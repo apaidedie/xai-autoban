@@ -2,7 +2,7 @@
 
 CLIProxyAPI 原生插件：自动隔离异常 xAI 凭据，支持策略配置、定时/手动巡检、禁用/删除、refresh 重授权与运维台。
 
-版本：**1.0.7**（Stable）
+版本：**1.0.8**（Stable）
 
 > **稳定性契约：** [STABILITY.md](./STABILITY.md) — 保证/不保证、配置冻结表、运维入口。  
 > **1.x 政策：** 不删/不改名冻结配置键（破坏性变更需 major）；默认策略变更写 CHANGELOG。
@@ -37,13 +37,13 @@ CLIProxyAPI 原生插件：自动隔离异常 xAI 凭据，支持策略配置、
 
 | 配置 | 默认 | 说明 |
 |------|------|------|
-| `auto_using_api` | `on_403` | 探测/复检时是否自动开 CPA「使用 API 模式」：`off` / `on_403` / `on_fail`（401/402/403） |
+| `auto_using_api` | `off` | 探测/复检失败是否自动写 `using_api`：`off`（默认，更安全）/ `on_403` / `on_fail` |
 
 ## 功能
 
 - 运维台：筛选 / 全选当前筛选 / 批量释放·隔离·禁用·启用·**API 模式**·删除 / 复检 / 巡检配置
 - 列表字段：API 模式 / 软 403 进度 / 最近巡检
-- `auto_using_api`：探测/复检 OAuth 失败时可选自动开 API 模式（默认仅 403）
+- `auto_using_api`：探测失败时可自动开 API 模式（**默认 off**，更安全）
 - Management 真删除（失败则禁用/隔离 + `pending_delete`）
 - reauth：`refresh_token` → `auth.x.ai`
 - 配置持久化：`xai-autoban-state.json`（默认；本地运行产物，已 gitignore）

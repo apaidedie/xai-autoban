@@ -54,7 +54,7 @@ Default mode: `probe_mode=responses_mini` → real `POST /responses`.
 | `auto_using_api` | Behavior |
 |------------------|----------|
 | `off` | Never auto-write; manual ops only |
-| `on_403` (**default**) | Probe/recheck may enable once per key **per run** on HTTP 403 |
+| `on_403` | Probe/recheck may enable once per key **per run** on HTTP 403 |
 | `on_fail` | Same, on 401/402/403 |
 
 Manual ops action `using_api` is **never** gated by this setting.  
@@ -121,7 +121,7 @@ Prefer **tag push** or **workflow_dispatch**; do not create an empty Release bef
 | `action_cooldown_seconds` | int | 60 |
 | `fail_streak_403` | int | 3 |
 | `fail_streak_window_seconds` | int | 1800 |
-| `auto_using_api` | off\|on_403\|on_fail | on_403 |
+| `auto_using_api` | off\|on_403\|on_fail | off（更安全；旧默认 on_403） |
 | `delete_fallback` | disable\|ban | disable |
 | `scheduler_delegate` | round-robin\|fill-first | round-robin |
 | `audit_max_events` | int | 200 |

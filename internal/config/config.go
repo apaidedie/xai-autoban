@@ -66,7 +66,7 @@ type PluginConfig struct {
 	FailStreak403 int `yaml:"fail_streak_403"`
 	// FailStreakWindowSeconds: reset streak if gap between failures exceeds this. Default 1800.
 	FailStreakWindowSeconds int `yaml:"fail_streak_window_seconds"`
-	// AutoUsingAPI: off | on_403 (default) | on_fail — auto enable CPA using_api on probe/recheck.
+	// AutoUsingAPI: off (default, safer) | on_403 | on_fail — auto enable CPA using_api on probe/recheck.
 	AutoUsingAPI      string `yaml:"auto_using_api"`
 	DeleteFallback    string `yaml:"delete_fallback"`
 	SchedulerDelegate string `yaml:"scheduler_delegate"`
@@ -105,7 +105,7 @@ func Default() PluginConfig {
 		ActionCooldownSeconds:   60,
 		FailStreak403:           3,
 		FailStreakWindowSeconds: 1800,
-		AutoUsingAPI:            AutoUsingAPIOn403,
+		AutoUsingAPI:            AutoUsingAPIOff,
 		DeleteFallback:          actionDisable,
 		SchedulerDelegate:       pluginapi.SchedulerBuiltinRoundRobin,
 		// Default state path: bans + ops-console settings overlay (survives reload).

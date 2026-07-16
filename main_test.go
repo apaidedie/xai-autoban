@@ -187,6 +187,8 @@ func TestStatusPageUsesManagementKeyFlow(t *testing.T) {
 		"code-strip",
 		"立即巡检",
 		"编辑配置",
+		"读懂状态口径",
+		"statusLegend",
 	} {
 		if !strings.Contains(page, required) {
 			t.Fatalf("page missing %q", required)

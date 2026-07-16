@@ -159,6 +159,15 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
 .sub2{display:block;color:var(--muted);font-size:11px;margin-top:2px}
 .empty{padding:48px;text-align:center;color:var(--muted);font-weight:700}
 .foot{color:var(--muted);font-size:12px;line-height:1.6;padding:0 2px}
+.legend{margin:0 0 10px;border:1px solid var(--line);border-radius:14px;background:rgba(12,20,34,.75);overflow:hidden}
+.legend>summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;user-select:none;font-size:12px;font-weight:800;color:#dbe4f3}
+.legend>summary::-webkit-details-marker{display:none}
+.legend>summary .chev{color:var(--muted);font-weight:700}
+.legend[open]>summary{border-bottom:1px solid var(--line)}
+.legend-body{padding:10px 14px 12px;display:grid;gap:8px;font-size:12px;line-height:1.5;color:var(--muted)}
+.legend-body b{color:#e2e8f0}
+.legend-body .row2{display:grid;grid-template-columns:88px 1fr;gap:6px 10px}
+.legend-body .k{color:var(--cyan);font-weight:800;white-space:nowrap}
 .drawer-mask{position:fixed;inset:0;background:rgba(2,6,23,.55);backdrop-filter:blur(2px);opacity:0;pointer-events:none;transition:opacity .18s;z-index:40}
 .drawer-mask.open{opacity:1;pointer-events:auto}
 .drawer{position:fixed;top:0;right:0;height:100vh;width:min(440px,100vw);background:linear-gradient(180deg,#0f172a,#0b1220);border-left:1px solid var(--line);box-shadow:-20px 0 50px rgba(0,0,0,.45);transform:translateX(100%);transition:transform .2s ease;z-index:50;display:flex;flex-direction:column}
@@ -283,39 +292,53 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
   </section>
 
   <div class="qcards" id="overviewCards">
-    <button type="button" class="qcard info" data-jump="all" data-filter="all" title="当前扫描到的 xAI 认证文件总数">
+    <button type="button" class="qcard info" data-jump="all" data-filter="all" title="xAI 认证文件总数（AuthList）">
       <div class="ql">全部凭证</div><div class="qn" id="ov_all">0</div><div class="qs">认证文件</div>
     </button>
-    <button type="button" class="qcard ok" data-jump="healthy" data-filter="healthy" title="未隔离且未禁用，可参与调度">
+    <button type="button" class="qcard ok" data-jump="healthy" data-filter="healthy" title="未禁用且未在插件隔离账本 → 可参与调度">
       <div class="ql">健康</div><div class="qn" id="ov_healthy">0</div><div class="qs">可调度</div>
     </button>
-    <button type="button" class="qcard warn" data-jump="banned" data-filter="banned" title="插件隔离账本（调度跳过）。下方 401–429 为状态码计数，口径不同。">
-      <div class="ql">当前隔离</div><div class="qn" id="ov_banned">0</div><div class="qs" id="ov_banned_sub">隔离账本 · 调度跳过</div>
+    <button type="button" class="qcard warn" data-jump="banned" data-filter="banned" title="【隔离账本】插件内部记录，调度会跳过。与下方 401–429（按隔离条目的状态码计数）口径不同；可与「已禁用」重叠。">
+      <div class="ql">当前隔离</div><div class="qn" id="ov_banned">0</div><div class="qs" id="ov_banned_sub">账本 · 跳过调度</div>
     </button>
-    <button type="button" class="qcard disabled-card" data-jump="disabled" data-filter="disabled" title="已关闭的 CPA 凭证">
-      <div class="ql">已禁用</div><div class="qn" id="c_disabled">0</div><div class="qs">关闭凭证</div>
+    <button type="button" class="qcard disabled-card" data-jump="disabled" data-filter="disabled" title="【CPA 禁用】凭证开关关闭（Auth.Disabled）。与插件隔离是两件事：可同时存在。">
+      <div class="ql">已禁用</div><div class="qn" id="c_disabled">0</div><div class="qs">CPA 关闭</div>
     </button>
-    <button type="button" class="qcard info" data-jump="probe" id="ov_probe_card" title="点击立即巡检全部 xAI 凭证">
+    <button type="button" class="qcard info" data-jump="probe" id="ov_probe_card" title="点击立即全量巡检。定时巡检开启后约 45 秒内首次执行；进行中会显示进度。">
       <div class="ql">上次巡检</div><div class="qn" id="ov_probe">—</div><div class="qs" id="ov_probe_sub">点击立即巡检</div>
     </button>
   </div>
   <div class="code-strip" id="codeStrip" role="toolbar" aria-label="状态码筛选">
-    <button type="button" class="code-chip s401" data-filter="401" title="401 重授权">
+    <button type="button" class="code-chip s401" data-filter="401" title="【状态码计数】隔离账本里 status=401 的条数（需重授权/Token 失效），不是全部 401 探测结果。">
       <span class="cl">401 · 重授权</span><b id="ov_401">0</b>
     </button>
-    <button type="button" class="code-chip s402" data-filter="402" title="402 无额度">
+    <button type="button" class="code-chip s402" data-filter="402" title="【状态码计数】隔离账本里 status=402 的条数（额度/free-usage）。探测 402 默认不写入隔离。">
       <span class="cl">402 · 无额度</span><b id="ov_402">0</b>
     </button>
-    <button type="button" class="code-chip s403" data-filter="403" title="403 禁止">
+    <button type="button" class="code-chip s403" data-filter="403" title="【状态码计数】隔离账本里 status=403 的条数。软 403 需连续多次才隔离。">
       <span class="cl">403 · 禁止</span><b id="ov_403">0</b>
     </button>
-    <button type="button" class="code-chip s429" data-filter="429" title="429 限流">
+    <button type="button" class="code-chip s429" data-filter="429" title="【状态码计数】隔离账本里 status=429 的条数（限流）。">
       <span class="cl">429 · 限流</span><b id="ov_429">0</b>
     </button>
-    <button type="button" class="code-chip s-api" data-filter="using_api" id="usingApiFilterBtn" title="已开启 CPA「使用 API 模式」的凭证（点击筛选；再点可取消）">
+    <button type="button" class="code-chip s-api" data-filter="using_api" id="usingApiFilterBtn" title="【API 模式】凭证 using_api=true。数字来自缓存/抽样；点击筛选，再点取消。">
       <span class="cl">API · 模式</span><b id="ov_using_api">0</b>
     </button>
   </div>
+  <details class="legend" id="statusLegend">
+    <summary><span>读懂状态口径（隔离 ≠ 禁用 ≠ 状态码卡）</span><span class="chev">展开</span></summary>
+    <div class="legend-body">
+      <div class="row2">
+        <span class="k">健康</span><span>未禁用、未在隔离账本 → 调度可选</span>
+        <span class="k">隔离</span><span><b>插件账本</b>：调度跳过；CPA 开关可能仍是启用。可点「释放」清账本</span>
+        <span class="k">禁用</span><span><b>CPA 开关</b>：凭证关闭；与隔离独立，可同时「禁用 + 兼隔离」</span>
+        <span class="k">401–429</span><span>只统计<strong>已写入隔离账本</strong>的状态码，不是实时探测全量分布</span>
+        <span class="k">软 403</span><span>连续失败达到阈值才隔离；行上 1/3 表示连击进度</span>
+        <span class="k">API 模式</span><span>CPA using_api；自动开启见配置「自动 API 模式」（默认关闭，更安全）</span>
+        <span class="k">真实流量</span><span>usage 成功会释放隔离，并在 30 分钟内跳过探测（防误伤）</span>
+      </div>
+    </div>
+  </details>
   <div id="statusChips" hidden aria-hidden="true">
     <button type="button" data-filter="all"><b id="c_all">-</b></button>
     <button type="button" data-filter="healthy"><b id="c_healthy">-</b></button>
@@ -397,8 +420,8 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
   </section>
 
   <p class="foot">
-    <b>隔离</b>=插件内跳过调度；<b>禁用</b>=关闭凭证；<b>启用</b>=打开凭证；<b>删除</b>=Management 删除。
-    日常策略在「编辑配置」；禁用/删除需插件管理中配置 CPA Management Key（非 cpamp_ 面板密钥）。
+    <b>隔离</b>=插件账本跳过调度 · <b>禁用</b>=CPA 关凭证 · <b>启用</b>=打开 CPA 开关 · <b>删除</b>=Management 删文件。
+    口径见上方「读懂状态」。禁用/删除需插件管理里配置 CPA Management Key（不要填 cpamp_ 面板密钥）。
   </p>
   <input id="importFile" type="file" accept="application/json,.json" hidden>
 </div>
@@ -427,12 +450,13 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
       <label class="chk" style="margin-bottom:8px"><input id="f_probe_include_disabled" type="checkbox"> 巡检包含已禁用凭证</label>
       <label class="chk" style="margin-bottom:10px"><input id="f_probe_only_disabled" type="checkbox"> 仅巡检已禁用凭证</label>
       <div class="fg"><label>自动 API 模式</label>
-        <select id="f_auto_using_api" title="OAuth 探测失败时是否自动开启 CPA 使用 API 模式">
-          <option value="on_403">仅 403 时自动（推荐）</option>
-          <option value="on_fail">401/402/403 自动</option>
-          <option value="off">关闭（仅手动）</option>
+        <select id="f_auto_using_api" title="探测/复检失败时是否自动写 using_api。会改变账号走 API 路径，可能影响额度/限流；默认关闭更安全。">
+          <option value="off">关闭 · 仅手动（推荐，更安全）</option>
+          <option value="on_403">仅 403 时自动开 API 模式</option>
+          <option value="on_fail">401/402/403 都自动开</option>
         </select>
       </div>
+      <p class="hint" style="margin:0 0 10px;line-height:1.45">自动开启会改 CPA 凭证字段；不确定时保持「关闭」，用列表「API 模式所选」手动开。</p>
     </div>
     <div class="sec">
       <h4>自动执行（对齐 Codex 巡检）</h4>
@@ -874,7 +898,7 @@ function fillDrawer(s){
   $('f_probe_mode').value=s.probe_mode||'responses_mini';
   if($('f_probe_include_disabled')) $('f_probe_include_disabled').checked=!!s.probe_include_disabled;
   if($('f_probe_only_disabled')) $('f_probe_only_disabled').checked=!!s.probe_only_disabled;
-  if($('f_auto_using_api')) $('f_auto_using_api').value=s.auto_using_api||'on_403';
+  if($('f_auto_using_api')) $('f_auto_using_api').value=s.auto_using_api||'off';
   $('f_delete_fallback').value=s.delete_fallback||'disable';
   $('f_action_on_401').value=s.action_on_401||'ban';
   $('f_action_on_402').value=s.action_on_402||'ban';
@@ -906,7 +930,7 @@ function collectDraft(){
     probe_mode: $('f_probe_mode').value,
     probe_include_disabled: !!($('f_probe_include_disabled')&&$('f_probe_include_disabled').checked),
     probe_only_disabled: !!($('f_probe_only_disabled')&&$('f_probe_only_disabled').checked),
-    auto_using_api: ($('f_auto_using_api')&&$('f_auto_using_api').value)||'on_403',
+    auto_using_api: ($('f_auto_using_api')&&$('f_auto_using_api').value)||'off',
     probe_on_success: state.success,
     probe_action: state.fail,
     auto_execute: !!state.autoExecute,
@@ -929,7 +953,7 @@ function settingsMismatch(draft, got){
     ['probe_action', String(draft.probe_action||''), String(got.probe_action||'')],
     ['probe_mode', String(draft.probe_mode||''), String(got.probe_mode||'')],
     ['probe_enabled', !!draft.probe_enabled, !!got.probe_enabled],
-    ['auto_using_api', String(draft.auto_using_api||'on_403'), String(got.auto_using_api||'on_403')],
+    ['auto_using_api', String(draft.auto_using_api||'off'), String(got.auto_using_api||'off')],
   ];
   for(const [k, want, have] of checks){
     if(want!==have) return k+' 期望 '+want+' 实际 '+have;

@@ -9,7 +9,7 @@ func TestNormalizeAutoUsingAPI(t *testing.T) {
 		in   string
 		want string
 	}{
-		{"", AutoUsingAPIOn403},
+		{"", AutoUsingAPIOff},
 		{"on_403", AutoUsingAPIOn403},
 		{"ON_403", AutoUsingAPIOn403},
 		{"true", AutoUsingAPIOn403},
@@ -21,7 +21,7 @@ func TestNormalizeAutoUsingAPI(t *testing.T) {
 		{"on_fail", AutoUsingAPIOnFail},
 		{"all", AutoUsingAPIOnFail},
 		{"fail", AutoUsingAPIOnFail},
-		{"nope", AutoUsingAPIOn403},
+		{"nope", AutoUsingAPIOff},
 	}
 	for _, tc := range cases {
 		cfg, _ := Normalize(PluginConfig{AutoUsingAPI: tc.in})
@@ -32,18 +32,18 @@ func TestNormalizeAutoUsingAPI(t *testing.T) {
 }
 
 func TestDefaultAutoUsingAPI(t *testing.T) {
-	if Default().AutoUsingAPI != AutoUsingAPIOn403 {
-		t.Fatalf("default=%q", Default().AutoUsingAPI)
+	if Default().AutoUsingAPI != AutoUsingAPIOff {
+		t.Fatalf("default=%q want off", Default().AutoUsingAPI)
 	}
 }
 
 func TestPublicViewIncludesAutoUsingAPI(t *testing.T) {
 	v := Default().PublicView()
-	if v["auto_using_api"] != AutoUsingAPIOn403 {
+	if v["auto_using_api"] != AutoUsingAPIOff {
 		t.Fatalf("%#v", v["auto_using_api"])
 	}
 	ops := Default().OpsSettingsView()
-	if ops["auto_using_api"] != AutoUsingAPIOn403 {
+	if ops["auto_using_api"] != AutoUsingAPIOff {
 		t.Fatalf("ops missing auto_using_api: %#v", ops["auto_using_api"])
 	}
 }
