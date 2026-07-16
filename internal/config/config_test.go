@@ -47,3 +47,39 @@ func TestPublicViewIncludesAutoUsingAPI(t *testing.T) {
 		t.Fatalf("ops missing auto_using_api: %#v", ops["auto_using_api"])
 	}
 }
+
+// TestFrozenOpsKeysInPublicView guards STABILITY.md §3 freeze: every ops key must appear in PublicView.
+func TestFrozenOpsKeysInPublicView(t *testing.T) {
+	view := Default().PublicView()
+	for _, k := range OpsSettingsKeys {
+		if _, ok := view[k]; !ok {
+			t.Errorf("frozen ops key %q missing from PublicView", k)
+		}
+	}
+	ops := Default().OpsSettingsView()
+	if len(ops) != len(OpsSettingsKeys) {
+		t.Fatalf("OpsSettingsView size %d want %d", len(ops), len(OpsSettingsKeys))
+	}
+	for _, k := range OpsSettingsKeys {
+		if _, ok := ops[k]; !ok {
+			t.Errorf("frozen ops key %q missing from OpsSettingsView", k)
+		}
+	}
+}
+
+func TestInstallConfigKeysDocumented(t *testing.T) {
+	// Install keys are not all in PublicView (secrets); ensure list is non-empty and stable count.
+	if len(InstallConfigKeys) < 5 {
+		t.Fatalf("InstallConfigKeys too short: %v", InstallConfigKeys)
+	}
+	seen := map[string]struct{}{}
+	for _, k := range InstallConfigKeys {
+		if k == "" {
+			t.Fatal("empty install key")
+		}
+		if _, ok := seen[k]; ok {
+			t.Fatalf("duplicate install key %q", k)
+		}
+		seen[k] = struct{}{}
+	}
+}

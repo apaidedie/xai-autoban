@@ -361,6 +361,8 @@ func (c PluginConfig) ResolveManagementKey() string {
 }
 
 // OpsSettingsKeys are fields the ops console may persist (excludes install secrets).
+// FROZEN for 0.9+/1.0: do not remove or rename without a major version after 1.0.
+// See STABILITY.md §3.
 var OpsSettingsKeys = []string{
 	"ban_401_seconds", "ban_402_seconds", "ban_403_seconds", "ban_429_fallback_seconds",
 	"action_on_401", "action_on_402", "action_on_403", "action_on_429",
@@ -369,6 +371,18 @@ var OpsSettingsKeys = []string{
 	"probe_action", "probe_on_success", "probe_include_disabled", "probe_only_disabled",
 	"auto_execute", "action_cooldown_seconds", "fail_streak_403", "fail_streak_window_seconds",
 	"auto_using_api", "delete_fallback", "scheduler_delegate", "audit_max_events",
+}
+
+// InstallConfigKeys are plugin-manage / install-time fields (may hold secrets).
+// FROZEN for 0.9+/1.0 alongside OpsSettingsKeys.
+var InstallConfigKeys = []string{
+	"disable_via",
+	"management_url",
+	"management_key",
+	"management_key_env",
+	"management_timeout_seconds",
+	"management_auth_failure_cooldown_seconds",
+	"state_file",
 }
 
 // OpsSettingsView returns only ops-console fields suitable for state-file overlay.

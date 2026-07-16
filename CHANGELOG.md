@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.9.0 - 2026-07-16
+
+### Freeze
+- **Config freeze window** opened: no remove/rename of frozen ops/install keys (see [STABILITY.md](./STABILITY.md) §3)
+- Policy: 0.9.x = bugfix only toward 1.0.0
+- CI guard: `TestFrozenOpsKeysInPublicView` ensures every `OpsSettingsKeys` entry is in PublicView
+
+### Note
+- Jump from 0.5.49 → 0.9.0 marks freeze intent (semver minor for pre-1.0 readiness), not a breaking API wipe.
+
 ## 0.5.49 - 2026-07-16
 
 ### Fix

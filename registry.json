@@ -6,7 +6,7 @@
       "name": "xAI Autoban",
       "description": "xAI 自动隔离：usage 熔断 + responses 巡检（OAuth 对齐 cli-chat-proxy）。运维台批量释放/隔离/禁用/API 模式/删除/复检；auto_using_api；兼容 CPA-Manager-Plus。",
       "author": "apaidedie",
-      "version": "0.5.49",
+      "version": "0.9.0",
       "repository": "https://github.com/apaidedie/xai-autoban",
       "homepage": "https://github.com/apaidedie/xai-autoban",
       "license": "MIT",
