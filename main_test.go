@@ -188,14 +188,20 @@ func TestStatusPageUsesManagementKeyFlow(t *testing.T) {
 			t.Fatalf("page missing %q", required)
 		}
 	}
-	// no browser key paste UI
-	for _, banned := range []string{"mgmtKeyInput", "保存密钥", "readManagementKey", "xai_autoban_management_key"} {
+	// no browser key paste UI / no secret embedded in HTML
+	for _, banned := range []string{"mgmtKeyInput", "保存密钥", "readManagementKey", "xai_autoban_management_key", "test-key"} {
 		if strings.Contains(page, banned) {
-			t.Fatalf("page must not contain browser key UI %q", banned)
+			t.Fatalf("page must not contain secret or key UI %q", banned)
 		}
 	}
-	if !strings.Contains(page, "test-key") {
-		t.Fatal("expected server key injection")
+	if !strings.Contains(page, "SERVER_MGMT_KEY=''") && !strings.Contains(page, `SERVER_MGMT_KEY=""`) {
+		// empty constant is required (never inject real key)
+		if !strings.Contains(page, "SERVER_MGMT_KEY=''") {
+			// allow either quote style from template
+			if !strings.Contains(page, "const SERVER_MGMT_KEY=''") {
+				t.Fatal("expected empty SERVER_MGMT_KEY constant (no secret in HTML)")
+			}
+		}
 	}
 	if strings.Contains(page, "/action?op=unban") || strings.Contains(page, resourceActionPath()) {
 		t.Fatal("public unban action must be removed")

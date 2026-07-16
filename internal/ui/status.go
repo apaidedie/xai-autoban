@@ -6,14 +6,11 @@ import (
 )
 
 // StatusPage renders the ops console.
-// serverMgmtKey is the plugin-configured CPA management key (plugin manage / env).
-// Used only as optional Authorization on resource POST; primary writes use GET /ops under CPAMP.
+// serverMgmtKey is accepted for ABI compatibility but never embedded in HTML
+// (resource ops use GET /data|/ops; secrets stay server-side).
 func StatusPage(pluginName, pluginVersion, serverMgmtKey string) string {
+	_ = serverMgmtKey
 	name := html.EscapeString(pluginName)
-	keyJS, err := json.Marshal(serverMgmtKey)
-	if err != nil {
-		keyJS = []byte(`""`)
-	}
 	verJS, err := json.Marshal(pluginVersion)
 	if err != nil {
 		verJS = []byte(`""`)
@@ -115,8 +112,8 @@ button:hover{background:rgba(51,65,85,.95)}button:disabled{opacity:.35;cursor:no
 .progress-meta .pc{color:var(--cyan);font-family:var(--mono);font-variant-numeric:tabular-nums}
 .progress{height:6px;border-radius:999px;background:rgba(148,163,184,.1);overflow:hidden}
 .progress>i{display:block;height:100%;width:0;border-radius:999px;background:linear-gradient(90deg,var(--cyan),var(--blue));transition:width .15s ease}
-/* Soft result panel — fits dark theme; not a jarring alert box */
-.op-result{margin-top:10px;padding:10px 12px;border-radius:10px;font-size:12px;font-weight:650;line-height:1.55;border:1px solid rgba(148,163,184,.12);background:rgba(2,6,23,.35);color:#cbd5e1;white-space:pre-wrap;max-height:160px;overflow:auto}
+/* Soft result panel — compact summary (not 100+ auth lines) */
+.op-result{margin-top:10px;padding:10px 12px;border-radius:10px;font-size:12px;font-weight:650;line-height:1.5;border:1px solid rgba(148,163,184,.12);background:rgba(2,6,23,.35);color:#cbd5e1;white-space:pre-wrap;max-height:120px;overflow:auto}
 .op-result.ok{border-color:rgba(34,211,238,.22);background:rgba(8,47,73,.28);color:#a5f3fc}
 .op-result.warn{border-color:rgba(148,163,184,.16);background:rgba(30,41,59,.4);color:#e2e8f0}
 .op-result.err{border-color:rgba(251,113,133,.22);background:rgba(69,10,10,.22);color:#fecdd3}
@@ -253,7 +250,7 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
     <div>
       <div class="kicker"><i></i>运维台 · xAI 账号巡检</div>
       <h1>xAI Autoban</h1>
-      <p class="sub">隔离 · 禁用 · 启用 · 复检 · v` + pluginVersion + `</p>
+      <p class="sub">主状态一眼看懂 · 复检结果只显示摘要 · v` + pluginVersion + `</p>
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <div class="live" id="syncState">准备中</div>
@@ -285,8 +282,8 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
     <button type="button" class="qcard ok" data-jump="healthy" data-filter="healthy" title="未隔离且未禁用，可参与调度">
       <div class="ql">健康</div><div class="qn" id="ov_healthy">0</div><div class="qs">可调度</div>
     </button>
-    <button type="button" class="qcard warn" data-jump="banned" data-filter="banned" title="插件内隔离账本条数（调度会跳过）。下方 401–429 为状态码计数，口径不同：可含未写入隔离账本的本地标记。">
-      <div class="ql">当前隔离</div><div class="qn" id="ov_banned">0</div><div class="qs" id="ov_banned_sub">隔离账本 · 调度跳过</div>
+    <button type="button" class="qcard warn" data-jump="banned" data-filter="banned" title="插件隔离账本（调度跳过）。下方 401–429 是状态码统计，口径不同。">
+      <div class="ql">隔离</div><div class="qn" id="ov_banned">0</div><div class="qs" id="ov_banned_sub">账本 · 跳过调度</div>
     </button>
     <button type="button" class="qcard disabled-card" data-jump="disabled" data-filter="disabled" title="已关闭的 CPA 凭证">
       <div class="ql">已禁用</div><div class="qn" id="c_disabled">0</div><div class="qs">关闭凭证</div>
@@ -487,8 +484,8 @@ const resourceBase=(function(){
   }catch(_){}
   return '/v0/resource/plugins/xai-autoban';
 })();
-// Optional CPA secret-key for resource POST; primary path is GET /data?op= (CPAMP-friendly).
-const SERVER_MGMT_KEY=` + string(keyJS) + `;
+// Never embed management secret in HTML (XSS / view-source risk). GET /ops is primary.
+const SERVER_MGMT_KEY='';
 const PLUGIN_VERSION=` + string(verJS) + `;
 const state={bans:[],credentials:[],counts:{},page:{page:1,page_size:50,total:0,pages:1,filter:'all',q:''},filter:'all',query:'',selected:new Set(),timer:null,searchTimer:null,toastTimer:null,busy:false,settings:{},success:'unban',fail:'ban',autoExecute:true,history:[]};
 const $=id=>document.getElementById(id);
@@ -683,13 +680,24 @@ function toast(text, kind=''){
   if(state.toastTimer) clearTimeout(state.toastTimer);
   state.toastTimer=setTimeout(()=>{ el.className='toast'; }, 2800);
 }
+// Collapse long multi-line results: keep summary + first few detail lines.
+function compactResultText(text){
+  const raw=String(text||'').trim();
+  if(!raw) return '';
+  const lines=raw.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+  if(lines.length<=7) return lines.join('\n');
+  const head=lines[0];
+  const rest=lines.slice(1);
+  const show=rest.slice(0,5);
+  const more=rest.length-show.length;
+  return [head, ...show, more>0?('…另 '+more+' 条，详见列表筛选'):''].filter(Boolean).join('\n');
+}
 function setOpResult(text, kind=''){
   const el=$('opResult'); if(!el) return;
   if(!text){ el.hidden=true; el.textContent=''; el.className='op-result'; return; }
   el.hidden=false;
-  el.textContent=text;
+  el.textContent=compactResultText(text);
   el.className='op-result'+(kind?' '+kind:'');
-  // keep panel visible so result stays under the bar
   const panel=$('progressPanel'); if(panel) panel.classList.add('on');
 }
 function clearOpResult(){ setOpResult(''); }
@@ -1193,7 +1201,7 @@ async function recheckSelected(){
   if(state.busy) return;
   const ids=[...state.selected];
   if(!ids.length){ setMessage('请先勾选凭证',true); setOpResult('请先勾选凭证','err'); return; }
-  if(!confirm('复检所选 '+ids.length+' 条？\n· 含已禁用凭证\n· 成功：释放隔离 + 自动启用\n· 失败：写入/刷新隔离记录\n· 分批执行并显示真实进度')) return;
+  if(!confirm('复检所选 '+ids.length+' 条？\n成功将释放隔离并启用；失败按策略处理。')) return;
   const chunkSize=5;
   try{
     setBusy(true,'复检所选');
@@ -1227,7 +1235,8 @@ async function recheckSelected(){
     setMessage(msg);
     finishProgress(ids.length, ids.length, '复检完成');
     // streak/grace 等探测噪声用中性样式，避免大块刺眼红底
-    const soft=failed>0 && (okN>0 || /streak\/grace|not isolated|skipped_/i.test(detail));
+    const soft=failed>0 && (okN>0 || /连击|宽限|不隔离|streak|grace|not isolated|skipped_/i.test(detail));
+    // Prefer short summary in panel; detail lines already capped server-side.
     setOpResult(detail, failed>0?(soft?'warn':'err'):'ok');
     state.selected.clear();
     await loadData(true);

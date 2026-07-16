@@ -269,16 +269,17 @@ func (p *Service) RecheckSelected(authIDs []string, reenableOnOK bool) (RecheckS
 				return
 			}
 			res.Failed++
-			msg := "probe failed"
-			if perr != nil {
-				msg = perr.Error()
+			msg := "探测失败"
+			if status > 0 {
+				msg = fmt.Sprintf("%d", status)
+			} else if perr != nil {
+				msg = shortErr(perr.Error())
 			}
 			p.RememberProbeResult(key, false, status, msg)
 			entry, okClass := p.engine.ClassifyFailureWithBody(status, nil, body, time.Now())
 			if !okClass {
-				// non-isolating failure (e.g. model unavailable): do not ban
-				if len(res.Errors) < 30 {
-					res.Errors = append(res.Errors, key+": "+msg+" (no isolate)")
+				if len(res.Errors) < 12 {
+					res.Errors = append(res.Errors, shortCredLabel(key, f.Email)+" · "+msg+" · 不隔离")
 				}
 				return
 			}
@@ -294,11 +295,12 @@ func (p *Service) RecheckSelected(authIDs []string, reenableOnOK bool) (RecheckS
 			if nowBanned && !wasBanned {
 				res.Banned++
 			}
-			if len(res.Errors) < 30 {
+			if len(res.Errors) < 12 {
+				label := shortCredLabel(key, f.Email)
 				if nowBanned && !wasBanned {
-					res.Errors = append(res.Errors, key+": "+msg)
+					res.Errors = append(res.Errors, label+" · "+msg+" · 已隔离")
 				} else {
-					res.Errors = append(res.Errors, key+": "+msg+"（连击/宽限中，尚未隔离）")
+					res.Errors = append(res.Errors, label+" · "+msg+" · 连击中")
 				}
 			}
 		}(id)
@@ -307,6 +309,37 @@ func (p *Service) RecheckSelected(authIDs []string, reenableOnOK bool) (RecheckS
 	p.persist.ScheduleSave()
 	res.FinishedAt = time.Now().Format(time.RFC3339)
 	return res, nil
+}
+
+func shortCredLabel(key, email string) string {
+	em := strings.ToLower(strings.TrimSpace(email))
+	if em != "" {
+		return em
+	}
+	k := strings.TrimSpace(key)
+	if i := strings.LastIndexAny(k, `/\`); i >= 0 {
+		k = k[i+1:]
+	}
+	k = strings.TrimSuffix(k, ".json")
+	if len(k) > 40 {
+		return k[:18] + "…" + k[len(k)-14:]
+	}
+	return k
+}
+
+func shortErr(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "失败"
+	}
+	// Drop long probe status prefixes; keep last meaningful bit short.
+	if i := strings.LastIndex(s, ": "); i >= 0 && i+2 < len(s) {
+		s = strings.TrimSpace(s[i+2:])
+	}
+	if len(s) > 48 {
+		return s[:48] + "…"
+	}
+	return s
 }
 
 func indexAuthFiles(files []pluginapi.HostAuthFileEntry) map[string]pluginapi.HostAuthFileEntry {
