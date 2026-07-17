@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.1 - 2026-07-17
+
+### Chore / Final polish
+- 巡检候选排序改为 `sort.SliceStable`（大号池）
+- 导出需重授改用 `LookupBan`，匹配更准
+- 仓库卫生：`.gitignore` 增加 `/deploy/`；README 对齐 1.1 能力
+- 本版本作为 **1.1 维护终点**（后续仅按需修 bug）
+
 ## 1.1.0 - 2026-07-16
 
 ### Perf
