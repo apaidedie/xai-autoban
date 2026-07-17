@@ -754,30 +754,16 @@ func (h *Handler) exportInspectList(body map[string]any, q url.Values) pluginapi
 			continue
 		}
 		key := xai.AuthKey(f)
-		entry, ok := snap[key]
-		if !ok {
-			entry, ok = snap[strings.ToLower(strings.TrimSpace(f.Email))]
-		}
-		if !ok {
-			// try by id
-			for _, e := range snap {
-				if ban.AuthIDsEqual(e.AuthID, key) || ban.AuthIDsEqual(e.AuthID, f.ID) {
-					entry, ok = e, true
-					break
-				}
-			}
-		}
+		entry, ok := creds.LookupBan(snap, key, f)
 		switch kind {
 		case "pending_delete", "pending-delete", "delete":
 			if ok && entry.PendingDelete {
 				out = append(out, row{AuthID: key, Email: f.Email, Name: f.Name, Reason: entry.Reason, Code: entry.StatusCode, Pending: true})
 			}
 		default: // reauth
-			need := false
-			if ok && (entry.StatusCode == 401 || entry.Classification == "reauth" || strings.Contains(strings.ToLower(entry.Reason), "token")) {
-				need = true
-			}
-			if need {
+			if ok && (entry.StatusCode == 401 || entry.Classification == "reauth" ||
+				strings.Contains(strings.ToLower(entry.Reason), "token") ||
+				strings.Contains(strings.ToLower(entry.Reason), "unauthorized")) {
 				out = append(out, row{AuthID: key, Email: f.Email, Name: f.Name, Reason: entry.Reason, Code: entry.StatusCode})
 			}
 		}

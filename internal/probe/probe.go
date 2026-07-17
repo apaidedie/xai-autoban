@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -1044,14 +1045,7 @@ func (p *Service) selectProbeTargets(files []pluginapi.HostAuthFileEntry, cfg co
 		}
 		cands = append(cands, cand{f: f, prio: prio})
 	}
-	// stable-ish sort by priority
-	for i := 0; i < len(cands); i++ {
-		for j := i + 1; j < len(cands); j++ {
-			if cands[j].prio < cands[i].prio {
-				cands[i], cands[j] = cands[j], cands[i]
-			}
-		}
-	}
+	sort.SliceStable(cands, func(i, j int) bool { return cands[i].prio < cands[j].prio })
 	limit := len(cands)
 	if scheduled && limit > maxScheduledBatch {
 		skipped += limit - maxScheduledBatch

@@ -41,13 +41,14 @@ CLIProxyAPI 原生插件：自动隔离异常 xAI 凭据，支持策略配置、
 
 ## 功能
 
-- 运维台：筛选 / 全选当前筛选 / 批量释放·隔离·禁用·启用·**API 模式**·删除 / 复检 / 巡检配置
-- 列表字段：API 模式 / 软 403 进度 / 最近巡检
-- `auto_using_api`：探测失败时可自动开 API 模式（**默认 off**，更安全）
+- 运维台：筛选 / 全选 / 批量释放·隔离·禁用·启用·API 模式·删除 / 复检 / 巡检
+- 大号池：增量巡检（跳过近期成功、每轮限批）、using_api 缓存与后台刷新
+- 策略预设（保守/标准/激进）；导出需重授/待删（给 cpa-auth-inspect）
+- `auto_using_api` 默认 **off**（更安全）
 - Management 真删除（失败则禁用/隔离 + `pending_delete`）
 - reauth：`refresh_token` → `auth.x.ai`
-- 配置持久化：`xai-autoban-state.json`（默认；本地运行产物，已 gitignore）
-- 兼容 **CPA-Manager-Plus**（resource GET 写通道）
+- 状态持久化：`xai-autoban-state.json`（本地产物，已 gitignore）
+- 兼容 **CPA-Manager-Plus**（resource 写通道）
 
 ## 目录结构
 
@@ -58,18 +59,20 @@ internal/
   ban/      隔离账本
   classify/ 上游语义分类
   config/   配置默认值与归一化
-  creds/    运维台凭证列表投影
+  creds/    凭证列表投影 + using_api 缓存
   host/     CPA host 回调
-  mgmt/     管理路由 + CPAMP resource ops
-  probe/    巡检 / 复检 / auto using_api
+  mgmt/     管理路由 / 状态组装 / bulk / export
+  probe/    巡检 / 复检 / 增量调度 / bulk 进度
   reauth/   refresh_token 刷新
   schedule/ 选号跳过隔离
-  ui/       运维台 HTML/JS
+  ui/       运维台（status + css/body/script）
   usage/    实时 usage 成功/失败
 docs/superpowers/        # 现行设计/计划
 docs/archive/            # 历史 plan/spec
 scripts/                 # build.sh / build.ps1
+.github/workflows/       # Release CI
 registry.json            # 插件商店
+STABILITY.md             # 1.x 契约
 ```
 
 ### 与 cpa-auth-inspect

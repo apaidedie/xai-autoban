@@ -3,7 +3,6 @@ package probe
 import (
 	"encoding/json"
 	"testing"
-	"time"
 
 	"xai-autoban/cpasdk/pluginapi"
 	"xai-autoban/internal/action"
@@ -47,7 +46,6 @@ func TestRunOnceSkipsRecentUsageOK(t *testing.T) {
 	if res.Checked != 1 {
 		t.Fatalf("checked=%d want 1 (only cold)", res.Checked)
 	}
-	_ = time.Now()
 }
 
 func TestRunOnceForceDoesNotSkip(t *testing.T) {

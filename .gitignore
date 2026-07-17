@@ -1,4 +1,5 @@
 /dist/
+/deploy/
 *.so
 *.h
 *.dll
