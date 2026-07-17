@@ -1060,4 +1060,3 @@ func (h *Handler) ImportSnapshot(raw []byte) pluginapi.ManagementResponse {
 		"status":           h.CurrentStatus(),
 	})
 }
-

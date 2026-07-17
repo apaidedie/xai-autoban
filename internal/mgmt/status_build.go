@@ -1,4 +1,4 @@
-﻿package mgmt
+package mgmt
 
 import (
 	"encoding/json"
@@ -42,7 +42,6 @@ type BanInfo struct {
 	Action           string `json:"action,omitempty"`
 	Source           string `json:"source,omitempty"`
 }
-
 
 func (h *Handler) CurrentStatus() StatusInfo {
 	return h.CurrentStatusPaged(nil)
@@ -205,4 +204,3 @@ func collectXAIAuthFiles(cli host.Client) ([]pluginapi.HostAuthFileEntry, error)
 func sampleAuthJSON(cli host.Client, files []pluginapi.HostAuthFileEntry, limit int) map[string]json.RawMessage {
 	return creds.SampleAuthJSON(cli, files, limit, nil)
 }
-

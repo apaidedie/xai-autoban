@@ -53,7 +53,7 @@ Default mode: `probe_mode=responses_mini` → real `POST /responses`.
 
 | `auto_using_api` | Behavior |
 |------------------|----------|
-| `off` | Never auto-write; manual ops only |
+| `off` (**default**) | Never auto-write; manual ops only |
 | `on_403` | Probe/recheck may enable once per key **per run** on HTTP 403 |
 | `on_fail` | Same, on 401/402/403 |
 
