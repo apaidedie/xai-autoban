@@ -2,7 +2,7 @@
 
 CLIProxyAPI 原生插件：自动隔离异常 xAI 凭据，支持策略配置、定时/手动巡检、禁用/删除、refresh 重授权与运维台。
 
-版本：**1.0.9**（Stable）
+版本：**1.0.10**（Stable）
 
 > **稳定性契约：** [STABILITY.md](./STABILITY.md) — 保证/不保证、配置冻结表、运维入口。  
 > **1.x 政策：** 不删/不改名冻结配置键（破坏性变更需 major）；默认策略变更写 CHANGELOG。

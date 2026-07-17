@@ -30,19 +30,19 @@ function setActionEnabled(ok){
     ['unbanSelected','banSelected','disableSelected','reenableSelected','usingApiSelected','deleteSelected','recheckSelected'].forEach(id=>{const el=$(id); if(el) el.disabled=n===0;});
     if($('clearSelectedBtn')) $('clearSelectedBtn').disabled=n===0;
   }
-  if($('unbanSelected')) $('unbanSelected').textContent=n?('释放所选 ('+n+')'):'释放所选';
-  if($('deleteSelected')) $('deleteSelected').textContent=n?('删除所选 ('+n+')'):'删除所选';
-  if($('banSelected')) $('banSelected').textContent=n?('隔离所选 ('+n+')'):'隔离所选';
-  if($('disableSelected')) $('disableSelected').textContent=n?('禁用所选 ('+n+')'):'禁用所选';
-  if($('reenableSelected')) $('reenableSelected').textContent=n?('启用所选 ('+n+')'):'启用所选';
-  if($('usingApiSelected')) $('usingApiSelected').textContent=n?('API 模式所选 ('+n+')'):'API 模式所选';
-  if($('recheckSelected')) $('recheckSelected').textContent=n?('复检所选 ('+n+')'):'复检所选';
+  if($('unbanSelected')) $('unbanSelected').textContent=n?('释放 ('+n+')'):'释放';
+  if($('deleteSelected')) $('deleteSelected').textContent=n?('删除 ('+n+')'):'删除';
+  if($('banSelected')) $('banSelected').textContent=n?('隔离 ('+n+')'):'隔离';
+  if($('disableSelected')) $('disableSelected').textContent=n?('禁用 ('+n+')'):'禁用';
+  if($('reenableSelected')) $('reenableSelected').textContent=n?('启用 ('+n+')'):'启用';
+  if($('usingApiSelected')) $('usingApiSelected').textContent=n?('API 模式 ('+n+')'):'API 模式';
+  if($('recheckSelected')) $('recheckSelected').textContent=n?('复检 ('+n+')'):'复检';
   const sh=$('selectedHint');
   if(sh) sh.textContent=n?('已选 '+n):'';
   const sf=$('selectFilterBtn');
   if(sf){
-    const fl={all:'全部',healthy:'健康',banned:'隔离',disabled:'已禁用',using_api:'API 模式','401':'401','402':'402','403':'403','429':'429'}[state.filter]||state.filter;
-    sf.textContent=state.filter&&state.filter!=='all'?('全选 · '+fl):'全选当前筛选';
+    const fl={all:'全部',healthy:'健康',banned:'隔离',disabled:'禁用',using_api:'API 模式','401':'401','402':'402','403':'403','429':'429'}[state.filter]||state.filter;
+    sf.textContent=state.filter&&state.filter!=='all'?('全选 · '+fl):'全选筛选';
   }
 }
 function setAuthUI(){
@@ -305,7 +305,7 @@ function paintOverviewProbe(probe){
     n.textContent=String((ok||0))+'/'+String((ok||0)+(fail||0));
     let line=(probe.last_run?formatDate(probe.last_run):'')+(err?(' · '+err):'');
     if(probe.auto_execute===false) line=(line?line+' · ':'')+'只输出';
-    if(sub) sub.textContent=line||'点击立即巡检';
+    if(sub) sub.textContent=line||'点击开始';
     if(card) card.className='qcard'+(fail>0?' bad':(ok>0?' ok':' info'));
     return;
   }
@@ -317,7 +317,7 @@ function paintOverviewProbe(probe){
       if(sub) sub.textContent='定时已开 · 调度未启动（保存配置或点立即巡检）';
     }
   }else{
-    if(sub) sub.textContent='定时关闭 · 点击立即巡检';
+    if(sub) sub.textContent='定时关闭 · 点击开始';
   }
   if(card) card.className='qcard info';
 }
@@ -365,11 +365,11 @@ function labelAction(a){return ({ban:'隔离',disable:'禁用',delete:'删除',n
 function renderSettingsSummary(s){
   state.settings=s||{};
   const pe=$('sumProbeEnabled');
-  if(pe){ pe.textContent=s.probe_enabled?'已打开':'关闭'; pe.className=s.probe_enabled?'v on':'v off'; }
+  if(pe){ pe.textContent=s.probe_enabled?'已开启':'已关闭'; pe.className=s.probe_enabled?'v on':'v off'; }
   if($('sumInterval')) $('sumInterval').textContent=(s.probe_interval_seconds||'-')+'s';
   const auto=s.auto_execute!==false;
   const ae=$('sumAutoExec');
-  if(ae){ ae.textContent=auto?'自动执行':'只输出'; ae.className=auto?'v on':'v off'; }
+  if(ae){ ae.textContent=auto?'自动执行':'只记录'; ae.className=auto?'v on':'v off'; }
   if($('sumProbeAction')) $('sumProbeAction').textContent=labelAction(s.probe_action);
   if($('sumOnSuccess')) $('sumOnSuccess').textContent=labelAction(s.probe_on_success);
   if($('sumMode')) $('sumMode').textContent=s.probe_mode||'-';
@@ -497,7 +497,7 @@ async function loadData(silent=false){
     if($('count429')) $('count429').textContent=String(c[429]||0);
     paintChips(); paintPager();
     if(!state.busy){ $('syncState').textContent='在线'; $('syncState').className='live'; }
-    setMessage('已更新 · '+new Date().toLocaleTimeString('zh-CN',{hour12:false}));
+    setMessage('已刷新 · '+new Date().toLocaleTimeString('zh-CN',{hour12:false}));
     render();
   }catch(e){ $('syncState').textContent='异常'; $('syncState').className='live err'; setMessage(e.message,true); toast(e.message,'err'); }
 }
@@ -591,16 +591,16 @@ function midCell(c){
 }
 function render(){
   const list=filtered();
-  const filterLabel={all:'全部',healthy:'健康',banned:'隔离',disabled:'已禁用',using_api:'API 模式','401':'401','402':'402','403':'403','429':'429'}[state.filter]||state.filter;
+  const filterLabel={all:'全部',healthy:'健康',banned:'隔离',disabled:'禁用',using_api:'API 模式','401':'401','402':'402','403':'403','429':'429'}[state.filter]||state.filter;
   const p=state.page||{};
   $('resultCount').textContent=(p.total!=null?p.total:list.length)+' 条'+(state.filter&&state.filter!=='all'?(' · '+filterLabel):'')+(p.pages>1?(' · '+ (p.page||1)+'/'+p.pages):'');
   const lh=$('listHint');
   if(lh){
-    if(state.filter==='banned') lh.textContent='筛选：隔离账本';
-    else if(state.filter==='disabled') lh.textContent='筛选：已禁用';
+    if(state.filter==='banned') lh.textContent='筛选：隔离';
+    else if(state.filter==='disabled') lh.textContent='筛选：禁用';
     else if(state.filter==='using_api') lh.textContent='筛选：已开启 API 模式 · 再点卡片可取消';
     else if(['401','402','403','429'].includes(state.filter)) lh.textContent='筛选：'+filterLabel+'（状态码口径，可与隔离账本不同）';
-    else lh.textContent='点击上方卡片筛选 · 勾选后复检或批量操作';
+    else lh.textContent='点上方卡片筛选 · 勾选后复检或批量操作';
   }
   paintPager();
   $('rows').innerHTML=list.map(c=>{
@@ -616,7 +616,7 @@ function render(){
   }).join('');
   const empty=$('empty');
   empty.hidden=list.length>0;
-  empty.textContent=state.filter==='all'&&!state.query?'暂无 xAI 凭证':'没有匹配的凭证 · 可清除筛选';
+  empty.textContent=state.filter==='all'&&!state.query?'暂无 xAI 凭证':'无匹配凭证 · 可改筛选';
   document.querySelectorAll('#rows input[type=checkbox]').forEach(input=>input.addEventListener('change',()=>{
     let id=input.dataset.id||'';
     try{ id=decodeURIComponent(id); }catch(_){}
@@ -632,7 +632,7 @@ function render(){
 }
 async function runRowAction(act,id){
   if(!id||state.busy) return;
-  const labels={unban:'释放',ban:'隔离',disable:'禁用',reenable:'启用',reauth:'重授权',using_api:'API 模式'};
+  const labels={unban:'释放',ban:'隔离',disable:'禁用',reenable:'启用',reauth:'重授权',using_api:'API 模式',delete:'删除'};
   if(!confirm('确认对凭证执行「'+(labels[act]||act)+'」？\n'+id)) return;
   try{
     setBusy(true, labels[act]||act);
@@ -690,7 +690,7 @@ async function bulkAct(act){
 }
 async function selectCurrentFilter(){
   if(state.busy) return;
-  const fl={all:'全部',healthy:'健康',banned:'隔离',disabled:'已禁用',using_api:'API 模式','401':'401','402':'402','403':'403','429':'429'}[state.filter]||state.filter;
+  const fl={all:'全部',healthy:'健康',banned:'隔离',disabled:'禁用',using_api:'API 模式','401':'401','402':'402','403':'403','429':'429'}[state.filter]||state.filter;
   try{
     setBusy(true,'拉取筛选 ID');
     setMessage('正在获取「'+fl+'」全部凭证 ID…');
