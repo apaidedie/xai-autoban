@@ -116,6 +116,11 @@ func (h *Handler) CurrentStatusPaged(query url.Values) StatusInfo {
 	}
 	pageCreds, page := creds.Page(allCreds, pq)
 
+	settings := h.Cfg().PublicView()
+	if h.Persist != nil && h.Persist.Path() != "" {
+		settings["state_file"] = h.Persist.Path()
+		settings["state_file_resolved"] = h.Persist.Path()
+	}
 	st := StatusInfo{
 		Plugin:      h.Name,
 		Version:     h.Version,
@@ -125,7 +130,7 @@ func (h *Handler) CurrentStatusPaged(query url.Values) StatusInfo {
 		Counts:      counts,
 		Page:        page,
 		Probe:       h.Probe.Status(),
-		Settings:    h.Cfg().PublicView(),
+		Settings:    settings,
 		Audit:       h.Audit.List(),
 	}
 	if h.Engine != nil {

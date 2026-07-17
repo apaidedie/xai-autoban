@@ -2,7 +2,7 @@
 
 CLIProxyAPI 原生插件：自动隔离异常 xAI 凭据，支持策略配置、定时/手动巡检、禁用/删除、refresh 重授权与运维台。
 
-版本：**1.1.1**（Stable · maintenance）
+版本：**1.1.2**（Stable · maintenance）
 
 > **稳定性契约：** [STABILITY.md](./STABILITY.md) — 保证/不保证、配置冻结表、运维入口。  
 > **1.x 政策：** 不删/不改名冻结配置键（破坏性变更需 major）；默认策略变更写 CHANGELOG。
@@ -47,7 +47,7 @@ CLIProxyAPI 原生插件：自动隔离异常 xAI 凭据，支持策略配置、
 - `auto_using_api` 默认 **off**（更安全）
 - Management 真删除（失败则禁用/隔离 + `pending_delete`）
 - reauth：`refresh_token` → `auth.x.ai`
-- 状态持久化：`xai-autoban-state.json`（本地产物，已 gitignore）
+- 状态持久化：`state_file`（默认 `xai-autoban-state.json`，运行时解析为绝对路径；运维台配置 + 隔离账本）
 - 兼容 **CPA-Manager-Plus**（resource 写通道）
 
 ## 目录结构
@@ -121,6 +121,16 @@ powershell -File scripts/build.ps1   # Windows
 |------|------|
 | **运维台 → 编辑配置** | 巡检、策略、动作（主用） |
 | **插件管理** | 启用 + `management_key` / env / url / `disable_via` |
+
+### 状态文件（运维台配置 + 隔离账本）
+
+相对路径会解析为**绝对路径**，优先已有文件与可写数据目录：
+
+1. 环境变量：`XAI_AUTOBAN_DATA_DIR` → `CPA_DATA_DIR` → `CLIPROXYAPI_DATA_DIR` → `DATA_DIR` → `CPA_HOME`
+2. 可执行文件旁 `data/`、用户 config、工作目录 `data/`
+3. 也可在插件配置写绝对 `state_file`
+
+Docker / CPA 重建时请**挂载**该目录，否则运维台设置与隔离账本会丢失。运维台配置区会显示当前路径。
 
 ### CPA-Manager-Plus 密钥
 

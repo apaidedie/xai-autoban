@@ -31,6 +31,7 @@ const statusBodyTemplate = `
       <div class="cfg-card"><div class="l">成功策略</div><div class="v" id="sumOnSuccess">-</div></div>
       <div class="cfg-card"><div class="l">探测模式</div><div class="v" id="sumMode">-</div></div>
     </div>
+    <div class="cfg-path" id="statePathHint" title="运维台配置与隔离账本持久化路径；CPA 重建请挂载此目录">状态文件：加载中…</div>
   </section>
 
   <section class="metrics-block" aria-label="概览与筛选">

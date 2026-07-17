@@ -380,6 +380,12 @@ function renderSettingsSummary(s){
   if($('sumProbeAction')) $('sumProbeAction').textContent=labelAction(s.probe_action);
   if($('sumOnSuccess')) $('sumOnSuccess').textContent=labelAction(s.probe_on_success);
   if($('sumMode')) $('sumMode').textContent=s.probe_mode||'-';
+  const sp=$('statePathHint');
+  if(sp){
+    const path=s.state_file_resolved||s.state_file||'';
+    sp.textContent=path?('状态文件：'+path):'状态文件：未配置（重启会丢失运维台配置）';
+    sp.title=path?('运维台配置与隔离账本保存在此；Docker/重建请挂载该目录'):sp.title;
+  }
 }
 function renderHistory(list){
   state.history=list||[];

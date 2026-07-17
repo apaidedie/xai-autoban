@@ -31,6 +31,7 @@ h1{margin:6px 0 0;font-size:24px;font-weight:800;letter-spacing:-.03em;line-heig
 .cfg-card .l{color:var(--muted);font-size:11px;font-weight:750;letter-spacing:.02em}
 .cfg-card .v{margin-top:7px;font-size:14px;font-weight:800;color:#f8fafc;line-height:1.2}
 .cfg-card .v.on{color:var(--green)}.cfg-card .v.off{color:var(--amber)}
+.cfg-path{padding:0 14px 12px;font-size:11px;color:var(--muted);font-family:var(--mono);word-break:break-all;line-height:1.4}
 @media(max-width:1100px){.cfg-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:700px){.cfg-grid{grid-template-columns:1fr 1fr}}
 .metrics-block{margin:0 0 12px}

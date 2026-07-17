@@ -135,7 +135,7 @@ Prefer **tag push** or **workflow_dispatch**; do not create an empty Release bef
 | `management_key` / `management_key_env` | secret; never log |
 | `management_timeout_seconds` | |
 | `management_auth_failure_cooldown_seconds` | |
-| `state_file` | default `xai-autoban-state.json` |
+| `state_file` | default `xai-autoban-state.json`；相对路径运行时解析为绝对路径（见 `persist.ResolveStatePath`） |
 
 **Rules:**
 

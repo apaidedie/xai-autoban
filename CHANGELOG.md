@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.2 - 2026-07-18
+
+### Fix
+- **运维台配置/隔离账本持久化路径**：相对 `state_file`（默认 `xai-autoban-state.json`）解析为绝对路径，优先已有文件与可写数据目录（`XAI_AUTOBAN_DATA_DIR` / `CPA_DATA_DIR` / exe·user config 等），避免 CPA 重建或 CWD 变化后运维台设置被重置
+- 运维台配置区展示实际状态文件路径；保存成功提示含绝对路径
+
+### Ops note
+- Docker/重建请挂载状态文件所在目录，或设置 `XAI_AUTOBAN_DATA_DIR` / `state_file` 为绝对路径
+
 ## 1.1.1 - 2026-07-17
 
 ### Chore / Final polish

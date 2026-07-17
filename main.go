@@ -24,7 +24,7 @@ import (
 
 const (
 	pluginName    = "xai-autoban"
-	pluginVersion = "1.1.1"
+	pluginVersion = "1.1.2"
 )
 
 type App struct {
@@ -88,6 +88,8 @@ func (a *App) Config() config.PluginConfig {
 }
 
 func (a *App) SetConfig(cfg config.PluginConfig) {
+	// Resolve relative state_file to a durable absolute path (survives CPA rebuild/CWD change).
+	cfg.StateFile = persist.ResolveStatePath(cfg.StateFile)
 	a.mu.Lock()
 	a.cfg = cfg
 	a.mu.Unlock()
@@ -178,15 +180,20 @@ func (a *App) handleRegister(raw []byte) ([]byte, error) {
 		cfg.StateFile = config.Default().StateFile
 	}
 	a.SetConfig(cfg)
+	slog.Info("xai-autoban: state file", "path", a.persist.Path())
 	a.persist.Load()
-	// Overlay ops-console settings saved in state file (survives yaml reconfigure).
+	// Overlay ops-console settings saved in state file (survives yaml reconfigure / rebuild).
 	if overlay := a.persist.Settings(); len(overlay) > 0 {
 		merged, more := config.MergePatch(a.Config(), overlay)
 		for _, w := range more {
 			slog.Warn("xai-autoban: settings overlay warning", "warning", w)
 		}
+		// Keep resolved absolute state path (overlay must not drop durability).
+		merged.StateFile = a.persist.Path()
 		a.SetConfig(merged)
-		slog.Info("xai-autoban: applied persisted ops settings", "keys", len(overlay))
+		slog.Info("xai-autoban: applied persisted ops settings", "keys", len(overlay), "state", a.persist.Path())
+	} else {
+		slog.Info("xai-autoban: no persisted ops settings yet", "state", a.persist.Path())
 	}
 	if a.Config().ProbeEnabled {
 		a.probe.Start()

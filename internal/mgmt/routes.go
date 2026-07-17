@@ -146,7 +146,12 @@ func (h *Handler) Handle(req pluginapi.ManagementRequest) pluginapi.ManagementRe
 	case method == http.MethodGet && strings.HasSuffix(path, ("/plugins/"+h.Name)+"/audit"):
 		return jsonResponse(http.StatusOK, map[string]any{"events": h.Audit.List()})
 	case method == http.MethodGet && strings.HasSuffix(path, ("/plugins/"+h.Name)+"/settings"):
-		return jsonResponse(http.StatusOK, map[string]any{"ok": true, "settings": h.Cfg().PublicView()})
+		view := h.Cfg().PublicView()
+		if h.Persist != nil && h.Persist.Path() != "" {
+			view["state_file"] = h.Persist.Path()
+			view["state_file_resolved"] = h.Persist.Path()
+		}
+		return jsonResponse(http.StatusOK, map[string]any{"ok": true, "settings": view})
 	case (method == http.MethodPut || method == http.MethodPost) && strings.HasSuffix(path, ("/plugins/"+h.Name)+"/settings"):
 		return h.updateSettings(req.Body)
 	case method == http.MethodPost && strings.HasSuffix(path, ("/plugins/"+h.Name)+"/unban"):
@@ -896,17 +901,29 @@ func (h *Handler) updateSettings(raw []byte) pluginapi.ManagementResponse {
 		_ = h.Persist.SaveNow()
 	}
 	h.Audit.Add("manual", "", "settings", "ok", fmt.Sprintf("ops settings applied=%d", len(clean)), 0)
-	note := "已保存并写入 state 文件（默认 xai-autoban-state.json）"
-	if h.Persist == nil || h.Persist.Path() == "" {
-		note = "已写入运行时；未配置 state_file"
+	statePath := ""
+	if h.Persist != nil {
+		statePath = h.Persist.Path()
+	}
+	note := "已保存到 state 文件"
+	if statePath != "" {
+		note = "已保存到 " + statePath
+	} else {
+		note = "已写入运行时；未配置 state_file（重启会丢失运维台配置）"
+	}
+	view := got.PublicView()
+	if statePath != "" {
+		view["state_file"] = statePath
+		view["state_file_resolved"] = statePath
 	}
 	return jsonResponse(http.StatusOK, map[string]any{
 		"ok":       true,
-		"settings": got.PublicView(),
+		"settings": view,
 		"applied":  len(clean),
 		"keys":     mapKeys(clean),
 		"warnings": warnings,
 		"note":     note,
+		"state_file": statePath,
 	})
 }
 
