@@ -121,6 +121,9 @@ const statusBodyTemplate = `
               <button type="button" id="usingApiSelected" onclick="bulkAct('using_api')" disabled title="开启 API 模式">API 模式</button>
               <button type="button" class="danger" id="deleteSelected" onclick="bulkAct('delete')" disabled>删除</button>
               <div class="more-div"></div>
+              <button type="button" onclick="exportInspect('reauth')">导出需重授</button>
+              <button type="button" onclick="exportInspect('pending_delete')">导出待删</button>
+              <div class="more-div"></div>
               <label class="chk"><input id="autoRefresh" type="checkbox" checked> 30 秒自动刷新</label>
             </div>
           </details>
@@ -183,6 +186,15 @@ const statusBodyTemplate = `
     <button class="bg" id="closeConfigBtn" type="button" title="关闭">关闭</button>
   </div>
   <div class="db">
+    <div class="sec">
+      <h4>策略预设</h4>
+      <div class="preset-row">
+        <button type="button" class="bs" onclick="applyPreset('conservative')">保守</button>
+        <button type="button" class="bs" onclick="applyPreset('standard')">标准</button>
+        <button type="button" class="bs" onclick="applyPreset('aggressive')">激进</button>
+      </div>
+      <p class="hint drawer-hint">一键填入常见组合，仍需点「保存」生效。</p>
+    </div>
     <div class="sec">
       <h4>巡检</h4>
       <label class="chk" style="margin-bottom:10px"><input id="f_probe_enabled" type="checkbox"> 开启定时巡检</label>

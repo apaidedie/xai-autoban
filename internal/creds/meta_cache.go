@@ -13,9 +13,11 @@ import (
 
 // MetaCache remembers using_api flags to avoid AuthGet storms on large fleets.
 type MetaCache struct {
-	mu  sync.Mutex
-	ttl time.Duration
-	m   map[string]metaEnt
+	mu         sync.Mutex
+	ttl        time.Duration
+	m          map[string]metaEnt
+	refreshing bool
+	lastFull   time.Time
 }
 
 type metaEnt struct {
@@ -230,6 +232,73 @@ func minInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// RefreshAllAsync scans all files in background (at most one scan at a time).
+func (c *MetaCache) RefreshAllAsync(cli host.Client, files []pluginapi.HostAuthFileEntry) {
+	if c == nil || cli == nil || len(files) == 0 {
+		return
+	}
+	c.mu.Lock()
+	if c.refreshing {
+		c.mu.Unlock()
+		return
+	}
+	c.refreshing = true
+	c.mu.Unlock()
+	go func() {
+		defer func() {
+			c.mu.Lock()
+			c.refreshing = false
+			c.lastFull = time.Now()
+			c.mu.Unlock()
+		}()
+		_ = SampleAuthJSON(cli, files, len(files), c)
+	}()
+}
+
+// NeedsFullRefresh reports whether a background full scan is due.
+func (c *MetaCache) NeedsFullRefresh() bool {
+	if c == nil {
+		return false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.refreshing {
+		return false
+	}
+	if c.lastFull.IsZero() {
+		return true
+	}
+	return time.Since(c.lastFull) > c.ttl
+}
+
+// CountUsingAPI returns cached true-count (may be partial until full refresh).
+func (c *MetaCache) CountUsingAPI() int {
+	if c == nil {
+		return 0
+	}
+	now := time.Now()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	n := 0
+	seen := map[string]struct{}{}
+	for k, e := range c.m {
+		if now.Sub(e.At) > c.ttl {
+			continue
+		}
+		if !e.UsingAPI {
+			continue
+		}
+		// de-dupe rough: prefer keys without .json suffix as primary
+		base := strings.TrimSuffix(k, ".json")
+		if _, ok := seen[base]; ok {
+			continue
+		}
+		seen[base] = struct{}{}
+		n++
+	}
+	return n
 }
 
 // RecountUsingAPI updates StatusCounts.UsingAPI after cache/JSON enrichment.

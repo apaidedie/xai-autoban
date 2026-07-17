@@ -21,6 +21,7 @@ import (
 	"xai-autoban/internal/persist"
 	"xai-autoban/internal/probe"
 	"xai-autoban/internal/ui"
+	"xai-autoban/internal/xai"
 )
 
 type Handler struct {
@@ -654,9 +655,142 @@ func (h *Handler) handleResourceAPI(req pluginapi.ManagementRequest) pluginapi.M
 		})
 	case "list_ids", "select_ids":
 		return h.listAuthIDs(body, q)
+	case "bulk", "bulk_action", "bulk-action":
+		return h.startBulkAction(body, req)
+	case "bulk_status", "bulk-status":
+		return jsonResponse(http.StatusOK, map[string]any{"ok": true, "bulk": h.Probe.BulkStatus()})
+	case "export":
+		return h.exportInspectList(body, q)
 	default:
 		return jsonResponse(http.StatusBadRequest, map[string]any{"error": "unknown_op", "op": op})
 	}
+}
+
+func (h *Handler) startBulkAction(body map[string]any, req pluginapi.ManagementRequest) pluginapi.ManagementResponse {
+	act := strings.ToLower(strings.TrimSpace(fmt.Sprint(body["action"])))
+	if act == "" || act == "<nil>" {
+		return jsonResponse(http.StatusBadRequest, map[string]any{"error": "missing_action"})
+	}
+	ids := []string{}
+	switch v := body["auth_ids"].(type) {
+	case []any:
+		for _, x := range v {
+			s := strings.TrimSpace(fmt.Sprint(x))
+			if s != "" && s != "<nil>" {
+				ids = append(ids, s)
+			}
+		}
+	case string:
+		ids = splitAuthIDs(v)
+	}
+	if len(ids) == 0 {
+		return jsonResponse(http.StatusBadRequest, map[string]any{"error": "missing_auth_ids"})
+	}
+	if len(ids) > 800 {
+		ids = ids[:800]
+	}
+	if k := extractBearer(req.Headers); k != "" {
+		h.Engine.SetRequestManagementKey(k)
+	}
+	force := true
+	err := h.Probe.StartBulk(act, ids, func(id string) error {
+		if act == "unban" || act == action.SuccessUnban {
+			if h.Bans != nil {
+				_ = h.Bans.Clear(id)
+			}
+			return nil
+		}
+		now := time.Now()
+		entry := ban.Entry{StatusCode: 403, Reason: "bulk", BannedAt: now, ResetAt: now.Add(h.Cfg().DurationForStatus(403)), Action: act, Source: "bulk"}
+		if act == action.SuccessReenable {
+			entry.StatusCode = 0
+			entry.Reason = "bulk_reenable"
+			entry.ResetAt = time.Time{}
+		}
+		if act == action.Reauth {
+			entry.StatusCode = http.StatusUnauthorized
+			entry.Classification = "reauth"
+		}
+		return h.Engine.ApplyAction(id, act, "bulk", entry, force)
+	})
+	if err != nil {
+		h.Engine.ClearRequestManagementKey()
+		return jsonResponse(http.StatusConflict, map[string]any{"error": err.Error()})
+	}
+	// clear request key after bulk finishes — clear in goroutine end is better; clear after short delay risk
+	go func() {
+		for {
+			st := h.Probe.BulkStatus()
+			if running, _ := st["running"].(bool); !running {
+				h.Engine.ClearRequestManagementKey()
+				return
+			}
+			time.Sleep(200 * time.Millisecond)
+		}
+	}()
+	return jsonResponse(http.StatusOK, map[string]any{"ok": true, "accepted": true, "total": len(ids), "action": act})
+}
+
+// exportInspectList exports reauth / pending_delete lists for cpa-auth-inspect workflows.
+func (h *Handler) exportInspectList(body map[string]any, q url.Values) pluginapi.ManagementResponse {
+	kind := strings.ToLower(strings.TrimSpace(firstNonEmpty(fmt.Sprint(body["kind"]), q.Get("kind"), "reauth")))
+	if kind == "<nil>" {
+		kind = "reauth"
+	}
+	now := time.Now()
+	files, _ := collectXAIAuthFiles(h.Host)
+	snap := h.Bans.Snapshot(now)
+	type row struct {
+		AuthID  string `json:"auth_id"`
+		Email   string `json:"email,omitempty"`
+		Name    string `json:"name,omitempty"`
+		Reason  string `json:"reason,omitempty"`
+		Code    int    `json:"status_code,omitempty"`
+		Pending bool   `json:"pending_delete,omitempty"`
+	}
+	out := make([]row, 0)
+	for _, f := range files {
+		if !xai.IsAuth(f) {
+			continue
+		}
+		key := xai.AuthKey(f)
+		entry, ok := snap[key]
+		if !ok {
+			entry, ok = snap[strings.ToLower(strings.TrimSpace(f.Email))]
+		}
+		if !ok {
+			// try by id
+			for _, e := range snap {
+				if ban.AuthIDsEqual(e.AuthID, key) || ban.AuthIDsEqual(e.AuthID, f.ID) {
+					entry, ok = e, true
+					break
+				}
+			}
+		}
+		switch kind {
+		case "pending_delete", "pending-delete", "delete":
+			if ok && entry.PendingDelete {
+				out = append(out, row{AuthID: key, Email: f.Email, Name: f.Name, Reason: entry.Reason, Code: entry.StatusCode, Pending: true})
+			}
+		default: // reauth
+			need := false
+			if ok && (entry.StatusCode == 401 || entry.Classification == "reauth" || strings.Contains(strings.ToLower(entry.Reason), "token")) {
+				need = true
+			}
+			if need {
+				out = append(out, row{AuthID: key, Email: f.Email, Name: f.Name, Reason: entry.Reason, Code: entry.StatusCode})
+			}
+		}
+	}
+	return jsonResponse(http.StatusOK, map[string]any{
+		"ok":      true,
+		"kind":    kind,
+		"count":   len(out),
+		"items":   out,
+		"note":    "for cpa-auth-inspect / manual reauth workflows",
+		"plugin":  h.Name,
+		"version": h.Version,
+	})
 }
 
 // listAuthIDs returns auth_id list for current filter/search (for 全选当前筛选).

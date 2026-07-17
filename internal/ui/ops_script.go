@@ -278,10 +278,11 @@ function paintChips(){
   set('ov_401',c['401']??0); set('ov_402',c['402']??0); set('ov_403',c['403']??0); set('ov_429',c['429']??0);
   set('ov_using_api', c.using_api??0);
   const sub=$('ov_banned_sub');
-  if(sub){
-    // Keep isolation ledger meaning; do not paste 40x counts here (different口径).
-    sub.textContent='隔离账本 · 调度跳过';
-  }
+  if(sub) sub.textContent='账本 · 跳过调度';
+  const disSub=document.querySelector('#overviewCards [data-filter="disabled"] .qs');
+  if(disSub) disSub.textContent='CPA 关闭';
+  const healthySub=document.querySelector('#overviewCards [data-filter="healthy"] .qs');
+  if(healthySub) healthySub.textContent='可调度';
   document.querySelectorAll('#overviewCards [data-filter], #codeStrip [data-filter], #statusChips [data-filter]').forEach(btn=>{
     const on=btn.dataset.filter===state.filter;
     btn.classList.toggle('active', on);
@@ -292,32 +293,38 @@ function paintOverviewProbe(probe){
   const n=$('ov_probe'), sub=$('ov_probe_sub'), card=$('ov_probe_card');
   if(!n) return;
   probe=probe||{};
-  const ok=probe.last_ok, fail=probe.last_fail, err=probe.last_err;
+  const ok=probe.last_ok, fail=probe.last_fail, err=probe.last_err, skip=probe.last_skip||0;
   const hasLast=probe.last_run && String(probe.last_run).indexOf('0001')!==0 && String(probe.last_run).length>4;
   if(probe.job_running){
     const done=probe.job_done||0, total=probe.job_total||0;
     n.textContent=(total>0?(done+'/'+total):'…');
-    if(sub) sub.textContent='巡检进行中'+(probe.job_age_sec?(' · '+Math.floor(probe.job_age_sec/60)+' 分'):'');
+    if(sub) sub.textContent='进行中'+(probe.job_age_sec?(' · '+Math.floor(probe.job_age_sec/60)+'分'):'');
     if(card) card.className='qcard warn';
     return;
   }
   if(hasLast){
     n.textContent=String((ok||0))+'/'+String((ok||0)+(fail||0));
-    let line=(probe.last_run?formatDate(probe.last_run):'')+(err?(' · '+err):'');
-    if(probe.auto_execute===false) line=(line?line+' · ':'')+'只输出';
-    if(sub) sub.textContent=line||'点击开始';
+    const bits=[];
+    if(probe.next_run) bits.push('下次 '+formatDate(probe.next_run).replace(/^\d{4}\//,''));
+    else if(probe.last_run) bits.push(formatDate(probe.last_run).replace(/^\d{4}\//,''));
+    if(skip>0) bits.push('跳过'+skip);
+    if(err) bits.push(String(err).slice(0,24));
+    if(probe.auto_execute===false) bits.push('只记录');
+    if(probe.running===false && probe.enabled) bits.push('调度停');
+    if(sub) sub.textContent=bits.join(' · ')||'点击开始';
     if(card) card.className='qcard'+(fail>0?' bad':(ok>0?' ok':' info'));
     return;
   }
   n.textContent='—';
   if(probe.enabled){
     if(probe.running){
-      if(sub) sub.textContent='定时已开 · 等待首次（约 45 秒内启动）';
+      const nr=probe.next_run?('下次 '+formatDate(probe.next_run).replace(/^\d{4}\//,'')):'约45秒内首次';
+      if(sub) sub.textContent='调度中 · '+nr;
     }else{
-      if(sub) sub.textContent='定时已开 · 调度未启动（保存配置或点立即巡检）';
+      if(sub) sub.textContent='已开 · 调度未启动';
     }
   }else{
-    if(sub) sub.textContent='定时关闭 · 点击开始';
+    if(sub) sub.textContent='已关 · 点击开始';
   }
   if(card) card.className='qcard info';
 }
@@ -438,7 +445,8 @@ function collectDraft(){
     action_on_402: $('f_action_on_402').value,
     action_on_403: $('f_action_on_403').value,
     action_on_429: $('f_action_on_429').value,
-    action_cooldown_seconds: Number($('f_action_cooldown_seconds').value||0)
+    action_cooldown_seconds: Number($('f_action_cooldown_seconds').value||0),
+    fail_streak_403: state._presetStreak||Number((state.settings&&state.settings.fail_streak_403)||3)
   };
 }
 function settingsMismatch(draft, got){
@@ -558,32 +566,41 @@ function shortWhy(c){
   return '';
 }
 function midCell(c){
+  // One human-readable headline; soft403/probe stay secondary only when not banned.
+  const parts=[];
+  if(c.disabled) parts.push('禁用');
+  if(c.banned){
+    const code=Number(c.status_code||0);
+    if([401,402,403,429].includes(code)) parts.push(String(code));
+    else parts.push('隔离');
+    if(c.disabled){ /* already 禁用 */ }
+    else if(c.disabled===false){ /* no-op */ }
+  }else if(!c.disabled){
+    if(c.token_expired||c.status==='401') parts.push('401');
+    else parts.push('健康');
+  }
+  if(c.disabled&&c.banned){
+    // "禁用 · 403" already covers; add 兼隔离 only if no code
+    if(![401,402,403,429].includes(Number(c.status_code||0))) parts.push('兼隔离');
+  }
+  if(c.using_api===true) parts.push('API');
+  let head=parts.join(' · ');
   const p=primaryStatus(c);
-  const tags=['<span class="badge '+p.cls+'" title="主状态">'+esc(p.label)+'</span>'];
-  // At most 2 secondary pills — no 已禁用+禁用+隔离 triple stack
-  if(c.disabled&&c.banned) tags.push('<span class="pill dim" title="CPA 已关，且插件仍在隔离账本">兼隔离</span>');
-  if(c.using_api===true) tags.push('<span class="pill dim" title="使用 API 模式">API</span>');
-  if(!c.banned && c.soft_403_streak>0){
-    tags.push('<span class="pill dim" title="软 403 连击，满额才隔离">'+c.soft_403_streak+'/'+(c.soft_403_need||3)+'</span>');
-  } else if(!c.banned && c.token_expired){
-    tags.push('<span class="pill dim">过期</span>');
-  } else if(!c.banned && c.needs_refresh && p.label!=='401'){
-    tags.push('<span class="pill dim">待刷新</span>');
+  const tags=['<span class="badge '+p.cls+'" title="'+esc(head)+'">'+esc(p.label)+'</span>'];
+  if(c.disabled&&c.banned) tags.push('<span class="pill dim">兼隔离</span>');
+  if(c.using_api===true) tags.push('<span class="pill dim">API</span>');
+  // soft 403 / probe: only when healthy-ish (not main drama)
+  if(!c.banned && !c.disabled && c.soft_403_streak>0){
+    tags.push('<span class="pill dim" title="软403连击">'+c.soft_403_streak+'/'+(c.soft_403_need||3)+'</span>');
   }
-  // One subtitle line only
   const sub=[];
-  const why=shortWhy(c);
-  if(why) sub.push(esc(why));
   if(c.banned&&c.remaining_seconds!=null&&c.remaining_seconds>=0){
-    sub.push('<span class="remain">'+esc(formatRemaining(c.remaining_seconds))+'</span>');
+    sub.push('<span class="remain">剩 '+esc(formatRemaining(c.remaining_seconds))+'</span>');
   }
-  if(c.last_probe_at){
-    if(c.last_probe_ok===true && !c.banned && !c.disabled) sub.push('探测OK');
-    else if(c.last_probe_ok===false && c.last_probe_status){
-      // Skip if same as primary code already shown
-      if(!(c.banned && Number(c.status_code)===Number(c.last_probe_status)))
-        sub.push('探测'+c.last_probe_status);
-    }
+  const why=shortWhy(c);
+  if(why && !(c.banned && Number(c.status_code)>0)) sub.push(esc(why));
+  if(!c.banned && c.last_probe_ok===false && c.last_probe_status){
+    sub.push('探测'+c.last_probe_status);
   }
   return '<div class="mid"><div class="mid-top">'+tags.join('')+'</div>'+
     (sub.length?'<div class="mid-sub">'+sub.join('<span class="sep">·</span>')+'</div>':'')+
@@ -656,37 +673,107 @@ async function bulkAct(act){
   const ids=[...state.selected];
   if(!ids.length){ setMessage('请先勾选凭证',true); setOpResult('请先勾选凭证','err'); return; }
   const labels={unban:'释放',ban:'隔离',disable:'禁用',reenable:'启用',reauth:'重授权',delete:'删除',using_api:'API 模式'};
-  const danger=act==='delete'?'\n\n删除将调用 Management 删除凭证；失败则按删除回退策略禁用/隔离。不可轻易撤销。':(act==='using_api'?'\n\n将开启 CPA「使用 API 模式」(using_api=true)，并清除隔离记录。':'');
-  if(!confirm('确认对所选 '+ids.length+' 条执行「'+(labels[act]||act)+'」？'+danger)) return;
-  if(act==='delete' && !confirm('再次确认：删除所选 '+ids.length+' 条凭证？')) return;
+  const danger=act==='delete'?'\n\n删除不可轻易撤销。':(act==='using_api'?'\n\n将开启 API 模式并清除隔离。':'');
+  if(!confirm('对所选 '+ids.length+' 条执行「'+(labels[act]||act)+'」？'+danger)) return;
+  if(act==='delete' && !confirm('再次确认删除 '+ids.length+' 条？')) return;
   try{
     setBusy(true,'批量'+(labels[act]||act));
     setProgress(0, ids.length, '批量'+(labels[act]||act));
+    // Server-side bulk when possible (unban goes single path still via apply unban)
+    let usedBulk=false;
+    if(act!=='unban' && act!=='reauth'){
+      try{
+        await apiMgmt('POST','/apply-action',{op:'bulk',action:act,auth_ids:ids,force:true});
+        usedBulk=true;
+      }catch(_){
+        try{
+          await apiOps('bulk',{action:act,auth_ids:ids,force:true});
+          usedBulk=true;
+        }catch(__){ usedBulk=false; }
+      }
+    }
+    if(usedBulk){
+      // poll bulk progress
+      for(let i=0;i<600;i++){
+        let st={};
+        try{
+          const r=await apiOps('bulk_status',{});
+          st=(r&&r.bulk)||r||{};
+        }catch(_){
+          try{ const r=await apiMgmt('GET','/probe/status'); st=(r&&r.bulk)||{}; }catch(__){}
+        }
+        const done=st.done||0, total=st.total||ids.length;
+        setProgress(done, total, '批量'+(labels[act]||act));
+        setMessage('批量'+(labels[act]||act)+' '+done+'/'+total);
+        if(st.running===false || (total>0 && done>=total && st.running!==true)){
+          const okN=st.ok||0, failN=st.fail||0;
+          const errs=Array.isArray(st.errors)?st.errors:[];
+          const msg='批量'+(labels[act]||act)+'完成 · 成功 '+okN+' / 共 '+total+(failN?(' · 失败 '+failN):'');
+          setMessage(msg, failN>0);
+          finishProgress(total, total, '批量完成');
+          setOpResult(msg+(errs.length?('\n'+errs.slice(0,6).join('\n')):''), failN>0?(okN>0?'warn':'err'):'ok');
+          state.selected.clear();
+          break;
+        }
+        await new Promise(r=>setTimeout(r,300));
+      }
+      await loadData(true);
+      return;
+    }
+    // Fallback: sequential
     let i=0, okN=0, failN=0;
     const fails=[];
     for(const id of ids){
-      setMessage('正在'+(labels[act]||act)+' '+ (i+1)+'/'+ids.length+' …');
+      setMessage('正在'+(labels[act]||act)+' '+(i+1)+'/'+ids.length+' …');
       try{
         if(act==='unban') await apiMgmt('POST','/unban',{auth_id:id});
         else if(act==='reauth') await apiMgmt('POST','/reauth',{auth_id:id,force:true});
         else await apiMgmt('POST','/apply-action',{auth_id:id,action:act,force:true});
-        okN++;
-        state.selected.delete(id);
-      }catch(one){
-        failN++;
-        if(fails.length<8) fails.push((id||'')+': '+(one.message||one));
-      }
-      i++;
-      setProgress(i, ids.length, '批量'+(labels[act]||act));
+        okN++; state.selected.delete(id);
+      }catch(one){ failN++; if(fails.length<8) fails.push((id||'')+': '+(one.message||one)); }
+      i++; setProgress(i, ids.length, '批量'+(labels[act]||act));
     }
     const msg='批量'+(labels[act]||act)+'完成 · 成功 '+okN+' / 共 '+ids.length+(failN?(' · 失败 '+failN):'');
-    const detail=msg+(fails.length?('\n'+fails.join('\n')):'');
     setMessage(msg, failN>0);
     finishProgress(ids.length, ids.length, '批量完成');
-    setOpResult(detail, failN>0?(okN>0?'warn':'err'):'ok');
+    setOpResult(msg+(fails.length?('\n'+fails.join('\n')):''), failN>0?(okN>0?'warn':'err'):'ok');
     await loadData(true);
   }catch(e){ setMessage(e.message,true); setOpResult(e.message,'err'); }
   finally{ setBusy(false); }
+}
+async function exportInspect(kind){
+  try{
+    setBusy(true,'导出中');
+    const res=await apiOps('export',{kind:kind||'reauth'});
+    const items=res.items||[];
+    const blob=new Blob([JSON.stringify({kind:res.kind,count:res.count,items:items,note:res.note},null,2)],{type:'application/json'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download='xai-autoban-export-'+(kind||'reauth')+'-'+Date.now()+'.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    setMessage('已导出 '+(res.count||items.length)+' 条 · '+(kind||'reauth'));
+    toast('导出完成','ok');
+  }catch(e){ setMessage(e.message,true); toast(e.message,'err'); }
+  finally{ setBusy(false); }
+}
+function applyPreset(name){
+  const presets={
+    conservative:{auto_execute:true,auto_using_api:'off',fail_streak_403:5,probe_action:'ban',probe_on_success:'unban',action_on_403:'ban',action_on_401:'ban'},
+    standard:{auto_execute:true,auto_using_api:'off',fail_streak_403:3,probe_action:'ban',probe_on_success:'unban',action_on_403:'ban',action_on_401:'ban'},
+    aggressive:{auto_execute:true,auto_using_api:'on_403',fail_streak_403:1,probe_action:'disable',probe_on_success:'unban_and_reenable',action_on_403:'disable',action_on_401:'disable'}
+  };
+  const p=presets[name]; if(!p) return;
+  state.autoExecute=!!p.auto_execute;
+  state.success=p.probe_on_success||'unban';
+  state.fail=p.probe_action||'ban';
+  if($('f_auto_using_api')) $('f_auto_using_api').value=p.auto_using_api||'off';
+  if($('f_action_on_403')) $('f_action_on_403').value=p.action_on_403||'ban';
+  if($('f_action_on_401')) $('f_action_on_401').value=p.action_on_401||'ban';
+  // fail_streak via save patch
+  state._presetStreak=p.fail_streak_403||3;
+  paintChoices();
+  setMessage('已套用预设「'+({conservative:'保守',standard:'标准',aggressive:'激进'}[name]||name)+'」，请点保存');
+  toast('预设已填入，请保存','ok');
 }
 async function selectCurrentFilter(){
   if(state.busy) return;

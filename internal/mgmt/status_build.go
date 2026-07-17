@@ -85,32 +85,36 @@ func (h *Handler) CurrentStatusPaged(query url.Values) StatusInfo {
 		soft403 = h.Engine.Soft403StreakSnapshot()
 		softNeed = h.Engine.Soft403Need()
 	}
-	// Fast path: build list, apply using_api cache, then only AuthGet missing / token sample.
+	// Status page: mostly cache. Background full refresh keeps using_api count warm.
 	allCreds, counts := creds.BuildFull(files, snapshot, probeLast, nil, soft403, softNeed, now)
 	if h.Meta == nil {
 		h.Meta = creds.NewMetaCache(15 * time.Minute)
 	}
 	h.Meta.Apply(allCreds)
-	sampleLimit := 120
+	// Small sample for token flags on first page only (not full fleet).
+	tokenSample := 24
 	if pq.Filter == "using_api" {
-		sampleLimit = 2000
-	}
-	// Prefer fetching only cache misses for using_api; always sample a small set for token flags.
-	jsonByID := creds.SampleMissingAuthJSON(h.Host, files, sampleLimit, h.Meta)
-	if len(jsonByID) < 40 {
-		// Ensure some raw JSON for token expiry on first page accounts.
-		more := creds.SampleAuthJSON(h.Host, files, 40, h.Meta)
-		for k, v := range more {
-			if _, ok := jsonByID[k]; !ok {
-				jsonByID[k] = v
-			}
+		// Filter needs more accuracy: pull missing up to a higher cap, still async-friendly.
+		jsonByID := creds.SampleMissingAuthJSON(h.Host, files, 400, h.Meta)
+		if len(jsonByID) > 0 {
+			allCreds, counts = creds.BuildFull(files, snapshot, probeLast, jsonByID, soft403, softNeed, now)
+			h.Meta.Apply(allCreds)
+		}
+	} else {
+		more := creds.SampleAuthJSON(h.Host, files, tokenSample, h.Meta)
+		if len(more) > 0 {
+			allCreds, counts = creds.BuildFull(files, snapshot, probeLast, more, soft403, softNeed, now)
+			h.Meta.Apply(allCreds)
 		}
 	}
-	if len(jsonByID) > 0 {
-		allCreds, counts = creds.BuildFull(files, snapshot, probeLast, jsonByID, soft403, softNeed, now)
-		h.Meta.Apply(allCreds)
-	}
 	creds.RecountUsingAPI(allCreds, &counts)
+	// Prefer cache-wide count when larger (covers accounts not on this page).
+	if n := h.Meta.CountUsingAPI(); n > counts.UsingAPI {
+		counts.UsingAPI = n
+	}
+	if h.Meta.NeedsFullRefresh() {
+		h.Meta.RefreshAllAsync(h.Host, files)
+	}
 	pageCreds, page := creds.Page(allCreds, pq)
 
 	st := StatusInfo{

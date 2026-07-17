@@ -163,6 +163,12 @@ type JobStatus struct {
 	Error   string  `json:"error,omitempty"`
 }
 
+// maxScheduledBatch caps accounts probed per scheduled tick (large fleets rotate).
+const maxScheduledBatch = 120
+
+// probeFreshOK is how long a successful probe stays "fresh" and can be skipped on scheduled runs.
+const probeFreshOK = 45 * time.Minute
+
 type Service struct {
 	mu      sync.Mutex
 	cfg     config.PluginConfig
@@ -176,9 +182,11 @@ type Service struct {
 	// jobStarted is set when a manual/async job acquires the flight lock.
 	jobStarted time.Time
 	lastRun    time.Time
+	nextRun    time.Time
 	lastErr    string
 	lastOK     int
 	lastFail   int
+	lastSkip   int
 	runSeq     int64
 	history    []Run
 	lastByAuth map[string]CredentialResult
@@ -189,6 +197,14 @@ type Service struct {
 	jobTotal   int
 	jobResult  *Result
 	jobErr     string
+	// bulk action job
+	bulkRunning bool
+	bulkDone    int
+	bulkTotal   int
+	bulkOK      int
+	bulkFail    int
+	bulkErrs    []string
+	bulkLabel   string
 }
 
 func NewService(cfg config.PluginConfig, host host.Client, engine *action.Engine) *Service {
@@ -255,6 +271,7 @@ func (p *Service) loop(interval time.Duration, stop <-chan struct{}) {
 	if firstDelay > interval {
 		firstDelay = interval
 	}
+	p.setNextRun(time.Now().Add(firstDelay))
 	first := time.NewTimer(firstDelay)
 	select {
 	case <-stop:
@@ -264,6 +281,7 @@ func (p *Service) loop(interval time.Duration, stop <-chan struct{}) {
 			default:
 			}
 		}
+		p.setNextRun(time.Time{})
 		return
 	case <-first.C:
 		p.runScheduled()
@@ -271,13 +289,21 @@ func (p *Service) loop(interval time.Duration, stop <-chan struct{}) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
+		p.setNextRun(time.Now().Add(interval))
 		select {
 		case <-stop:
+			p.setNextRun(time.Time{})
 			return
 		case <-ticker.C:
 			p.runScheduled()
 		}
 	}
+}
+
+func (p *Service) setNextRun(t time.Time) {
+	p.mu.Lock()
+	p.nextRun = t
+	p.mu.Unlock()
 }
 
 func (p *Service) runScheduled() {
@@ -446,34 +472,7 @@ func (p *Service) runOnceBody(force bool, trigger string) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	targets := make([]pluginapi.HostAuthFileEntry, 0)
-	skippedRecent := 0
-	for _, f := range files {
-		if !xai.IsAuth(f) {
-			continue
-		}
-		if cfg.ProbeOnlyDisabled {
-			if !f.Disabled {
-				continue
-			}
-		} else if !cfg.ProbeIncludeDisabled && f.Disabled {
-			continue
-		}
-		// Skip accounts with recent real usage success (ground truth) unless forced.
-		// Cuts probe load on large fleets; isolation still cleared by usage path.
-		if !force && p.engine != nil {
-			key := xai.AuthKey(f)
-			if key != "" && p.engine.RecentUsageOK(key) {
-				skippedRecent++
-				continue
-			}
-			if f.Email != "" && p.engine.RecentUsageOK(strings.ToLower(strings.TrimSpace(f.Email))) {
-				skippedRecent++
-				continue
-			}
-		}
-		targets = append(targets, f)
-	}
+	targets, skippedRecent := p.selectProbeTargets(files, cfg, force, trigger)
 	res := Result{
 		Checked:     len(targets),
 		Skipped:     skippedRecent,
@@ -484,6 +483,9 @@ func (p *Service) runOnceBody(force bool, trigger string) (Result, error) {
 		Trigger:     trigger,
 		StartedAt:   started.Format(time.RFC3339),
 	}
+	p.mu.Lock()
+	p.lastSkip = skippedRecent
+	p.mu.Unlock()
 	p.bumpJobProgress(0, len(targets))
 	if len(targets) == 0 {
 		res.FinishedAt = time.Now().Format(time.RFC3339)
@@ -963,6 +965,7 @@ func (p *Service) recordRun(res Result, errMsg string) {
 	p.lastRun = time.Now()
 	p.lastOK = res.OK
 	p.lastFail = res.Failed
+	p.lastSkip = res.Skipped
 	p.lastErr = errMsg
 	p.runSeq++
 	run := Run{ID: p.runSeq, Result: res, Error: errMsg}
@@ -980,12 +983,145 @@ func (p *Service) HistorySnapshot() []Run {
 	return out
 }
 
+// selectProbeTargets builds the probe set: skip recent usage OK / fresh probe OK;
+// scheduled runs batch and prioritize banned / never-probed / last-fail.
+func (p *Service) selectProbeTargets(files []pluginapi.HostAuthFileEntry, cfg config.PluginConfig, force bool, trigger string) ([]pluginapi.HostAuthFileEntry, int) {
+	scheduled := strings.EqualFold(trigger, "scheduled")
+	type cand struct {
+		f    pluginapi.HostAuthFileEntry
+		prio int // lower = sooner
+	}
+	cands := make([]cand, 0, len(files))
+	skipped := 0
+	now := time.Now()
+	p.mu.Lock()
+	lastBy := p.lastByAuth
+	p.mu.Unlock()
+
+	for _, f := range files {
+		if !xai.IsAuth(f) {
+			continue
+		}
+		if cfg.ProbeOnlyDisabled {
+			if !f.Disabled {
+				continue
+			}
+		} else if !cfg.ProbeIncludeDisabled && f.Disabled {
+			continue
+		}
+		key := xai.AuthKey(f)
+		email := strings.ToLower(strings.TrimSpace(f.Email))
+		if !force && p.engine != nil {
+			if key != "" && p.engine.RecentUsageOK(key) {
+				skipped++
+				continue
+			}
+			if email != "" && p.engine.RecentUsageOK(email) {
+				skipped++
+				continue
+			}
+		}
+		// Incremental: skip recent successful probes on scheduled/manual non-force.
+		if !force {
+			if pr, ok := lastBy[key]; ok && pr.OK && now.Sub(pr.At) < probeFreshOK {
+				// Still probe if currently banned (need recovery check).
+				banned := p.bans != nil && (p.bans.Active(key, now) || (email != "" && p.bans.Active(email, now)))
+				if !banned {
+					skipped++
+					continue
+				}
+			}
+		}
+		prio := 50
+		if p.bans != nil && (p.bans.Active(key, now) || (email != "" && p.bans.Active(email, now))) {
+			prio = 0
+		} else if pr, ok := lastBy[key]; !ok {
+			prio = 10 // never probed
+		} else if !pr.OK {
+			prio = 20 // last fail
+		} else {
+			prio = 40
+		}
+		cands = append(cands, cand{f: f, prio: prio})
+	}
+	// stable-ish sort by priority
+	for i := 0; i < len(cands); i++ {
+		for j := i + 1; j < len(cands); j++ {
+			if cands[j].prio < cands[i].prio {
+				cands[i], cands[j] = cands[j], cands[i]
+			}
+		}
+	}
+	limit := len(cands)
+	if scheduled && limit > maxScheduledBatch {
+		skipped += limit - maxScheduledBatch
+		limit = maxScheduledBatch
+	}
+	out := make([]pluginapi.HostAuthFileEntry, 0, limit)
+	for i := 0; i < limit; i++ {
+		out = append(out, cands[i].f)
+	}
+	return out, skipped
+}
+
+// StartBulk runs apply-action over many auth IDs with progress (ops bulk).
+func (p *Service) StartBulk(actionName string, ids []string, apply func(id string) error) error {
+	p.mu.Lock()
+	if p.bulkRunning || p.jobRunning {
+		p.mu.Unlock()
+		return fmt.Errorf("busy")
+	}
+	p.bulkRunning = true
+	p.bulkDone, p.bulkTotal, p.bulkOK, p.bulkFail = 0, len(ids), 0, 0
+	p.bulkErrs = nil
+	p.bulkLabel = actionName
+	p.mu.Unlock()
+	go func() {
+		for _, id := range ids {
+			err := apply(id)
+			p.mu.Lock()
+			p.bulkDone++
+			if err != nil {
+				p.bulkFail++
+				if len(p.bulkErrs) < 12 {
+					p.bulkErrs = append(p.bulkErrs, id+": "+err.Error())
+				}
+			} else {
+				p.bulkOK++
+			}
+			p.mu.Unlock()
+		}
+		p.mu.Lock()
+		p.bulkRunning = false
+		p.mu.Unlock()
+	}()
+	return nil
+}
+
+func (p *Service) BulkStatus() map[string]any {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return map[string]any{
+		"running": p.bulkRunning,
+		"done":    p.bulkDone,
+		"total":   p.bulkTotal,
+		"ok":      p.bulkOK,
+		"fail":    p.bulkFail,
+		"label":   p.bulkLabel,
+		"errors":  append([]string(nil), p.bulkErrs...),
+	}
+}
+
 func (p *Service) Status() map[string]any {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	lastRun := ""
 	if !p.lastRun.IsZero() {
 		lastRun = p.lastRun.Format(time.RFC3339)
+	}
+	nextRun := ""
+	if !p.nextRun.IsZero() {
+		nextRun = p.nextRun.Format(time.RFC3339)
 	}
 	jobAge := 0
 	if p.jobRunning && !p.jobStarted.IsZero() {
@@ -1000,13 +1136,17 @@ func (p *Service) Status() map[string]any {
 		"job_total":    p.jobTotal,
 		"job_age_sec":  jobAge,
 		"last_run":     lastRun,
+		"next_run":     nextRun,
 		"last_ok":      p.lastOK,
 		"last_fail":    p.lastFail,
+		"last_skip":    p.lastSkip,
 		"last_err":     p.lastErr,
 		"mode":         p.cfg.ProbeMode,
 		"interval":     p.cfg.ProbeIntervalSeconds,
 		"auto_execute": p.cfg.AutoExecute,
+		"batch_max":    maxScheduledBatch,
 		"history":      append([]Run(nil), p.history...),
+		"bulk":         map[string]any{"running": p.bulkRunning, "done": p.bulkDone, "total": p.bulkTotal, "ok": p.bulkOK, "fail": p.bulkFail, "label": p.bulkLabel},
 	}
 }
 
