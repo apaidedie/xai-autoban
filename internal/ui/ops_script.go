@@ -275,16 +275,12 @@ function paintChips(){
   set('f_401',c['401']??0); set('f_402',c['402']??0); set('f_403',c['403']??0); set('f_429',c['429']??0);
   set('ov_all',c.all??0); set('ov_healthy',c.healthy??0); set('ov_banned',c.banned??0);
 
-  const allN=Number(c.all||0), hN=Number(c.healthy||0), bN=Number(c.banned||0), dN=Number(c.disabled||0);
-  // disabled-only ≈ all - healthy - banned (banned already includes banned∩disabled)
-  const onlyDis=Math.max(0, allN - hN - bN);
-  const both=Math.max(0, dN - onlyDis);
   const hs=$('ov_healthy_sub');
   if(hs) hs.textContent='未隔离·未禁用';
   const sub=$('ov_banned_sub');
-  if(sub) sub.textContent=both>0?('账本 · 其中兼禁用 '+both):'账本 · 跳过调度';
+  if(sub) sub.textContent='账本 · 到期可释放';
   const disSub=$('ov_disabled_sub')||document.querySelector('#overviewCards [data-filter="disabled"] .qs');
-  if(disSub) disSub.textContent=onlyDis<dN?('CPA关 · 仅禁用 '+onlyDis):'CPA 关闭';
+  if(disSub) disSub.textContent='CPA 关 · 不兼隔离';
 
   const healthySub=document.querySelector('#overviewCards [data-filter="healthy"] .qs');
   if(healthySub) healthySub.textContent='可调度';

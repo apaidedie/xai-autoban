@@ -41,11 +41,11 @@ const statusBodyTemplate = `
     <button type="button" class="qcard ok" data-jump="healthy" data-filter="healthy" title="未隔离且未禁用 → 可调度。健康+隔离+仅禁用=全部（隔离与禁用可重叠，不能直接健康+隔离+禁用=全部）。">
       <div class="ql">健康</div><div class="qn" id="ov_healthy">0</div><div class="qs" id="ov_healthy_sub">未隔离·未禁用</div>
     </button>
-    <button type="button" class="qcard warn" data-jump="banned" data-filter="banned" title="隔离账本条数（可与禁用重叠）。下方 401–429 之和应等于本卡。">
-      <div class="ql">隔离</div><div class="qn" id="ov_banned">0</div><div class="qs" id="ov_banned_sub">账本 · 可兼禁用</div>
+    <button type="button" class="qcard warn" data-jump="banned" data-filter="banned" title="隔离账本条数（与禁用互斥）。下方 401–429 之和应等于本卡。">
+      <div class="ql">隔离</div><div class="qn" id="ov_banned">0</div><div class="qs" id="ov_banned_sub">账本 · 到期可释放</div>
     </button>
-    <button type="button" class="qcard disabled-card" data-jump="disabled" data-filter="disabled" title="CPA 开关关闭数（可与隔离重叠）。关闭≠隔离账本。">
-      <div class="ql">禁用</div><div class="qn" id="c_disabled">0</div><div class="qs" id="ov_disabled_sub">CPA 关 · 可兼隔离</div>
+    <button type="button" class="qcard disabled-card" data-jump="disabled" data-filter="disabled" title="CPA 开关关闭；禁用后不写隔离，直到巡检成功启用。">
+      <div class="ql">禁用</div><div class="qn" id="c_disabled">0</div><div class="qs" id="ov_disabled_sub">CPA 关 · 不兼隔离</div>
     </button>
     <button type="button" class="qcard info" data-jump="probe" id="ov_probe_card" title="立即全量巡检（受「仅巡检已禁用」等筛选影响）；定时开启后约 45 秒内首次执行">
       <div class="ql">巡检</div><div class="qn" id="ov_probe">—</div><div class="qs" id="ov_probe_sub">点击开始</div>
@@ -71,9 +71,9 @@ const statusBodyTemplate = `
       <div class="row2">
         <span class="k">健康</span><span>未隔离且未禁用 → 可调度</span>
         <span class="k">隔离</span><span>插件<strong>隔离账本</strong>；调度跳过；可「释放」或<strong>到期自动释放</strong></span>
-        <span class="k">禁用</span><span>关闭 CPA 开关；与隔离<strong>可重叠</strong>；不因到期自动打开</span>
-        <span class="k">计数口径</span><span>全部 = 健康 + 隔离 + 仅禁用；隔离与禁用重叠时<strong>不能</strong>三者相加</span>
-        <span class="k">401–429</span><span>之和 = 隔离卡；只统计账本，不含「只禁用」</span>
+        <span class="k">禁用</span><span>关闭 CPA 开关；与隔离<strong>互斥</strong>——禁用后只保留禁用，直到巡检成功启用或永久禁用</span>
+        <span class="k">计数口径</span><span>全部 ≈ 健康 + 隔离 + 禁用（互斥后可直接相加）</span>
+        <span class="k">401–429</span><span>之和 = 隔离卡；只统计账本，不含禁用</span>
         <span class="k">释放</span><span>清除隔离账本（不解禁用）</span>
         <span class="k">启用</span><span>打开 CPA 凭证开关（不自动清隔离）</span>
         <span class="k">释放并启用</span><span>清隔离账本 + 打开 CPA 开关（成功策略）</span>

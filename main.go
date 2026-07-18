@@ -24,7 +24,7 @@ import (
 
 const (
 	pluginName    = "xai-autoban"
-	pluginVersion = "1.1.8"
+	pluginVersion = "1.1.9"
 )
 
 type App struct {
@@ -182,6 +182,10 @@ func (a *App) handleRegister(raw []byte) ([]byte, error) {
 	a.SetConfig(cfg)
 	slog.Info("xai-autoban: state file", "path", a.persist.Path())
 	a.persist.Load()
+	// 禁用与隔离互斥：启动时清掉「已禁用但仍在隔离账本」的残留。
+	if n := a.engine.ReconcileDisabledExclusive(); n > 0 {
+		a.persist.ScheduleSave()
+	}
 	// Overlay ops-console settings saved in state file (survives yaml reconfigure / rebuild).
 	if overlay := a.persist.Settings(); len(overlay) > 0 {
 		merged, more := config.MergePatch(a.Config(), overlay)

@@ -63,6 +63,49 @@ func TestApplyUsingAPIOff(t *testing.T) {
 	}
 }
 
+func TestBanSkippedWhenAlreadyDisabled(t *testing.T) {
+	stub := &host.Stub{
+		Files: []pluginapi.HostAuthFileEntry{
+			{ID: "d2", AuthIndex: "2", Name: "xai-d2.json", Provider: "xai", Disabled: true, Email: "d2@x.com"},
+		},
+	}
+	cfg := config.Default()
+	cfg.ActionCooldownSeconds = 0
+	bans := &ban.State{}
+	eng := NewEngine(cfg, bans, audit.New(10), stub, nil)
+	now := time.Now()
+	if err := eng.ApplyAction("d2", Ban, "test", ban.Entry{StatusCode: 429, ResetAt: now.Add(time.Hour), Email: "d2@x.com"}, true); err != nil {
+		t.Fatal(err)
+	}
+	if bans.Active("d2", time.Now()) {
+		t.Fatal("ban must not apply on already-disabled credential")
+	}
+}
+
+func TestReconcileDisabledExclusiveClearsBan(t *testing.T) {
+	stub := &host.Stub{
+		Files: []pluginapi.HostAuthFileEntry{
+			{ID: "d3", AuthIndex: "3", Name: "xai-d3.json", Provider: "xai", Disabled: true, Email: "d3@x.com"},
+			{ID: "ok", AuthIndex: "4", Name: "xai-ok.json", Provider: "xai", Disabled: false},
+		},
+	}
+	bans := &ban.State{}
+	now := time.Now()
+	bans.Set("d3", ban.Entry{StatusCode: 403, ResetAt: now.Add(time.Hour), AuthID: "d3", Email: "d3@x.com"})
+	bans.Set("ok", ban.Entry{StatusCode: 429, ResetAt: now.Add(time.Hour), AuthID: "ok"})
+	eng := NewEngine(config.Default(), bans, audit.New(10), stub, nil)
+	n := eng.ReconcileDisabledExclusive()
+	if n < 1 {
+		t.Fatalf("cleared=%d want >=1", n)
+	}
+	if bans.Active("d3", time.Now()) {
+		t.Fatal("disabled cred must not keep isolation")
+	}
+	if !bans.Active("ok", time.Now()) {
+		t.Fatal("non-disabled isolation must remain")
+	}
+}
+
 func TestDisableDoesNotWriteBanLedger(t *testing.T) {
 	stub := &host.Stub{
 		Files: []pluginapi.HostAuthFileEntry{
@@ -91,12 +134,13 @@ func TestDisableDoesNotWriteBanLedger(t *testing.T) {
 	if bans.Active("d1", time.Now()) {
 		t.Fatal("disable must not keep isolation ledger entry")
 	}
-	// ban-only still isolates
+	// re-enable host flag then ban should isolate
+	stub.Files[0].Disabled = false
 	if err := eng.ApplyAction("d1", Ban, "test", ban.Entry{StatusCode: 429, ResetAt: now.Add(time.Hour)}, true); err != nil {
 		t.Fatal(err)
 	}
 	if !bans.Active("d1", time.Now()) {
-		t.Fatal("ban should isolate")
+		t.Fatal("ban should isolate when not disabled")
 	}
 }
 

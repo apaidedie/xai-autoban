@@ -73,6 +73,12 @@ func (h *Handler) CurrentStatusPaged(query url.Values) StatusInfo {
 	sort.Slice(items, func(i, j int) bool { return items[i].ResetAt < items[j].ResetAt })
 
 	files, _ := collectXAIAuthFiles(h.Host)
+	// Keep disabled-only: drop residual isolation on disabled credentials (ops view).
+	if h.Engine != nil {
+		if n := h.Engine.ReconcileDisabledExclusive(); n > 0 && h.Persist != nil {
+			h.Persist.ScheduleSave()
+		}
+	}
 	probeLast := map[string]creds.ProbeResult{}
 	for k, v := range h.Probe.LastResults() {
 		probeLast[k] = creds.ProbeResult{At: v.At, OK: v.OK, Status: v.Status, Error: v.Error}

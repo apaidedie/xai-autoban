@@ -697,9 +697,9 @@ func TestRecheckSelectedIncludesDisabled(t *testing.T) {
 	if len(stub.Saves) < 1 {
 		t.Fatal("expected reenable save for recovered disabled cred")
 	}
-	// failed should be banned
-	if !defaultApp.bans.Active("dis-bad", time.Now()) && !defaultApp.bans.Active("b@x.ai", time.Now()) {
-		t.Fatal("failed selected recheck should ban")
+	// failed but still disabled: isolation must not apply (disabled exclusive)
+	if defaultApp.bans.Active("dis-bad", time.Now()) || defaultApp.bans.Active("b@x.ai", time.Now()) {
+		t.Fatal("failed recheck on disabled cred must not write isolation")
 	}
 }
 

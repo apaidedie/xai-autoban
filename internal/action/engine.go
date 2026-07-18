@@ -432,6 +432,13 @@ func (e *Engine) ApplyAction(authID, action, source string, entry ban.Entry, for
 
 	switch action {
 	case Ban:
+		// 禁用与隔离互斥：已禁用号只保留「禁用」，不再写隔离账本。
+		if e.hostCredentialDisabled(authID) {
+			e.clearIsolation(authID, entry.Email)
+			e.audit.Add(source, authID, Ban, "skipped_disabled", "already disabled; isolation not applied", entry.StatusCode)
+			e.notifyChanged()
+			return nil
+		}
 		entry.Action = Ban
 		entry.Source = source
 		entry.AuthID = authID
@@ -441,17 +448,12 @@ func (e *Engine) ApplyAction(authID, action, source string, entry ban.Entry, for
 		e.notifyChanged()
 		return nil
 	case Disable:
-		// Disable = CPA 开关关闭 only. Do NOT write isolation ledger:
-		// status-code chips / 隔离 count are for ban-only; 403→disable must not inflate 隔离.
+		// Disable = 仅 CPA 开关关闭；唯一状态直到巡检成功启用或永久禁用。
 		if err := e.SetDisabled(authID, true, fmt.Sprintf("xai-autoban:%s", entry.Reason)); err != nil {
 			e.audit.Add(source, authID, Disable, "error", err.Error(), entry.StatusCode)
 			return err
 		}
-		// Drop any prior isolation so recovery is purely reenable (probe success policy).
-		_ = e.bans.Clear(authID)
-		if entry.Email != "" {
-			_ = e.bans.Clear(entry.Email)
-		}
+		e.clearIsolation(authID, entry.Email)
 		e.markCooldown(cooldownKeyID, action)
 		e.audit.Add(source, authID, Disable, "ok", entry.Reason, entry.StatusCode)
 		e.notifyChanged()
@@ -792,6 +794,94 @@ func (e *Engine) lookupEmail(authID string) string {
 		}
 	}
 	return ""
+}
+
+// clearIsolation drops ban-ledger rows for authID and optional email.
+func (e *Engine) clearIsolation(authID, email string) {
+	if e == nil || e.bans == nil {
+		return
+	}
+	_ = e.bans.Clear(authID)
+	email = strings.ToLower(strings.TrimSpace(email))
+	if email != "" {
+		_ = e.bans.Clear(email)
+	}
+}
+
+// hostCredentialDisabled reports CPA Disabled flag for authID (best-effort AuthList).
+func (e *Engine) hostCredentialDisabled(authID string) bool {
+	if e == nil {
+		return false
+	}
+	e.mu.Lock()
+	h := e.host
+	e.mu.Unlock()
+	if h == nil {
+		return false
+	}
+	files, err := h.AuthList()
+	if err != nil {
+		return false
+	}
+	authID = strings.TrimSpace(authID)
+	for _, f := range files {
+		if !f.Disabled {
+			continue
+		}
+		if f.ID == authID || f.AuthIndex == authID || f.Name == authID || ban.AuthIDsEqual(xai.AuthKey(f), authID) {
+			return true
+		}
+		if email := strings.ToLower(strings.TrimSpace(f.Email)); email != "" && strings.EqualFold(email, authID) {
+			return true
+		}
+	}
+	return false
+}
+
+// ReconcileDisabledExclusive ensures disabled credentials never keep isolation ledger rows.
+// Returns how many ban rows were cleared. Call after state load / on ops status refresh.
+func (e *Engine) ReconcileDisabledExclusive() int {
+	if e == nil || e.bans == nil {
+		return 0
+	}
+	e.mu.Lock()
+	h := e.host
+	e.mu.Unlock()
+	if h == nil {
+		return 0
+	}
+	files, err := h.AuthList()
+	if err != nil || len(files) == 0 {
+		return 0
+	}
+	now := time.Now()
+	cleared := 0
+	for _, f := range files {
+		if !f.Disabled || !xai.IsAuth(f) {
+			continue
+		}
+		key := xai.AuthKey(f)
+		email := strings.ToLower(strings.TrimSpace(f.Email))
+		had := e.bans.Active(key, now) || (email != "" && e.bans.Active(email, now)) ||
+			e.bans.IsBannedCandidate(f.ID, email, now) || e.bans.IsBannedCandidate(key, email, now)
+		if !had {
+			continue
+		}
+		e.clearIsolation(key, email)
+		if f.ID != "" && f.ID != key {
+			_ = e.bans.Clear(f.ID)
+		}
+		if f.Name != "" {
+			_ = e.bans.Clear(f.Name)
+		}
+		cleared++
+	}
+	if cleared > 0 {
+		e.audit.Add("system", "", "reconcile", "ok", fmt.Sprintf("cleared isolation for %d disabled credentials", cleared), 0)
+		e.notifyChanged()
+		slog.Info("xai-autoban: disabled exclusive — cleared isolation", "count", cleared)
+	}
+	return cleared
 }
 
 func (e *Engine) SetDisabled(authID string, disabled bool, note string) error {
