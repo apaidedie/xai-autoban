@@ -189,6 +189,8 @@ type Service struct {
 	lastSkipUsageOK int
 	lastSkipProbeOK int
 	lastCandidate   string // "disabled_only" | "all" | "include_disabled"
+	lastByStatus    map[string]int
+	lastByAction    map[string]int
 	runSeq          int64
 	history         []Run
 	lastByAuth      map[string]CredentialResult
@@ -385,6 +387,10 @@ type Result struct {
 	AutoExecute bool   `json:"auto_execute"`
 	ProbeAction string `json:"probe_action,omitempty"`
 	OnSuccess   string `json:"probe_on_success,omitempty"`
+	// ByStatus: fail counts by HTTP status (401/402/403/429/0=other).
+	ByStatus map[string]int `json:"by_status,omitempty"`
+	// ByAction: applied action counts (ban/disable/delete/none).
+	ByAction map[string]int `json:"by_action,omitempty"`
 }
 
 type Run struct {
@@ -484,6 +490,8 @@ func (p *Service) runOnceBody(force bool, trigger string) (Result, error) {
 		OnSuccess:   cfg.ProbeOnSuccess,
 		Trigger:     trigger,
 		StartedAt:   started.Format(time.RFC3339),
+		ByStatus:    map[string]int{},
+		ByAction:    map[string]int{},
 	}
 	p.mu.Lock()
 	p.lastSkip = skippedRecent
@@ -534,6 +542,7 @@ func (p *Service) runOnceBody(force bool, trigger string) (Result, error) {
 			if getErr != nil {
 				mu.Lock()
 				res.Failed++
+				bumpStatus(&res, 0)
 				p.RememberProbeResult(key, false, 0, getErr.Error())
 				mu.Unlock()
 				return
@@ -542,14 +551,17 @@ func (p *Service) runOnceBody(force bool, trigger string) (Result, error) {
 				mu.Lock()
 				res.Failed++
 				res.LocalSkip++
+				bumpStatus(&res, localEntry.StatusCode)
 				p.RememberProbeResult(key, false, localEntry.StatusCode, localEntry.Reason)
 				if cfg.AutoExecute {
 					_ = p.engine.ApplyFailure(key, "probe-local", localEntry, force)
 					res.Banned++
+					bumpAction(&res, localEntry.Action)
 				} else {
 					localEntry.Action = action.Ban
 					_ = p.engine.ApplyAction(key, action.Ban, "probe-report", localEntry, force)
 					res.Banned++
+					bumpAction(&res, action.Ban)
 				}
 				mu.Unlock()
 				return
@@ -559,10 +571,12 @@ func (p *Service) runOnceBody(force bool, trigger string) (Result, error) {
 			defer mu.Unlock()
 			if perr != nil {
 				res.Failed++
+				bumpStatus(&res, status)
 				p.RememberProbeResult(key, false, status, perr.Error())
 				entry, ok := p.engine.ClassifyFailureWithBody(status, nil, body, time.Now())
 				if !ok {
 					// model_unavailable / probe_error without isolate: skip ledger
+					bumpAction(&res, "none")
 					return
 				}
 				entry.Source = "probe"
@@ -584,11 +598,13 @@ func (p *Service) runOnceBody(force bool, trigger string) (Result, error) {
 					if nowBan && !was {
 						res.Banned++
 					}
+					bumpAction(&res, action.Ban)
 					return
 				}
 				act := entry.Action
 				// force flag is for job unlock only — never force-isolate soft 403s from probe.
 				_ = p.engine.ApplyFailure(key, "probe", entry, false)
+				bumpAction(&res, act)
 				switch act {
 				case action.Disable:
 					res.Disabled++
@@ -942,6 +958,45 @@ func (p *Service) LastResults() map[string]CredentialResult {
 	return out
 }
 
+func bumpStatus(res *Result, status int) {
+	if res == nil {
+		return
+	}
+	if res.ByStatus == nil {
+		res.ByStatus = map[string]int{}
+	}
+	key := "other"
+	switch status {
+	case 401, 402, 403, 429:
+		key = fmt.Sprintf("%d", status)
+	case 0:
+		key = "other"
+	default:
+		if status >= 500 {
+			key = "5xx"
+		} else if status >= 400 {
+			key = "4xx"
+		} else {
+			key = "other"
+		}
+	}
+	res.ByStatus[key]++
+}
+
+func bumpAction(res *Result, act string) {
+	if res == nil {
+		return
+	}
+	if res.ByAction == nil {
+		res.ByAction = map[string]int{}
+	}
+	act = strings.TrimSpace(strings.ToLower(act))
+	if act == "" {
+		act = "none"
+	}
+	res.ByAction[act]++
+}
+
 func (p *Service) recordRun(res Result, errMsg string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -950,6 +1005,22 @@ func (p *Service) recordRun(res Result, errMsg string) {
 	p.lastFail = res.Failed
 	p.lastSkip = res.Skipped
 	p.lastErr = errMsg
+	if res.ByStatus != nil {
+		p.lastByStatus = map[string]int{}
+		for k, v := range res.ByStatus {
+			p.lastByStatus[k] = v
+		}
+	} else {
+		p.lastByStatus = nil
+	}
+	if res.ByAction != nil {
+		p.lastByAction = map[string]int{}
+		for k, v := range res.ByAction {
+			p.lastByAction[k] = v
+		}
+	} else {
+		p.lastByAction = nil
+	}
 	p.runSeq++
 	run := Run{ID: p.runSeq, Result: res, Error: errMsg}
 	p.history = append([]Run{run}, p.history...)
@@ -1122,11 +1193,13 @@ func (p *Service) Status() map[string]any {
 		"job_age_sec":  jobAge,
 		"last_run":     lastRun,
 		"next_run":     nextRun,
-		"last_ok":      p.lastOK,
-		"last_fail":    p.lastFail,
+		"last_ok":            p.lastOK,
+		"last_fail":          p.lastFail,
 		"last_skip":          p.lastSkip,
 		"last_skip_usage_ok": p.lastSkipUsageOK,
 		"last_skip_probe_ok": p.lastSkipProbeOK,
+		"last_by_status":     p.lastByStatus,
+		"last_by_action":     p.lastByAction,
 		"candidate_mode":     p.lastCandidate,
 		"only_disabled":      p.cfg.ProbeOnlyDisabled,
 		"last_err":           p.lastErr,

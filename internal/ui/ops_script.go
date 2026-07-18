@@ -310,6 +310,10 @@ function paintOverviewProbe(probe){
     const bits=[cand];
     if(probe.next_run) bits.push('下次 '+formatDate(probe.next_run).replace(/^\d{4}\//,''));
     else if(probe.last_run) bits.push(formatDate(probe.last_run).replace(/^\d{4}\//,''));
+    const bs=probe.last_by_status||{};
+    const sb=[];
+    for(const k of ['401','402','403','429','4xx','5xx','other']){ if(bs[k]>0) sb.push(k+'×'+bs[k]); }
+    if(sb.length) bits.push(sb.join(' '));
     if(skip>0){
       const parts=[];
       if(skipU>0) parts.push('流量宽限'+skipU);
@@ -321,6 +325,12 @@ function paintOverviewProbe(probe){
     if(probe.running===false && probe.enabled) bits.push('调度停');
     if(sub) sub.textContent=bits.join(' · ')||'点击开始';
     if(card) card.className='qcard'+(fail>0?' bad':(ok>0?' ok':' info'));
+    // Keep last detailed result visible under progress when present
+    if(fail>0 || (probe.last_by_status && Object.keys(probe.last_by_status).length)){
+      const detail=formatProbeResult({ok:ok,failed:fail,checked:(ok||0)+(fail||0),skipped:skip,by_status:probe.last_by_status,by_action:probe.last_by_action,banned:0,disabled:0,deleted:0,unbanned:0,reenabled:0}, (ok||0)+(fail||0));
+      // only refresh op panel if not busy with another op
+      if(!state.busy && $('opResult')) setOpResult(detail, fail>0?'warn':'ok');
+    }
     return;
   }
   n.textContent='—';
@@ -444,10 +454,14 @@ function renderHistory(list){
     const r=run.result||{};
     const mode=r.report_only?'只记录':'自动执行';
     const st=run.error?'失败':'完成';
+    const bs=r.by_status||{};
+    const sb=[];
+    for(const k of ['401','402','403','429','4xx','5xx','other']){ if(bs[k]>0) sb.push(k+'×'+bs[k]); }
+    const codeLine=sb.length?(' · '+sb.join(' ')):'';
     return '<button type="button" class="bs" title="#'+run.id+'">'+
       '<b>#'+run.id+' · '+st+'</b>'+
       '<small>'+esc(r.finished_at||r.started_at||'')+' · '+esc(r.trigger||'')+'</small>'+
-      '<small style="color:#cbd5e1">'+mode+' · 检'+(r.checked||0)+' 成'+(r.ok||0)+' 败'+(r.failed||0)+'</small></button>';
+      '<small style="color:#cbd5e1">'+mode+' · 检'+(r.checked||0)+' 成'+(r.ok||0)+' 败'+(r.failed||0)+esc(codeLine)+'</small></button>';
   }).join('');
 }
 function fillDrawer(s){
@@ -862,6 +876,30 @@ function clearSelection(){
   setMessage('已清除选择');
 }
 async function unbanSelected(){ return bulkAct('unban'); }
+function formatProbeResult(r, done){
+  r=r||{};
+  const lines=[];
+  lines.push('巡检完成 · 成功 '+(r.ok||0)+' · 失败 '+(r.failed||0)+' · 检 '+(r.checked||done||0)+(r.skipped?(' · 跳过 '+(r.skipped||0)):'')+(r.report_only?'（只记录）':''));
+  const bs=r.by_status||{};
+  const order=['401','402','403','429','4xx','5xx','other'];
+  const statusBits=[];
+  for(const k of order){ if(bs[k]>0) statusBits.push(k+'×'+bs[k]); }
+  for(const k of Object.keys(bs).sort()){ if(order.indexOf(k)<0 && bs[k]>0) statusBits.push(k+'×'+bs[k]); }
+  if(statusBits.length) lines.push('失败状态码：'+statusBits.join(' · '));
+  const ba=r.by_action||{};
+  const actLabel={ban:'隔离',disable:'禁用',delete:'删除',none:'未动作',unban:'释放',reenable:'启用'};
+  const actBits=[];
+  for(const k of Object.keys(ba).sort()){ if(ba[k]>0) actBits.push((actLabel[k]||k)+'×'+ba[k]); }
+  if(actBits.length) lines.push('已执行动作：'+actBits.join(' · '));
+  const actSummary=[];
+  if(r.banned) actSummary.push('隔离 '+(r.banned||0));
+  if(r.disabled) actSummary.push('禁用 '+(r.disabled||0));
+  if(r.deleted) actSummary.push('删除 '+(r.deleted||0));
+  if(r.unbanned) actSummary.push('释放 '+(r.unbanned||0));
+  if(r.reenabled) actSummary.push('启用 '+(r.reenabled||0));
+  if(actSummary.length) lines.push('动作合计：'+actSummary.join(' · '));
+  return lines.join('\n');
+}
 async function pollProbeUntilDone(){
   let idle=0, lastDone=-1;
   for(;;){
@@ -873,9 +911,9 @@ async function pollProbeUntilDone(){
     if(done===lastDone) idle++; else { idle=0; lastDone=done; }
     if(!st.running){
       const r=st.result||{};
-      const msg='巡检完成 · 成功 '+(r.ok||0)+' · 失败 '+(r.failed||0)+' · 检 '+(r.checked||done||0)+(r.report_only?'（只输出结果）':'');
+      const msg=formatProbeResult(r, done);
       finishProgress(total>0?total:done||1, total>0?total:done||1, '巡检完成');
-      setMessage(msg);
+      setMessage(msg.split('\n')[0]);
       setOpResult(msg+(st.error?('\n'+st.error):''), st.error?'err':((r.failed||0)>0?'warn':'ok'));
       if(st.error) throw new Error(st.error);
       return st;
