@@ -77,14 +77,37 @@ func TestStability_UsageSuccessClearsIsolation(t *testing.T) {
 	}
 }
 
-func TestStability_Probe402DoesNotIsolate(t *testing.T) {
+func TestStability_DefaultSoft403IsolatesOnce(t *testing.T) {
+	cfg := config.Default()
+	if cfg.FailStreak403 != 1 {
+		t.Fatalf("default fail_streak_403=%d want 1", cfg.FailStreak403)
+	}
+	cfg.ActionOn403 = Ban
+	eng, bans := stabilityEngine(t, cfg, nil)
+	now := time.Now()
+	entry := ban.Entry{
+		StatusCode:     http.StatusForbidden,
+		Reason:         "permission denied (HTTP 403)",
+		Classification: "permission_denied",
+		Action:         Ban,
+		BannedAt:       now,
+		ResetAt:        now.Add(time.Hour),
+	}
+	if err := eng.ApplyFailure("soft-once", "usage", entry, false); err != nil {
+		t.Fatal(err)
+	}
+	if !bans.Active("soft-once", time.Now()) {
+		t.Fatal("default fail_streak_403=1: one soft 403 must isolate")
+	}
+}
+
+func TestStability_Probe402DoesIsolate(t *testing.T) {
 	cfg := config.Default()
 	cfg.ActionOn402 = Ban
 	eng, bans := stabilityEngine(t, cfg, nil)
 	now := time.Now()
 	entry, ok := eng.ClassifyFailureWithBody(http.StatusPaymentRequired, nil, `{"error":{"code":"free-usage-exhausted","message":"used all free usage"}}`, now)
 	if !ok {
-		// empty-body 402 still classifies via status path
 		entry, ok = eng.ClassifyFailure(http.StatusPaymentRequired, nil, now)
 	}
 	if !ok {
@@ -95,15 +118,14 @@ func TestStability_Probe402DoesNotIsolate(t *testing.T) {
 	if err := eng.ApplyFailure("p402", "probe", entry, false); err != nil {
 		t.Fatal(err)
 	}
-	if bans.Active("p402", time.Now()) {
-		t.Fatal("probe 402/free-usage must not isolate")
+	if !bans.Active("p402", time.Now()) {
+		t.Fatal("probe 402 must isolate once (same as usage)")
 	}
-	// recheck path same rule
-	if err := eng.ApplyFailure("p402", "recheck-selected", entry, false); err != nil {
+	if err := eng.ApplyFailure("p402r", "recheck-selected", entry, false); err != nil {
 		t.Fatal(err)
 	}
-	if bans.Active("p402", time.Now()) {
-		t.Fatal("recheck 402 must not isolate")
+	if !bans.Active("p402r", time.Now()) {
+		t.Fatal("recheck 402 must isolate once")
 	}
 }
 

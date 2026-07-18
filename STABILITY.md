@@ -35,8 +35,8 @@
 |--------|------------------|
 | Real usage **success** | Clear isolation |
 | **401** / token invalid | Isolate (reauth possible) |
-| **402** / free-usage | Isolate on **real usage** failure only; **probe 402 does not isolate** |
-| Soft **403** (permission-style) | Need `fail_streak_403` consecutive fails (default **3**) before isolate; hard account bans may isolate immediately |
+| **402** / free-usage | Isolate on usage **and** probe/recheck (same `action_on_402`) |
+| Soft **403** (permission-style) | Need `fail_streak_403` consecutive fails (default **1** = once) before isolate; set higher to soften |
 | Bare **429** | Isolate only (short window / header reset when present) |
 | **5xx** / model unavailable | Generally **no** isolate |
 
@@ -119,7 +119,7 @@ Prefer **tag push** or **workflow_dispatch**; do not create an empty Release bef
 | `probe_only_disabled` | bool | false |
 | `auto_execute` | bool | true |
 | `action_cooldown_seconds` | int | 60 |
-| `fail_streak_403` | int | 3 |
+| `fail_streak_403` | int | 1 |
 | `fail_streak_window_seconds` | int | 1800 |
 | `auto_using_api` | off\|on_403\|on_fail | off（更安全；旧默认 on_403） |
 | `delete_fallback` | disable\|ban | disable |
@@ -152,6 +152,7 @@ Prefer **tag push** or **workflow_dispatch**; do not create an empty Release bef
 | `delete` | Management delete (+ fallback) |
 | `reauth` | refresh_token → access_token |
 | `using_api` / `enable_api` / `api_mode` | Set `using_api=true` |
+| `using_api_off` / `disable_api` | Set `using_api=false`（批量关 API） |
 
 ### 3.3 Resource ops (CPAMP) vocabulary (frozen)
 
@@ -164,8 +165,8 @@ Stable `op` names include: `settings`, `unban`, `unban_all`, `probe`, `apply`, `
 Ship **1.0.0** only when all are true:
 
 - [x] This file reviewed and linked from README as the operator contract
-- [x] No known open P0 false-isolate under normal traffic at ship time (soft 403 + usage grace + probe 402 skip covered by tests; continue monitoring)
-- [x] Tests green on CI for: soft 403 streak, usage success unban, probe 402 no-isolate, `auto_using_api` gate, using_api write verify, delete fallback  
+- [x] No known open P0 false-isolate under normal traffic at ship time (configurable soft 403 streak + usage grace covered by tests; continue monitoring)
+- [x] Tests green on CI for: soft 403 streak (configurable), usage success unban, probe 402 isolates, `auto_using_api` gate, using_api write verify, delete fallback
       → `internal/action/stability_contract_test.go`, `internal/usage/handle_test.go`, `internal/probe/using_api_test.go`, `internal/classify` 402→quota
 - [x] Ops list shows: isolation/disabled, using_api, soft-403 progress, last probe (0.5.48+)
 - [x] Disable + using_api write paths documented with Management key requirements (this file §1 + README)

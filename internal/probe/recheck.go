@@ -135,6 +135,8 @@ type RecheckSelectedResult struct {
 	Unbanned   int      `json:"unbanned"`
 	Reenabled  int      `json:"reenabled"`
 	Banned     int      `json:"banned"`
+	Disabled   int      `json:"disabled"`
+	Deleted    int      `json:"deleted"`
 	Skipped    int      `json:"skipped"`
 	Errors     []string `json:"errors,omitempty"`
 	StartedAt  string   `json:"started_at"`
@@ -144,7 +146,7 @@ type RecheckSelectedResult struct {
 // recheckSelectedCredentials concurrently probes the given auth IDs.
 // Includes disabled credentials (full probe skips them).
 // On success: unban if isolated, reenable if disabled (when reenableOnOK).
-// On classifiable failure: refresh ban ledger for visibility.
+// On classifiable failure: apply action_on_401/402/403/429 (same as usage/full probe when auto_execute).
 func (p *Service) RecheckSelected(authIDs []string, reenableOnOK bool) (RecheckSelectedResult, error) {
 	now := time.Now()
 	res := RecheckSelectedResult{StartedAt: now.Format(time.RFC3339)}
@@ -283,24 +285,51 @@ func (p *Service) RecheckSelected(authIDs []string, reenableOnOK bool) (RecheckS
 				}
 				return
 			}
-			// Recheck only isolates (ban). Never ForceSet — soft 403 needs streak;
-			// recent real traffic success also blocks probe false positives.
+			// Same status-code actions as full probe / usage (soft-403 streak + usage grace still apply).
 			entry.Source = "recheck-selected"
-			entry.Action = action.Ban
 			entry.Email = strings.ToLower(strings.TrimSpace(f.Email))
 			entry.AuthID = key
+			cfg := p.configCopy()
+			if !cfg.AutoExecute {
+				// Report-only: isolate only.
+				entry.Action = action.Ban
+			} else if entry.Action == "" {
+				entry.Action = cfg.ActionForStatus(entry.StatusCode)
+			}
+			// Optional probe_action override only when classifier left bare ban (same as full probe).
+			if cfg.AutoExecute && cfg.ProbeAction != "" && entry.Action == action.Ban && cfg.ProbeAction != action.Ban {
+				if entry.Classification != "rate_limited" {
+					entry.Action = cfg.ProbeAction
+				}
+			}
+			act := entry.Action
 			wasBanned := p.bans.Active(key, time.Now()) || p.bans.IsBannedCandidate(key, entry.Email, time.Now())
 			_ = p.engine.ApplyFailure(key, "recheck-selected", entry, false)
 			nowBanned := p.bans.Active(key, time.Now()) || p.bans.IsBannedCandidate(key, entry.Email, time.Now())
-			if nowBanned && !wasBanned {
+			switch act {
+			case action.Disable:
+				res.Disabled++
 				res.Banned++
+			case action.Delete:
+				res.Deleted++
+				res.Banned++
+			default:
+				if nowBanned && !wasBanned {
+					res.Banned++
+				}
 			}
 			if len(res.Errors) < 12 {
 				label := shortCredLabel(key, f.Email)
-				if nowBanned && !wasBanned {
-					res.Errors = append(res.Errors, label+" · "+msg+" · 已隔离")
+				actLabel := map[string]string{
+					action.Ban: "已隔离", action.Disable: "已禁用", action.Delete: "已删除",
+				}[act]
+				if actLabel == "" {
+					actLabel = act
+				}
+				if act == action.Ban && !(nowBanned && !wasBanned) {
+					res.Errors = append(res.Errors, label+" · "+msg+" · 连击/跳过")
 				} else {
-					res.Errors = append(res.Errors, label+" · "+msg+" · 连击中")
+					res.Errors = append(res.Errors, label+" · "+msg+" · "+actLabel)
 				}
 			}
 		}(id)

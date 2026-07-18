@@ -13,7 +13,6 @@ const statusBodyTemplate = `
     <div class="top-actions">
       <div class="live" id="syncState">准备中</div>
       <button class="bs" id="btnRefresh" type="button" onclick="loadData()" title="刷新列表与统计">刷新</button>
-      <button class="bp" id="btnProbe" type="button" onclick="runProbe()" disabled title="立即全量巡检">巡检</button>
       <button class="bs" id="openConfigBtn" type="button" title="编辑巡检与策略">配置</button>
     </div>
   </header>
@@ -56,10 +55,10 @@ const statusBodyTemplate = `
     <button type="button" class="code-chip s401" data-filter="401" title="隔离账本中状态码 401 的条数（需重授权）">
       <span class="cl">401 · 需重授</span><b id="ov_401">0</b>
     </button>
-    <button type="button" class="code-chip s402" data-filter="402" title="隔离账本中状态码 402 的条数（额度不足）。探测 402 默认不隔离">
+    <button type="button" class="code-chip s402" data-filter="402" title="隔离账本中状态码 402 的条数（额度不足）。usage/巡检/复检 402 均按 action_on_402 处理">
       <span class="cl">402 · 额度</span><b id="ov_402">0</b>
     </button>
-    <button type="button" class="code-chip s403" data-filter="403" title="隔离账本中状态码 403 的条数。软 403 需连续多次才隔离">
+    <button type="button" class="code-chip s403" data-filter="403" title="隔离账本中状态码 403 的条数。默认一次即按 action_on_403 处理（fail_streak_403=1）">
       <span class="cl">403 · 拒绝</span><b id="ov_403">0</b>
     </button>
     <button type="button" class="code-chip s429" data-filter="429" title="隔离账本中状态码 429 的条数（限流）">
@@ -77,9 +76,9 @@ const statusBodyTemplate = `
         <span class="k">隔离</span><span>插件账本，调度跳过；用「释放」清除</span>
         <span class="k">禁用</span><span>CPA 凭证开关关闭；与隔离独立</span>
         <span class="k">释放 / 启用</span><span>释放=清隔离账本 · 启用=打开 CPA 开关</span>
-        <span class="k">巡检 / 复检</span><span>巡检=全量探测 · 复检=对勾选凭证探测</span>
+        <span class="k">巡检 / 复检</span><span>巡检=全量 · 复检=勾选；失败均按状态码动作（需自动执行）</span>
         <span class="k">401–429</span><span>仅统计<strong>隔离账本</strong>内状态码，不是全量探测分布</span>
-        <span class="k">软 403</span><span>连续失败达阈值才隔离；行上 1/3 为连击进度</span>
+        <span class="k">401/402/403</span><span>默认出现一次即按状态码动作；软 403 连击由 fail_streak_403 控制（默认 1）</span>
         <span class="k">API 模式</span><span>CPA using_api；默认不自动开启（配置里可改）</span>
         <span class="k">真实流量</span><span>调用成功会释放隔离，并在 30 分钟内跳过巡检</span>
       </div>
@@ -119,7 +118,8 @@ const statusBodyTemplate = `
               <button type="button" id="banSelected" onclick="bulkAct('ban')" disabled>隔离</button>
               <button type="button" id="disableSelected" onclick="bulkAct('disable')" disabled>禁用</button>
               <button type="button" id="reenableSelected" onclick="bulkAct('reenable')" disabled>启用</button>
-              <button type="button" id="usingApiSelected" onclick="bulkAct('using_api')" disabled title="开启 API 模式">API 模式</button>
+              <button type="button" id="usingApiSelected" onclick="bulkAct('using_api')" disabled title="开启 API 模式">开 API</button>
+              <button type="button" id="usingApiOffSelected" onclick="bulkAct('using_api_off')" disabled title="关闭 API 模式（恢复 OAuth/代理路径）">关 API</button>
               <button type="button" class="danger" id="deleteSelected" onclick="bulkAct('delete')" disabled>删除</button>
               <div class="more-div"></div>
               <button type="button" onclick="exportInspect('reauth')">导出需重授</button>
@@ -187,15 +187,6 @@ const statusBodyTemplate = `
     <button class="bg" id="closeConfigBtn" type="button" title="关闭">关闭</button>
   </div>
   <div class="db">
-    <div class="sec">
-      <h4>策略预设</h4>
-      <div class="preset-row">
-        <button type="button" class="bs" onclick="applyPreset('conservative')">保守</button>
-        <button type="button" class="bs" onclick="applyPreset('standard')">标准</button>
-        <button type="button" class="bs" onclick="applyPreset('aggressive')">激进</button>
-      </div>
-      <p class="hint drawer-hint">一键填入常见组合，仍需点「保存」生效。</p>
-    </div>
     <div class="sec">
       <h4>巡检</h4>
       <label class="chk" style="margin-bottom:10px"><input id="f_probe_enabled" type="checkbox"> 开启定时巡检</label>

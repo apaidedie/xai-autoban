@@ -103,7 +103,7 @@ func Default() PluginConfig {
 		ProbeOnSuccess:          successUnban,
 		AutoExecute:             true,
 		ActionCooldownSeconds:   60,
-		FailStreak403:           3,
+		FailStreak403:           1, // 401/402/403：出现一次即按状态码动作（软 403 连击默认关）
 		FailStreakWindowSeconds: 1800,
 		AutoUsingAPI:            AutoUsingAPIOff,
 		DeleteFallback:          actionDisable,

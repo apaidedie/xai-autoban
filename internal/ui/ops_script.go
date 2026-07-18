@@ -23,11 +23,11 @@ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 
 function setActionEnabled(ok){
   const can=!!ok && !state.busy;
-  const ids=['btnProbe','btnRefresh','unbanSelected','banSelected','disableSelected','reenableSelected','usingApiSelected','deleteSelected','recheckSelected','saveConfigBtn','selectFilterBtn','clearSelectedBtn'];
+  const ids=['btnRefresh','unbanSelected','banSelected','disableSelected','reenableSelected','usingApiSelected','usingApiOffSelected','deleteSelected','recheckSelected','saveConfigBtn','selectFilterBtn','clearSelectedBtn'];
   ids.forEach(id=>{const el=$(id); if(el) el.disabled=!can;});
   const n=state.selected.size;
   if(can){
-    ['unbanSelected','banSelected','disableSelected','reenableSelected','usingApiSelected','deleteSelected','recheckSelected'].forEach(id=>{const el=$(id); if(el) el.disabled=n===0;});
+    ['unbanSelected','banSelected','disableSelected','reenableSelected','usingApiSelected','usingApiOffSelected','deleteSelected','recheckSelected'].forEach(id=>{const el=$(id); if(el) el.disabled=n===0;});
     if($('clearSelectedBtn')) $('clearSelectedBtn').disabled=n===0;
   }
   if($('unbanSelected')) $('unbanSelected').textContent=n?('释放 ('+n+')'):'释放';
@@ -35,7 +35,8 @@ function setActionEnabled(ok){
   if($('banSelected')) $('banSelected').textContent=n?('隔离 ('+n+')'):'隔离';
   if($('disableSelected')) $('disableSelected').textContent=n?('禁用 ('+n+')'):'禁用';
   if($('reenableSelected')) $('reenableSelected').textContent=n?('启用 ('+n+')'):'启用';
-  if($('usingApiSelected')) $('usingApiSelected').textContent=n?('API 模式 ('+n+')'):'API 模式';
+  if($('usingApiSelected')) $('usingApiSelected').textContent=n?('开 API ('+n+')'):'开 API';
+  if($('usingApiOffSelected')) $('usingApiOffSelected').textContent=n?('关 API ('+n+')'):'关 API';
   if($('recheckSelected')) $('recheckSelected').textContent=n?('复检 ('+n+')'):'复检';
   const sh=$('selectedHint');
   if(sh) sh.textContent=n?('已选 '+n):'';
@@ -452,7 +453,7 @@ function collectDraft(){
     action_on_403: $('f_action_on_403').value,
     action_on_429: $('f_action_on_429').value,
     action_cooldown_seconds: Number($('f_action_cooldown_seconds').value||0),
-    fail_streak_403: state._presetStreak||Number((state.settings&&state.settings.fail_streak_403)||3)
+    fail_streak_403: Number((state.settings&&state.settings.fail_streak_403)||1)
   };
 }
 function settingsMismatch(draft, got){
@@ -545,7 +546,8 @@ function rowActions(c){
   }else{
     more.push(['disable','禁用']);
   }
-  if(c.using_api!==true && !c.disabled) more.push(['using_api','API 模式']);
+  if(c.using_api===true) more.push(['using_api_off','关 API']);
+  else if(!c.disabled) more.push(['using_api','开 API']);
   if(c.banned && needsReauth(c) && !primary.some(x=>x.indexOf('data-act="unban"')>=0)) more.push(['unban','释放']);
   let html=primary.join('');
   if(more.length){
@@ -597,7 +599,7 @@ function midCell(c){
   if(c.using_api===true) tags.push('<span class="pill dim">API</span>');
   // soft 403 / probe: only when healthy-ish (not main drama)
   if(!c.banned && !c.disabled && c.soft_403_streak>0){
-    tags.push('<span class="pill dim" title="软403连击">'+c.soft_403_streak+'/'+(c.soft_403_need||3)+'</span>');
+    tags.push('<span class="pill dim" title="软403连击">'+c.soft_403_streak+'/'+(c.soft_403_need||1)+'</span>');
   }
   const sub=[];
   if(c.banned&&c.remaining_seconds!=null&&c.remaining_seconds>=0){
@@ -655,7 +657,7 @@ function render(){
 }
 async function runRowAction(act,id){
   if(!id||state.busy) return;
-  const labels={unban:'释放',ban:'隔离',disable:'禁用',reenable:'启用',reauth:'重授权',using_api:'API 模式',delete:'删除'};
+  const labels={unban:'释放',ban:'隔离',disable:'禁用',reenable:'启用',reauth:'重授权',using_api:'开 API',using_api_off:'关 API',delete:'删除'};
   if(!confirm('确认对凭证执行「'+(labels[act]||act)+'」？\n'+id)) return;
   try{
     setBusy(true, labels[act]||act);
@@ -678,8 +680,8 @@ async function bulkAct(act){
   if(state.busy) return;
   const ids=[...state.selected];
   if(!ids.length){ setMessage('请先勾选凭证',true); setOpResult('请先勾选凭证','err'); return; }
-  const labels={unban:'释放',ban:'隔离',disable:'禁用',reenable:'启用',reauth:'重授权',delete:'删除',using_api:'API 模式'};
-  const danger=act==='delete'?'\n\n删除不可轻易撤销。':(act==='using_api'?'\n\n将开启 API 模式并清除隔离。':'');
+  const labels={unban:'释放',ban:'隔离',disable:'禁用',reenable:'启用',reauth:'重授权',delete:'删除',using_api:'开 API',using_api_off:'关 API'};
+  const danger=act==='delete'?'\n\n删除不可轻易撤销。':(act==='using_api'?'\n\n将开启 API 模式并清除隔离。':(act==='using_api_off'?'\n\n将关闭 API 模式，恢复 OAuth/代理路径。':''));
   if(!confirm('对所选 '+ids.length+' 条执行「'+(labels[act]||act)+'」？'+danger)) return;
   if(act==='delete' && !confirm('再次确认删除 '+ids.length+' 条？')) return;
   try{
@@ -762,25 +764,6 @@ async function exportInspect(kind){
   }catch(e){ setMessage(e.message,true); toast(e.message,'err'); }
   finally{ setBusy(false); }
 }
-function applyPreset(name){
-  const presets={
-    conservative:{auto_execute:true,auto_using_api:'off',fail_streak_403:5,probe_action:'ban',probe_on_success:'unban',action_on_403:'ban',action_on_401:'ban'},
-    standard:{auto_execute:true,auto_using_api:'off',fail_streak_403:3,probe_action:'ban',probe_on_success:'unban',action_on_403:'ban',action_on_401:'ban'},
-    aggressive:{auto_execute:true,auto_using_api:'on_403',fail_streak_403:1,probe_action:'disable',probe_on_success:'unban_and_reenable',action_on_403:'disable',action_on_401:'disable'}
-  };
-  const p=presets[name]; if(!p) return;
-  state.autoExecute=!!p.auto_execute;
-  state.success=p.probe_on_success||'unban';
-  state.fail=p.probe_action||'ban';
-  if($('f_auto_using_api')) $('f_auto_using_api').value=p.auto_using_api||'off';
-  if($('f_action_on_403')) $('f_action_on_403').value=p.action_on_403||'ban';
-  if($('f_action_on_401')) $('f_action_on_401').value=p.action_on_401||'ban';
-  // fail_streak via save patch
-  state._presetStreak=p.fail_streak_403||3;
-  paintChoices();
-  setMessage('已套用预设「'+({conservative:'保守',standard:'标准',aggressive:'激进'}[name]||name)+'」，请点保存');
-  toast('预设已填入，请保存','ok');
-}
 async function selectCurrentFilter(){
   if(state.busy) return;
   const fl={all:'全部',healthy:'健康',banned:'隔离',disabled:'禁用',using_api:'API 模式','401':'401','402':'402','403':'403','429':'429'}[state.filter]||state.filter;
@@ -862,12 +845,12 @@ async function recheckSelected(){
   if(state.busy) return;
   const ids=[...state.selected];
   if(!ids.length){ setMessage('请先勾选凭证',true); setOpResult('请先勾选凭证','err'); return; }
-  if(!confirm('复检所选 '+ids.length+' 条？\n成功将释放隔离并启用；失败按策略处理。')) return;
+  if(!confirm('复检所选 '+ids.length+' 条？\n成功：释放隔离并可启用\n失败：按状态码动作（401/402/403/429）')) return;
   const chunkSize=5;
   try{
     setBusy(true,'复检所选');
     setProgress(0, ids.length, '复检所选');
-    let done=0, checked=0, okN=0, failed=0, unbanned=0, reenabled=0, skipped=0;
+    let done=0, checked=0, okN=0, failed=0, unbanned=0, reenabled=0, skipped=0, banned=0, disabled=0, deleted=0;
     const errs=[];
     for(let i=0;i<ids.length;i+=chunkSize){
       const part=ids.slice(i, i+chunkSize);
@@ -881,6 +864,9 @@ async function recheckSelected(){
         unbanned+=(r.unbanned||0);
         reenabled+=(r.reenabled||0);
         skipped+=(r.skipped||0);
+        banned+=(r.banned||0);
+        disabled+=(r.disabled||0);
+        deleted+=(r.deleted||0);
         if(Array.isArray(r.errors)){
           for(const e of r.errors){ if(errs.length<12) errs.push(String(e)); }
         }
@@ -891,7 +877,7 @@ async function recheckSelected(){
       done=Math.min(i+part.length, ids.length);
       setProgress(done, ids.length, '复检所选');
     }
-    const msg='复检完成 · 检 '+checked+' · 成功 '+okN+' · 失败 '+failed+' · 释放 '+unbanned+' · 启用 '+reenabled+' · 跳过 '+skipped;
+    const msg='复检完成 · 检 '+checked+' · 成功 '+okN+' · 失败 '+failed+' · 释放 '+unbanned+' · 启用 '+reenabled+' · 隔离 '+banned+' · 禁用 '+disabled+' · 删除 '+deleted+' · 跳过 '+skipped;
     const detail=msg+(errs.length?('\n'+errs.join('\n')):'');
     setMessage(msg);
     finishProgress(ids.length, ids.length, '复检完成');

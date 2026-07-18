@@ -39,6 +39,30 @@ func TestSetUsingAPIHostSaveAndVerify(t *testing.T) {
 	}
 }
 
+func TestApplyUsingAPIOff(t *testing.T) {
+	stub := &host.Stub{
+		Files: []pluginapi.HostAuthFileEntry{{ID: "a1", AuthIndex: "1", Name: "xai-1.json", Provider: "xai"}},
+		JSONBy: map[string]json.RawMessage{
+			"1": json.RawMessage(`{"access_token":"tok","using_api":true}`),
+		},
+	}
+	eng := NewEngine(config.Default(), &ban.State{}, audit.New(10), stub, nil)
+	if err := eng.ApplyAction("a1", UsingAPIOff, "manual", ban.Entry{}, true); err != nil {
+		t.Fatal(err)
+	}
+	got, err := stub.AuthGet("1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal(got.JSON, &obj); err != nil {
+		t.Fatal(err)
+	}
+	if obj["using_api"] != false {
+		t.Fatalf("want using_api=false got %#v", obj["using_api"])
+	}
+}
+
 func TestSoft403StreakSnapshot(t *testing.T) {
 	cfg := config.Default()
 	cfg.FailStreak403 = 3

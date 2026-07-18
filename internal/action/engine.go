@@ -313,17 +313,7 @@ func (e *Engine) ApplyFailure(authID, source string, entry ban.Entry, force bool
 			entry.StatusCode)
 		return nil
 	}
-	// Probe/recheck 402 / free-usage is often wrong for brand-new or chat-capable accounts.
-	// Only real usage failures should isolate quota; probe just records the result.
-	if !force && probeLikeSource(source) && (entry.StatusCode == http.StatusPaymentRequired ||
-		entry.Classification == classify.QuotaExhausted ||
-		strings.Contains(strings.ToLower(entry.Reason), "free usage") ||
-		strings.Contains(strings.ToLower(entry.Reason), "402")) {
-		e.audit.Add(source, authID, action, "skipped_probe_402",
-			"probe 402/free-usage not isolating; wait for real usage failure", entry.StatusCode)
-		return nil
-	}
-	// Soft 403 / permission-denied: require consecutive failures (xAI often recovers next try).
+	// Soft 403 / permission-denied: optional consecutive failures (default fail_streak_403=1 → once).
 	if !force && soft403NeedsStreak(entry) {
 		n, need, ok := e.bumpSoft403Streak(authID, entry.StatusCode, cfg.FailStreak403, cfg.FailStreakWindowSeconds)
 		if !ok {
@@ -419,7 +409,7 @@ func (e *Engine) Soft403Need() int {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.cfg.FailStreak403 <= 0 {
-		return 3
+		return 1
 	}
 	return e.cfg.FailStreak403
 }
@@ -479,6 +469,15 @@ func (e *Engine) ApplyAction(authID, action, source string, entry ban.Entry, for
 		}
 		e.markCooldown(cooldownKeyID, UsingAPI)
 		e.audit.Add(source, authID, UsingAPI, "ok", "using_api=true", 0)
+		e.notifyChanged()
+		return nil
+	case UsingAPIOff, "disable_api", "disable_api_mode", "using_api_false":
+		if err := e.SetUsingAPI(authID, false); err != nil {
+			e.audit.Add(source, authID, UsingAPIOff, "error", err.Error(), entry.StatusCode)
+			return err
+		}
+		e.markCooldown(cooldownKeyID, UsingAPIOff)
+		e.audit.Add(source, authID, UsingAPIOff, "ok", "using_api=false", 0)
 		e.notifyChanged()
 		return nil
 	case SuccessReenable:

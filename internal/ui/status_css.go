@@ -23,8 +23,6 @@ h1{margin:6px 0 0;font-size:24px;font-weight:800;letter-spacing:-.03em;line-heig
 .phd .count{font-variant-numeric:tabular-nums;font-weight:750;color:#cbd5e1}
 .hint{color:var(--muted);font-size:12px;line-height:1.4}
 .drawer-hint{margin:0 0 10px;line-height:1.45}
-.preset-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px}
-.preset-row button{flex:1;min-width:72px}
 .cfg-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;padding:12px 14px}
 .cfg-card{background:rgba(7,12,22,.55);border:1px solid var(--line);border-radius:10px;padding:10px 12px;min-height:52px}
 .cfg-card.accent{border-color:rgba(59,130,246,.4);box-shadow:0 0 0 1px rgba(59,130,246,.1) inset}
