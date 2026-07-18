@@ -441,14 +441,17 @@ func (e *Engine) ApplyAction(authID, action, source string, entry ban.Entry, for
 		e.notifyChanged()
 		return nil
 	case Disable:
+		// Disable = CPA 开关关闭 only. Do NOT write isolation ledger:
+		// status-code chips / 隔离 count are for ban-only; 403→disable must not inflate 隔离.
 		if err := e.SetDisabled(authID, true, fmt.Sprintf("xai-autoban:%s", entry.Reason)); err != nil {
 			e.audit.Add(source, authID, Disable, "error", err.Error(), entry.StatusCode)
 			return err
 		}
-		entry.Action = Disable
-		entry.Source = source
-		entry.AuthID = authID
-		e.bans.Set(authID, entry)
+		// Drop any prior isolation so recovery is purely reenable (probe success policy).
+		_ = e.bans.Clear(authID)
+		if entry.Email != "" {
+			_ = e.bans.Clear(entry.Email)
+		}
 		e.markCooldown(cooldownKeyID, action)
 		e.audit.Add(source, authID, Disable, "ok", entry.Reason, entry.StatusCode)
 		e.notifyChanged()

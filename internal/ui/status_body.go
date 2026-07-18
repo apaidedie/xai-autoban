@@ -74,8 +74,9 @@ const statusBodyTemplate = `
         <span class="k">禁用</span><span>CPA 凭证开关关闭；与隔离独立</span>
         <span class="k">释放 / 启用</span><span>释放=清隔离账本 · 启用=打开 CPA 开关</span>
         <span class="k">巡检 / 复检</span><span>巡检=全量 · 复检=勾选；失败均按状态码动作（需自动执行）</span>
-        <span class="k">401–429</span><span>仅统计<strong>隔离账本</strong>内状态码，不是全量探测分布</span>
-        <span class="k">401/402/403</span><span>默认出现一次即按状态码动作；软 403 连击由 fail_streak_403 控制（默认 1）</span>
+        <span class="k">401–429</span><span>仅统计<strong>隔离账本</strong>内状态码（动作=隔离时）；禁用/删除不进隔离账本</span>
+        <span class="k">隔离 vs 禁用</span><span>隔离=插件账本跳过调度 · 禁用=关 CPA 开关；403 设禁用时只禁用、不隔离</span>
+        <span class="k">401/402/403</span><span>默认出现一次即按状态码动作；成功策略「启用」可在复检/巡检成功后打开开关</span>
         <span class="k">真实流量</span><span>调用成功会释放隔离，并在 30 分钟内跳过巡检</span>
       </div>
     </div>

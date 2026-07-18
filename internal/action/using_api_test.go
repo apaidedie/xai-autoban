@@ -63,6 +63,43 @@ func TestApplyUsingAPIOff(t *testing.T) {
 	}
 }
 
+func TestDisableDoesNotWriteBanLedger(t *testing.T) {
+	stub := &host.Stub{
+		Files: []pluginapi.HostAuthFileEntry{
+			{ID: "d1", AuthIndex: "1", Name: "xai-d1.json", Provider: "xai", Disabled: true},
+		},
+		JSONBy: map[string]json.RawMessage{
+			"1": json.RawMessage(`{"access_token":"t"}`),
+		},
+		HTTPFn: func(req pluginapi.HTTPRequest) (pluginapi.HTTPResponse, error) {
+			return pluginapi.HTTPResponse{StatusCode: 200, Body: []byte(`{}`)}, nil
+		},
+	}
+	cfg := config.Default()
+	cfg.DisableVia = DisableViaManagementAPI
+	cfg.ManagementURL = "http://127.0.0.1:8317"
+	cfg.ManagementKey = "k"
+	cfg.ActionCooldownSeconds = 0
+	bans := &ban.State{}
+	now := time.Now()
+	bans.Set("d1", ban.Entry{StatusCode: 403, ResetAt: now.Add(time.Hour), AuthID: "d1"})
+	eng := NewEngine(cfg, bans, audit.New(10), stub, nil)
+	eng.SetManagementHTTP(HostHTTPDoer(stub))
+	if err := eng.ApplyAction("d1", Disable, "test", ban.Entry{StatusCode: 403, Reason: "forbidden", ResetAt: now.Add(time.Hour)}, true); err != nil {
+		t.Fatal(err)
+	}
+	if bans.Active("d1", time.Now()) {
+		t.Fatal("disable must not keep isolation ledger entry")
+	}
+	// ban-only still isolates
+	if err := eng.ApplyAction("d1", Ban, "test", ban.Entry{StatusCode: 429, ResetAt: now.Add(time.Hour)}, true); err != nil {
+		t.Fatal(err)
+	}
+	if !bans.Active("d1", time.Now()) {
+		t.Fatal("ban should isolate")
+	}
+}
+
 func TestSoft403StreakSnapshot(t *testing.T) {
 	cfg := config.Default()
 	cfg.FailStreak403 = 3
