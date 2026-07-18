@@ -295,20 +295,27 @@ function paintOverviewProbe(probe){
   if(!n) return;
   probe=probe||{};
   const ok=probe.last_ok, fail=probe.last_fail, err=probe.last_err, skip=probe.last_skip||0;
+  const skipU=probe.last_skip_usage_ok||0, skipP=probe.last_skip_probe_ok||0;
+  const cand=probe.only_disabled||probe.candidate_mode==='disabled_only'?'候选=已禁用':(probe.candidate_mode==='include_disabled'?'候选=含禁用':'候选=全部');
   const hasLast=probe.last_run && String(probe.last_run).indexOf('0001')!==0 && String(probe.last_run).length>4;
   if(probe.job_running){
     const done=probe.job_done||0, total=probe.job_total||0;
     n.textContent=(total>0?(done+'/'+total):'…');
-    if(sub) sub.textContent='进行中'+(probe.job_age_sec?(' · '+Math.floor(probe.job_age_sec/60)+'分'):'');
+    if(sub) sub.textContent=cand+' · 进行中'+(probe.job_age_sec?(' · '+Math.floor(probe.job_age_sec/60)+'分'):'');
     if(card) card.className='qcard warn';
     return;
   }
   if(hasLast){
     n.textContent=String((ok||0))+'/'+String((ok||0)+(fail||0));
-    const bits=[];
+    const bits=[cand];
     if(probe.next_run) bits.push('下次 '+formatDate(probe.next_run).replace(/^\d{4}\//,''));
     else if(probe.last_run) bits.push(formatDate(probe.last_run).replace(/^\d{4}\//,''));
-    if(skip>0) bits.push('跳过'+skip);
+    if(skip>0){
+      const parts=[];
+      if(skipU>0) parts.push('流量宽限'+skipU);
+      if(skipP>0) parts.push('近期成功'+skipP);
+      bits.push('跳过'+skip+(parts.length?('('+parts.join('+')+')'):''));
+    }
     if(err) bits.push(String(err).slice(0,24));
     if(probe.auto_execute===false) bits.push('只记录');
     if(probe.running===false && probe.enabled) bits.push('调度停');
@@ -320,18 +327,59 @@ function paintOverviewProbe(probe){
   if(probe.enabled){
     if(probe.running){
       const nr=probe.next_run?('下次 '+formatDate(probe.next_run).replace(/^\d{4}\//,'')):'约45秒内首次';
-      if(sub) sub.textContent='调度中 · '+nr;
+      if(sub) sub.textContent=cand+' · 调度中 · '+nr;
     }else{
-      if(sub) sub.textContent='已开 · 调度未启动';
+      if(sub) sub.textContent=cand+' · 已开 · 调度未启动';
     }
   }else{
     if(sub) sub.textContent='已关 · 点击开始';
   }
   if(card) card.className='qcard info';
 }
+function paintDisabledPool(dp){
+  dp=dp||{};
+  const t=$('ov_dp_total'), sub=$('ov_dp_sub');
+  if(t) t.textContent=String(dp.total??0);
+  if(sub){
+    const ok=dp.last_probe_ok??0, fail=dp.last_probe_fail??0, unk=dp.last_probe_unknown??0;
+    const avg=Number(dp.avg_hours_since_probe||0);
+    const avgS=avg>0?(avg<48?(avg.toFixed(1)+'h'):(Math.round(avg/24)+'d')):'—';
+    sub.textContent='成'+ok+' · 败'+fail+' · 未知'+unk+' · 均龄'+avgS;
+  }
+}
+function paintMgmtBanner(probe, settings){
+  const el=$('mgmtBanner'); if(!el) return;
+  const m=(probe&&probe.management)||{};
+  const hasKey=!!(m.has_key||(settings&&settings.management_key_configured));
+  const blocked=!!m.blocked;
+  const lastErr=String(m.last_error||'').trim();
+  if(blocked){
+    el.hidden=false;
+    el.textContent='Management 密钥暂时被拒：'+(lastErr||m.blocked_until||'请检查 remote-management 密钥与 management_url');
+    return;
+  }
+  if(!hasKey){
+    el.hidden=false;
+    el.textContent='未配置 Management 密钥：禁用/启用/删除可能失败。请在插件管理填写与 CPA remote-management 相同的密钥（勿用 cpamp_）。';
+    return;
+  }
+  if(lastErr && /invalid|401|403|denied|unauthorized|fail/i.test(lastErr)){
+    el.hidden=false;
+    el.textContent='Management 最近错误：'+lastErr.slice(0,160)+'（禁用/删除请核对密钥）';
+    return;
+  }
+  el.hidden=true;
+  el.textContent='';
+}
 function jumpOverview(kind){
   if(kind==='probe'){
     runProbe();
+    return;
+  }
+  if(kind==='disabled_pool'){
+    setFilter('disabled', false);
+    const list=document.querySelector('.card-list')||document.querySelector('.panel');
+    if(list) list.scrollIntoView({behavior:'smooth',block:'start'});
     return;
   }
   setFilter(kind||'all', false);
@@ -408,6 +456,8 @@ function fillDrawer(s){
   $('f_probe_timeout_seconds').value=s.probe_timeout_seconds??20;
   $('f_probe_concurrency').value=s.probe_concurrency??3;
   $('f_probe_qps').value=s.probe_qps??2;
+  if($('f_probe_disabled_concurrency')) $('f_probe_disabled_concurrency').value=s.probe_disabled_concurrency??8;
+  if($('f_probe_disabled_qps')) $('f_probe_disabled_qps').value=s.probe_disabled_qps??4;
   $('f_probe_mode').value=s.probe_mode||'responses_mini';
   if($('f_probe_include_disabled')) $('f_probe_include_disabled').checked=!!s.probe_include_disabled;
   if($('f_probe_only_disabled')) $('f_probe_only_disabled').checked=!!s.probe_only_disabled;
@@ -416,6 +466,9 @@ function fillDrawer(s){
   $('f_action_on_402').value=s.action_on_402||'ban';
   $('f_action_on_403').value=s.action_on_403||'ban';
   $('f_action_on_429').value=s.action_on_429||'ban';
+  if($('f_ban_402_seconds')) $('f_ban_402_seconds').value=s.ban_402_seconds??604800;
+  if($('f_ban_429_fallback_seconds')) $('f_ban_429_fallback_seconds').value=s.ban_429_fallback_seconds??1800;
+  if($('f_ban_403_seconds')) $('f_ban_403_seconds').value=s.ban_403_seconds??86400;
   $('f_action_cooldown_seconds').value=s.action_cooldown_seconds??60;
   state.success=s.probe_on_success||'unban';
   state.fail=s.probe_action||'ban';
@@ -439,6 +492,8 @@ function collectDraft(){
     probe_timeout_seconds: Number($('f_probe_timeout_seconds').value||0),
     probe_concurrency: Number($('f_probe_concurrency').value||0),
     probe_qps: Number($('f_probe_qps').value||0),
+    probe_disabled_concurrency: Number(($('f_probe_disabled_concurrency')&&$('f_probe_disabled_concurrency').value)||0),
+    probe_disabled_qps: Number(($('f_probe_disabled_qps')&&$('f_probe_disabled_qps').value)||0),
     probe_mode: $('f_probe_mode').value,
     probe_include_disabled: !!($('f_probe_include_disabled')&&$('f_probe_include_disabled').checked),
     probe_only_disabled: !!($('f_probe_only_disabled')&&$('f_probe_only_disabled').checked),
@@ -451,6 +506,9 @@ function collectDraft(){
     action_on_402: $('f_action_on_402').value,
     action_on_403: $('f_action_on_403').value,
     action_on_429: $('f_action_on_429').value,
+    ban_402_seconds: Number(($('f_ban_402_seconds')&&$('f_ban_402_seconds').value)||604800),
+    ban_429_fallback_seconds: Number(($('f_ban_429_fallback_seconds')&&$('f_ban_429_fallback_seconds').value)||1800),
+    ban_403_seconds: Number(($('f_ban_403_seconds')&&$('f_ban_403_seconds').value)||86400),
     action_cooldown_seconds: Number($('f_action_cooldown_seconds').value||0),
     fail_streak_403: Number((state.settings&&state.settings.fail_streak_403)||1)
   };
@@ -486,8 +544,12 @@ async function saveSettings(){
     const bad=settingsMismatch(draft, res.settings);
     if(bad) throw new Error('保存后校验失败：'+bad);
     renderSettingsSummary(res.settings);
-    setMessage('配置已保存'+(res.note?(' · '+res.note):'')+(res.applied!=null?(' · '+res.applied+' 项'):''));
-    toast('配置已保存','ok');
+    let msg='配置已保存'+(res.note?(' · '+res.note):'')+(res.applied!=null?(' · '+res.applied+' 项'):'');
+    if(Array.isArray(res.hints)&&res.hints.length){
+      msg+='\n'+res.hints.join('\n');
+      toast(res.hints[0],'ok');
+    }else toast('配置已保存','ok');
+    setMessage(msg);
     closeDrawer();
     await loadData(true);
   }catch(e){ setMessage(e.message,true); toast(e.message,'err'); }
@@ -502,6 +564,8 @@ async function loadData(silent=false){
     if(data.page) state.page=Object.assign({page:1,page_size:50,total:0,pages:1}, data.page);
     if(data.settings) renderSettingsSummary(data.settings);
     if(data.probe){ paintOverviewProbe(data.probe); if(data.probe.history) renderHistory(data.probe.history); }
+    paintDisabledPool(data.disabled_pool);
+    paintMgmtBanner(data.probe, data.settings);
     for(const id of [...state.selected]) if(!state.credentials.some(x=>x.auth_id===id)&&!state.bans.some(x=>x.auth_id===id)) state.selected.delete(id);
     const c=counts();
     if($('total')) $('total').textContent=String(data.count||0);
@@ -513,6 +577,19 @@ async function loadData(silent=false){
     setMessage('已刷新 · '+new Date().toLocaleTimeString('zh-CN',{hour12:false}));
     render();
   }catch(e){ $('syncState').textContent='异常'; $('syncState').className='live err'; setMessage(e.message,true); toast(e.message,'err'); }
+}
+async function clearResidual403(){
+  if(state.busy) return;
+  if(!confirm('清除「已禁用」凭证上残留的 403 隔离账本？\\n不影响 CPA 禁用状态。')) return;
+  try{
+    setBusy(true,'清除 403 残留');
+    const res=await apiOps('clear_residual_403',{});
+    const n=res.cleared||0;
+    setMessage('已清除 '+n+' 条禁用上的 403 残留隔离'+(res.note?(' · '+res.note):''));
+    toast('清除完成 · '+n,'ok');
+    await loadData(true);
+  }catch(e){ setMessage(e.message,true); toast(e.message,'err'); }
+  finally{ setBusy(false); }
 }
 // One primary badge: 健康 | 禁用 | 隔离 | 401/402/403/429
 function primaryStatus(c){

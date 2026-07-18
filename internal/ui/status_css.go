@@ -204,7 +204,7 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
   .rcard{grid-template-columns:28px 1fr auto;grid-template-areas:"ck acc ops" "mid mid mid";row-gap:6px}
   .rcard .ck{grid-area:ck}.rcard .acc{grid-area:acc}.rcard .mid{grid-area:mid}.rcard .ops{grid-area:ops;justify-self:end}
 }
-.qcards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:0 0 10px}
+.qcards{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin:0 0 10px}
 .code-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:0}
 @media(max-width:900px){.code-strip{grid-template-columns:1fr 1fr}}
 @media(max-width:700px){.code-strip{grid-template-columns:1fr 1fr}}

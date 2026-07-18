@@ -184,12 +184,12 @@ func (p *Service) RecheckSelected(authIDs []string, reenableOnOK bool) (RecheckS
 	}
 	byKey := indexAuthFiles(files)
 
-	sem := make(chan struct{}, max(1, cfg.ProbeConcurrency))
+	sem := make(chan struct{}, max(1, cfg.EffectiveProbeConcurrency()))
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	minInterval := time.Duration(0)
-	if cfg.ProbeQPS > 0 {
-		minInterval = time.Duration(float64(time.Second) / cfg.ProbeQPS)
+	if qps := cfg.EffectiveProbeQPS(); qps > 0 {
+		minInterval = time.Duration(float64(time.Second) / qps)
 	}
 	var lastStart time.Time
 

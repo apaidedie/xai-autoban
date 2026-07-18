@@ -56,6 +56,10 @@ type PluginConfig struct {
 	ProbeIncludeDisabled bool `yaml:"probe_include_disabled"`
 	// ProbeOnlyDisabled: only disabled creds (implies include).
 	ProbeOnlyDisabled bool `yaml:"probe_only_disabled"`
+	// ProbeDisabledConcurrency/QPS: used when ProbeOnlyDisabled (smaller pool, can be more aggressive).
+	// 0 = fall back to ProbeConcurrency / ProbeQPS.
+	ProbeDisabledConcurrency int     `yaml:"probe_disabled_concurrency"`
+	ProbeDisabledQPS         float64 `yaml:"probe_disabled_qps"`
 	// AutoExecute mirrors CPA-Manager-Plus Codex inspection:
 	// false = report-only (只输出结果), true = apply probe_action / probe_on_success.
 	AutoExecute           bool `yaml:"auto_execute"`
@@ -94,14 +98,16 @@ func Default() PluginConfig {
 		ProbeEnabled:            true,
 		ProbeIntervalSeconds:    600,
 		ProbeTimeoutSeconds:     20,
-		ProbeConcurrency:        3,
-		ProbeQPS:                2,
-		ProbeMode:               "responses_mini",
-		ProbeBaseURL:            "",
-		ProbePath:               "/models",
-		ProbeAction:             actionBan,
-		ProbeOnSuccess:          successUnban,
-		AutoExecute:             true,
+		ProbeConcurrency:         3,
+		ProbeQPS:                 2,
+		ProbeDisabledConcurrency: 8,
+		ProbeDisabledQPS:         4,
+		ProbeMode:                "responses_mini",
+		ProbeBaseURL:             "",
+		ProbePath:                "/models",
+		ProbeAction:              actionBan,
+		ProbeOnSuccess:           successUnban,
+		AutoExecute:              true,
 		ActionCooldownSeconds:   60,
 		FailStreak403:           1, // 401/402/403：出现一次即按状态码动作（软 403 连击默认关）
 		FailStreakWindowSeconds: 1800,
@@ -161,6 +167,12 @@ func Normalize(cfg PluginConfig) (PluginConfig, []string) {
 	}
 	if cfg.ProbeQPS <= 0 {
 		cfg.ProbeQPS = def.ProbeQPS
+	}
+	if cfg.ProbeDisabledConcurrency < 0 {
+		cfg.ProbeDisabledConcurrency = 0
+	}
+	if cfg.ProbeDisabledQPS < 0 {
+		cfg.ProbeDisabledQPS = 0
 	}
 	if cfg.ActionCooldownSeconds < 0 {
 		cfg.ActionCooldownSeconds = def.ActionCooldownSeconds
@@ -267,6 +279,28 @@ func normalizeAutoUsingAPI(value, fallback string, warnings *[]string) string {
 	}
 }
 
+// EffectiveProbeConcurrency returns concurrency for a probe run.
+func (c PluginConfig) EffectiveProbeConcurrency() int {
+	if c.ProbeOnlyDisabled && c.ProbeDisabledConcurrency > 0 {
+		return c.ProbeDisabledConcurrency
+	}
+	if c.ProbeConcurrency > 0 {
+		return c.ProbeConcurrency
+	}
+	return 3
+}
+
+// EffectiveProbeQPS returns QPS for a probe run.
+func (c PluginConfig) EffectiveProbeQPS() float64 {
+	if c.ProbeOnlyDisabled && c.ProbeDisabledQPS > 0 {
+		return c.ProbeDisabledQPS
+	}
+	if c.ProbeQPS > 0 {
+		return c.ProbeQPS
+	}
+	return 2
+}
+
 func (c PluginConfig) DurationForStatus(status int) time.Duration {
 	switch status {
 	case 401:
@@ -312,6 +346,8 @@ func (c PluginConfig) PublicView() map[string]any {
 		"probe_timeout_seconds":                    c.ProbeTimeoutSeconds,
 		"probe_concurrency":                        c.ProbeConcurrency,
 		"probe_qps":                                c.ProbeQPS,
+		"probe_disabled_concurrency":               c.ProbeDisabledConcurrency,
+		"probe_disabled_qps":                       c.ProbeDisabledQPS,
 		"probe_mode":                               c.ProbeMode,
 		"probe_base_url":                           c.ProbeBaseURL,
 		"probe_path":                               c.ProbePath,
@@ -367,7 +403,8 @@ var OpsSettingsKeys = []string{
 	"ban_401_seconds", "ban_402_seconds", "ban_403_seconds", "ban_429_fallback_seconds",
 	"action_on_401", "action_on_402", "action_on_403", "action_on_429",
 	"probe_enabled", "probe_interval_seconds", "probe_timeout_seconds",
-	"probe_concurrency", "probe_qps", "probe_mode", "probe_base_url", "probe_path",
+	"probe_concurrency", "probe_qps", "probe_disabled_concurrency", "probe_disabled_qps",
+	"probe_mode", "probe_base_url", "probe_path",
 	"probe_action", "probe_on_success", "probe_include_disabled", "probe_only_disabled",
 	"auto_execute", "action_cooldown_seconds", "fail_streak_403", "fail_streak_window_seconds",
 	"auto_using_api", "delete_fallback", "scheduler_delegate", "audit_max_events",
@@ -408,10 +445,11 @@ func CoerceOpsPatch(patch map[string]any) map[string]any {
 	intKeys := map[string]struct{}{
 		"ban_401_seconds": {}, "ban_402_seconds": {}, "ban_403_seconds": {}, "ban_429_fallback_seconds": {},
 		"probe_interval_seconds": {}, "probe_timeout_seconds": {}, "probe_concurrency": {},
+		"probe_disabled_concurrency": {},
 		"action_cooldown_seconds": {}, "fail_streak_403": {}, "fail_streak_window_seconds": {},
 		"audit_max_events": {},
 	}
-	floatKeys := map[string]struct{}{"probe_qps": {}}
+	floatKeys := map[string]struct{}{"probe_qps": {}, "probe_disabled_qps": {}}
 	out := make(map[string]any, len(patch))
 	for k, v := range patch {
 		if v == nil {

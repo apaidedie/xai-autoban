@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -141,9 +142,21 @@ func (p *Persister) SaveNow() error {
 		return nil
 	}
 	now := time.Now()
-	snapshot := p.bans.Snapshot(now)
-	st := persistedState{Version: stateVersion, Bans: snapshot, Settings: settings}
-	raw, err := json.MarshalIndent(st, "", "  ")
+	snapshot := p.bans.Snapshot(now) // already drops expired bans
+	// Compact settings (drop nil / empty string noise).
+	cleanSettings := map[string]any{}
+	for k, v := range settings {
+		if v == nil {
+			continue
+		}
+		if s, ok := v.(string); ok && strings.TrimSpace(s) == "" {
+			continue
+		}
+		cleanSettings[k] = v
+	}
+	st := persistedState{Version: stateVersion, Bans: snapshot, Settings: cleanSettings}
+	// Compact JSON (no indent) to limit state file growth on large fleets.
+	raw, err := json.Marshal(st)
 	if err != nil {
 		return err
 	}

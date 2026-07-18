@@ -43,6 +43,8 @@ type Engine struct {
 	host      host.Client
 	mgmt      *managementDisabler
 	onChanged func()
+	// lastReconcileAt throttles ReconcileDisabledExclusive (status path).
+	lastReconcileAt time.Time
 	// requestMgmtKey is set per Management API request (Bearer from ops console).
 	requestMgmtKey string
 	// onProbeMemo updates last probe result display (wired to probe.Service).
@@ -838,13 +840,24 @@ func (e *Engine) hostCredentialDisabled(authID string) bool {
 	return false
 }
 
+const reconcileMinInterval = 5 * time.Minute
+
 // ReconcileDisabledExclusive ensures disabled credentials never keep isolation ledger rows.
-// Returns how many ban rows were cleared. Call after state load / on ops status refresh.
+// force=true bypasses throttle (startup / settings save). Status path should use force=false.
 func (e *Engine) ReconcileDisabledExclusive() int {
+	return e.ReconcileDisabledExclusiveThrottled(true)
+}
+
+// ReconcileDisabledExclusiveThrottled runs reconcile; when force=false, at most once per 5 minutes.
+func (e *Engine) ReconcileDisabledExclusiveThrottled(force bool) int {
 	if e == nil || e.bans == nil {
 		return 0
 	}
 	e.mu.Lock()
+	if !force && !e.lastReconcileAt.IsZero() && time.Since(e.lastReconcileAt) < reconcileMinInterval {
+		e.mu.Unlock()
+		return 0
+	}
 	h := e.host
 	e.mu.Unlock()
 	if h == nil {
@@ -876,12 +889,70 @@ func (e *Engine) ReconcileDisabledExclusive() int {
 		}
 		cleared++
 	}
+	e.mu.Lock()
+	e.lastReconcileAt = time.Now()
+	e.mu.Unlock()
 	if cleared > 0 {
 		e.audit.Add("system", "", "reconcile", "ok", fmt.Sprintf("cleared isolation for %d disabled credentials", cleared), 0)
 		e.notifyChanged()
 		slog.Info("xai-autoban: disabled exclusive — cleared isolation", "count", cleared)
 	}
 	return cleared
+}
+
+// ClearResidual403OnDisabled removes ban-ledger rows with status 403 whose credential is currently disabled.
+func (e *Engine) ClearResidual403OnDisabled() (int, error) {
+	if e == nil || e.bans == nil {
+		return 0, fmt.Errorf("engine unavailable")
+	}
+	e.mu.Lock()
+	h := e.host
+	e.mu.Unlock()
+	if h == nil {
+		return 0, fmt.Errorf("host unavailable")
+	}
+	files, err := h.AuthList()
+	if err != nil {
+		return 0, err
+	}
+	disabled := map[string]struct{}{}
+	for _, f := range files {
+		if !f.Disabled || !xai.IsAuth(f) {
+			continue
+		}
+		for _, id := range []string{xai.AuthKey(f), f.ID, f.Name, strings.ToLower(strings.TrimSpace(f.Email))} {
+			if id != "" {
+				disabled[id] = struct{}{}
+			}
+		}
+	}
+	snap := e.bans.Snapshot(time.Now())
+	cleared := 0
+	for id, ent := range snap {
+		if ent.StatusCode != http.StatusForbidden {
+			continue
+		}
+		match := false
+		if _, ok := disabled[id]; ok {
+			match = true
+		}
+		if !match && ent.Email != "" {
+			if _, ok := disabled[strings.ToLower(ent.Email)]; ok {
+				match = true
+			}
+		}
+		if !match {
+			continue
+		}
+		if e.bans.Clear(id) {
+			cleared++
+		}
+	}
+	if cleared > 0 {
+		e.audit.Add("manual", "", "unban", "ok", fmt.Sprintf("cleared residual 403 isolation on disabled: %d", cleared), 403)
+		e.notifyChanged()
+	}
+	return cleared, nil
 }
 
 func (e *Engine) SetDisabled(authID string, disabled bool, note string) error {

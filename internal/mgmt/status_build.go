@@ -17,16 +17,17 @@ import (
 )
 
 type StatusInfo struct {
-	Plugin      string             `json:"plugin"`
-	Version     string             `json:"version"`
-	Count       int                `json:"count"`
-	Bans        []BanInfo          `json:"bans"`
-	Credentials []creds.Info       `json:"credentials,omitempty"`
-	Counts      creds.StatusCounts `json:"counts"`
-	Page        creds.PageMeta     `json:"page"`
-	Probe       map[string]any     `json:"probe,omitempty"`
-	Settings    map[string]any     `json:"settings,omitempty"`
-	Audit       []audit.Event      `json:"audit,omitempty"`
+	Plugin       string             `json:"plugin"`
+	Version      string             `json:"version"`
+	Count        int                `json:"count"`
+	Bans         []BanInfo          `json:"bans"`
+	Credentials  []creds.Info       `json:"credentials,omitempty"`
+	Counts       creds.StatusCounts `json:"counts"`
+	Page         creds.PageMeta     `json:"page"`
+	Probe        map[string]any     `json:"probe,omitempty"`
+	Settings     map[string]any     `json:"settings,omitempty"`
+	Audit        []audit.Event      `json:"audit,omitempty"`
+	DisabledPool map[string]any     `json:"disabled_pool,omitempty"`
 }
 
 type BanInfo struct {
@@ -73,9 +74,9 @@ func (h *Handler) CurrentStatusPaged(query url.Values) StatusInfo {
 	sort.Slice(items, func(i, j int) bool { return items[i].ResetAt < items[j].ResetAt })
 
 	files, _ := collectXAIAuthFiles(h.Host)
-	// Keep disabled-only: drop residual isolation on disabled credentials (ops view).
+	// Throttled reconcile (startup/settings use force=true elsewhere).
 	if h.Engine != nil {
-		if n := h.Engine.ReconcileDisabledExclusive(); n > 0 && h.Persist != nil {
+		if n := h.Engine.ReconcileDisabledExclusiveThrottled(false); n > 0 && h.Persist != nil {
 			h.Persist.ScheduleSave()
 		}
 	}
@@ -126,16 +127,17 @@ func (h *Handler) CurrentStatusPaged(query url.Values) StatusInfo {
 		settings["state_file_resolved"] = h.Persist.Path()
 	}
 	st := StatusInfo{
-		Plugin:      h.Name,
-		Version:     h.Version,
-		Count:       len(items),
-		Bans:        items,
-		Credentials: pageCreds,
-		Counts:      counts,
-		Page:        page,
-		Probe:       h.Probe.Status(),
-		Settings:    settings,
-		Audit:       h.Audit.List(),
+		Plugin:       h.Name,
+		Version:      h.Version,
+		Count:        len(items),
+		Bans:         items,
+		Credentials:  pageCreds,
+		Counts:       counts,
+		Page:         page,
+		Probe:        h.Probe.Status(),
+		Settings:     settings,
+		Audit:        h.Audit.List(),
+		DisabledPool: buildDisabledPool(files, probeLast, now),
 	}
 	if h.Engine != nil {
 		if st.Probe == nil {
@@ -144,6 +146,47 @@ func (h *Handler) CurrentStatusPaged(query url.Values) StatusInfo {
 		st.Probe["management"] = h.Engine.ManagementStatus()
 	}
 	return st
+}
+
+// buildDisabledPool summarizes CPA-disabled credentials for recovery ops.
+func buildDisabledPool(files []pluginapi.HostAuthFileEntry, probeLast map[string]creds.ProbeResult, now time.Time) map[string]any {
+	total, okN, failN, unk := 0, 0, 0, 0
+	var ages []float64
+	for _, f := range files {
+		if !f.Disabled || !xai.IsAuth(f) {
+			continue
+		}
+		total++
+		key := xai.AuthKey(f)
+		pr, has := probeLast[key]
+		if !has {
+			unk++
+			continue
+		}
+		if pr.OK {
+			okN++
+		} else {
+			failN++
+		}
+		if !pr.At.IsZero() {
+			ages = append(ages, now.Sub(pr.At).Hours())
+		}
+	}
+	avgH := 0.0
+	if len(ages) > 0 {
+		sum := 0.0
+		for _, a := range ages {
+			sum += a
+		}
+		avgH = sum / float64(len(ages))
+	}
+	return map[string]any{
+		"total":                 total,
+		"last_probe_ok":         okN,
+		"last_probe_fail":       failN,
+		"last_probe_unknown":    unk,
+		"avg_hours_since_probe": avgH,
+	}
 }
 
 func pageQueryFromValues(q url.Values) creds.PageQuery {

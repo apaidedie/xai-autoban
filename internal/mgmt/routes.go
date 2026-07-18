@@ -666,6 +666,8 @@ func (h *Handler) handleResourceAPI(req pluginapi.ManagementRequest) pluginapi.M
 		return jsonResponse(http.StatusOK, map[string]any{"ok": true, "bulk": h.Probe.BulkStatus()})
 	case "export":
 		return h.exportInspectList(body, q)
+	case "clear_residual_403", "clear-residual-403", "clear_403_disabled":
+		return h.clearResidual403Disabled(req)
 	default:
 		return jsonResponse(http.StatusBadRequest, map[string]any{"error": "unknown_op", "op": op})
 	}
@@ -736,7 +738,7 @@ func (h *Handler) startBulkAction(body map[string]any, req pluginapi.ManagementR
 	return jsonResponse(http.StatusOK, map[string]any{"ok": true, "accepted": true, "total": len(ids), "action": act})
 }
 
-// exportInspectList exports reauth / pending_delete lists for cpa-auth-inspect workflows.
+// exportInspectList exports reauth / pending_delete / disabled lists for cpa-auth-inspect workflows.
 func (h *Handler) exportInspectList(body map[string]any, q url.Values) pluginapi.ManagementResponse {
 	kind := strings.ToLower(strings.TrimSpace(firstNonEmpty(fmt.Sprint(body["kind"]), q.Get("kind"), "reauth")))
 	if kind == "<nil>" {
@@ -746,12 +748,13 @@ func (h *Handler) exportInspectList(body map[string]any, q url.Values) pluginapi
 	files, _ := collectXAIAuthFiles(h.Host)
 	snap := h.Bans.Snapshot(now)
 	type row struct {
-		AuthID  string `json:"auth_id"`
-		Email   string `json:"email,omitempty"`
-		Name    string `json:"name,omitempty"`
-		Reason  string `json:"reason,omitempty"`
-		Code    int    `json:"status_code,omitempty"`
-		Pending bool   `json:"pending_delete,omitempty"`
+		AuthID   string `json:"auth_id"`
+		Email    string `json:"email,omitempty"`
+		Name     string `json:"name,omitempty"`
+		Reason   string `json:"reason,omitempty"`
+		Code     int    `json:"status_code,omitempty"`
+		Pending  bool   `json:"pending_delete,omitempty"`
+		Disabled bool   `json:"disabled,omitempty"`
 	}
 	out := make([]row, 0)
 	for _, f := range files {
@@ -763,13 +766,23 @@ func (h *Handler) exportInspectList(body map[string]any, q url.Values) pluginapi
 		switch kind {
 		case "pending_delete", "pending-delete", "delete":
 			if ok && entry.PendingDelete {
-				out = append(out, row{AuthID: key, Email: f.Email, Name: f.Name, Reason: entry.Reason, Code: entry.StatusCode, Pending: true})
+				out = append(out, row{AuthID: key, Email: f.Email, Name: f.Name, Reason: entry.Reason, Code: entry.StatusCode, Pending: true, Disabled: f.Disabled})
+			}
+		case "disabled", "disabled_pool", "disable":
+			if f.Disabled {
+				r := row{AuthID: key, Email: f.Email, Name: f.Name, Disabled: true}
+				if ok {
+					r.Reason = entry.Reason
+					r.Code = entry.StatusCode
+					r.Pending = entry.PendingDelete
+				}
+				out = append(out, r)
 			}
 		default: // reauth
 			if ok && (entry.StatusCode == 401 || entry.Classification == "reauth" ||
 				strings.Contains(strings.ToLower(entry.Reason), "token") ||
 				strings.Contains(strings.ToLower(entry.Reason), "unauthorized")) {
-				out = append(out, row{AuthID: key, Email: f.Email, Name: f.Name, Reason: entry.Reason, Code: entry.StatusCode})
+				out = append(out, row{AuthID: key, Email: f.Email, Name: f.Name, Reason: entry.Reason, Code: entry.StatusCode, Disabled: f.Disabled})
 			}
 		}
 	}
@@ -778,9 +791,33 @@ func (h *Handler) exportInspectList(body map[string]any, q url.Values) pluginapi
 		"kind":    kind,
 		"count":   len(out),
 		"items":   out,
-		"note":    "for cpa-auth-inspect / manual reauth workflows",
+		"note":    "for cpa-auth-inspect / manual reauth / disabled-pool workflows",
 		"plugin":  h.Name,
 		"version": h.Version,
+	})
+}
+
+func (h *Handler) clearResidual403Disabled(req pluginapi.ManagementRequest) pluginapi.ManagementResponse {
+	if h.Engine == nil {
+		return jsonResponse(http.StatusBadGateway, map[string]any{"error": "engine_unavailable"})
+	}
+	if k := extractBearer(req.Headers); k != "" {
+		h.Engine.SetRequestManagementKey(k)
+		defer h.Engine.ClearRequestManagementKey()
+	}
+	n, err := h.Engine.ClearResidual403OnDisabled()
+	if err != nil {
+		return jsonResponse(http.StatusBadGateway, map[string]any{"error": err.Error()})
+	}
+	if h.Persist != nil {
+		h.Persist.ScheduleSave()
+		_ = h.Persist.SaveNow()
+	}
+	return jsonResponse(http.StatusOK, map[string]any{
+		"ok":      true,
+		"cleared": n,
+		"note":    "已清除：禁用凭证上的残留 403 隔离账本",
+		"status":  h.CurrentStatus(),
 	})
 }
 
@@ -901,6 +938,19 @@ func (h *Handler) updateSettings(raw []byte) pluginapi.ManagementResponse {
 		_ = h.Persist.SaveNow()
 	}
 	h.Audit.Add("manual", "", "settings", "ok", fmt.Sprintf("ops settings applied=%d", len(clean)), 0)
+	if h.Engine != nil {
+		_ = h.Engine.ReconcileDisabledExclusiveThrottled(true)
+	}
+	// Soft hint: only_disabled + 402/429 ban is fine (ban auto-expires) but worth noting.
+	hints := []string{}
+	if got.ProbeOnlyDisabled {
+		if strings.EqualFold(got.ActionOn402, "ban") || strings.EqualFold(got.ActionOn429, "ban") {
+			hints = append(hints, "已勾选「仅巡检已禁用」：402/429 隔离靠到期自动释放，不必进禁用巡检池（设计自洽）。")
+		}
+		if strings.EqualFold(got.ActionOn403, "disable") {
+			hints = append(hints, "403→禁用 + 仅巡检已禁用 + 成功「释放并启用」：适合禁用池恢复。")
+		}
+	}
 	statePath := ""
 	if h.Persist != nil {
 		statePath = h.Persist.Path()
@@ -917,12 +967,13 @@ func (h *Handler) updateSettings(raw []byte) pluginapi.ManagementResponse {
 		view["state_file_resolved"] = statePath
 	}
 	return jsonResponse(http.StatusOK, map[string]any{
-		"ok":       true,
-		"settings": view,
-		"applied":  len(clean),
-		"keys":     mapKeys(clean),
-		"warnings": warnings,
-		"note":     note,
+		"ok":         true,
+		"settings":   view,
+		"applied":    len(clean),
+		"keys":       mapKeys(clean),
+		"warnings":   warnings,
+		"hints":      hints,
+		"note":       note,
 		"state_file": statePath,
 	})
 }

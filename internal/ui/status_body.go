@@ -16,6 +16,7 @@ const statusBodyTemplate = `
       <button class="bs" id="openConfigBtn" type="button" title="编辑巡检与策略">配置</button>
     </div>
   </header>
+  <div class="banner warn" id="mgmtBanner" hidden role="alert"></div>
 
   <section class="panel">
     <div class="phd">
@@ -47,7 +48,10 @@ const statusBodyTemplate = `
     <button type="button" class="qcard disabled-card" data-jump="disabled" data-filter="disabled" title="CPA 开关关闭；禁用后不写隔离，直到巡检成功启用。">
       <div class="ql">禁用</div><div class="qn" id="c_disabled">0</div><div class="qs" id="ov_disabled_sub">CPA 关 · 不兼隔离</div>
     </button>
-    <button type="button" class="qcard info" data-jump="probe" id="ov_probe_card" title="立即全量巡检（受「仅巡检已禁用」等筛选影响）；定时开启后约 45 秒内首次执行">
+    <button type="button" class="qcard info" data-jump="disabled_pool" id="ov_disabled_pool_card" title="禁用池健康度：上次巡检成功/失败/未知">
+      <div class="ql">禁用池</div><div class="qn" id="ov_dp_total">0</div><div class="qs" id="ov_dp_sub">巡检 —</div>
+    </button>
+    <button type="button" class="qcard info" data-jump="probe" id="ov_probe_card" title="立即巡检（受「仅巡检已禁用」等筛选影响）；定时开启后约 45 秒内首次执行">
       <div class="ql">巡检</div><div class="qn" id="ov_probe">—</div><div class="qs" id="ov_probe_sub">点击开始</div>
     </button>
   </div>
@@ -123,6 +127,8 @@ const statusBodyTemplate = `
               <div class="more-div"></div>
               <button type="button" onclick="exportInspect('reauth')">导出需重授</button>
               <button type="button" onclick="exportInspect('pending_delete')">导出待删</button>
+              <button type="button" onclick="exportInspect('disabled')">导出禁用池</button>
+              <button type="button" onclick="clearResidual403()">清除禁用上 403 残留隔离</button>
               <div class="more-div"></div>
               <label class="chk"><input id="autoRefresh" type="checkbox" checked> 30 秒自动刷新</label>
             </div>
@@ -193,6 +199,8 @@ const statusBodyTemplate = `
       <div class="fg"><label>超时（秒）</label><input id="f_probe_timeout_seconds" type="number" min="5" step="1"></div>
       <div class="fg"><label>并发</label><input id="f_probe_concurrency" type="number" min="1" step="1"></div>
       <div class="fg"><label>QPS</label><input id="f_probe_qps" type="number" min="0.1" step="0.1"></div>
+      <div class="fg"><label>禁用池并发</label><input id="f_probe_disabled_concurrency" type="number" min="0" step="1" title="仅巡检已禁用时使用；0=沿用上方并发"></div>
+      <div class="fg"><label>禁用池 QPS</label><input id="f_probe_disabled_qps" type="number" min="0" step="0.1" title="仅巡检已禁用时使用；0=沿用上方 QPS"></div>
       <div class="fg"><label>巡检模式</label>
         <select id="f_probe_mode"><option value="responses_mini">responses · 真实请求（推荐）</option><option value="models">models（轻量列表）</option></select>
       </div>
@@ -235,6 +243,9 @@ const statusBodyTemplate = `
       <div class="fg"><label>402 额度</label><select id="f_action_on_402"><option value="ban">隔离</option><option value="disable">禁用</option><option value="delete">删除</option></select></div>
       <div class="fg"><label>403 拒绝</label><select id="f_action_on_403"><option value="ban">隔离</option><option value="disable">禁用</option><option value="delete">删除</option></select></div>
       <div class="fg"><label>429 限流</label><select id="f_action_on_429"><option value="ban">隔离</option><option value="disable">禁用</option><option value="delete">删除</option></select></div>
+      <div class="fg"><label>402 隔离时长（秒）</label><input id="f_ban_402_seconds" type="number" min="60" step="60" title="默认 604800=7 天；到期自动释放"></div>
+      <div class="fg"><label>429 隔离时长（秒）</label><input id="f_ban_429_fallback_seconds" type="number" min="30" step="30" title="无响应头时使用；默认 1800=30 分钟"></div>
+      <div class="fg"><label>403 隔离时长（秒）</label><input id="f_ban_403_seconds" type="number" min="60" step="60" title="仅当 403 动作为隔离时生效"></div>
       <div class="fg"><label>动作冷却（秒）</label><input id="f_action_cooldown_seconds" type="number" min="0" step="1"></div>
     </div>
   </div>

@@ -185,9 +185,13 @@ type Service struct {
 	lastOK     int
 	lastFail   int
 	lastSkip   int
-	runSeq     int64
-	history    []Run
-	lastByAuth map[string]CredentialResult
+	// lastSkipUsageOK / lastSkipProbeOK break down lastSkip for ops UI.
+	lastSkipUsageOK int
+	lastSkipProbeOK int
+	lastCandidate   string // "disabled_only" | "all" | "include_disabled"
+	runSeq          int64
+	history         []Run
+	lastByAuth      map[string]CredentialResult
 	// async probe job
 	jobRunning bool
 	jobID      int64
@@ -491,12 +495,12 @@ func (p *Service) runOnceBody(force bool, trigger string) (Result, error) {
 		return res, nil
 	}
 
-	sem := make(chan struct{}, max(1, cfg.ProbeConcurrency))
+	sem := make(chan struct{}, max(1, cfg.EffectiveProbeConcurrency()))
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	minInterval := time.Duration(0)
-	if cfg.ProbeQPS > 0 {
-		minInterval = time.Duration(float64(time.Second) / cfg.ProbeQPS)
+	if qps := cfg.EffectiveProbeQPS(); qps > 0 {
+		minInterval = time.Duration(float64(time.Second) / qps)
 	}
 	var lastStart time.Time
 	var finished int
@@ -963,19 +967,25 @@ func (p *Service) HistorySnapshot() []Run {
 }
 
 // selectProbeTargets builds the probe set: skip recent usage OK / fresh probe OK;
-// scheduled runs batch and prioritize banned / never-probed / last-fail.
+// prioritize banned / never-probed / last-fail.
 func (p *Service) selectProbeTargets(files []pluginapi.HostAuthFileEntry, cfg config.PluginConfig, force bool, trigger string) ([]pluginapi.HostAuthFileEntry, int) {
-	scheduled := strings.EqualFold(trigger, "scheduled")
+	_ = trigger
 	type cand struct {
 		f    pluginapi.HostAuthFileEntry
 		prio int // lower = sooner
 	}
 	cands := make([]cand, 0, len(files))
-	skipped := 0
+	skipped, skipUsage, skipProbe := 0, 0, 0
 	now := time.Now()
 	p.mu.Lock()
 	lastBy := p.lastByAuth
 	p.mu.Unlock()
+	candMode := "all"
+	if cfg.ProbeOnlyDisabled {
+		candMode = "disabled_only"
+	} else if cfg.ProbeIncludeDisabled {
+		candMode = "include_disabled"
+	}
 
 	for _, f := range files {
 		if !xai.IsAuth(f) {
@@ -993,10 +1003,12 @@ func (p *Service) selectProbeTargets(files []pluginapi.HostAuthFileEntry, cfg co
 		if !force && p.engine != nil {
 			if key != "" && p.engine.RecentUsageOK(key) {
 				skipped++
+				skipUsage++
 				continue
 			}
 			if email != "" && p.engine.RecentUsageOK(email) {
 				skipped++
+				skipUsage++
 				continue
 			}
 		}
@@ -1007,6 +1019,7 @@ func (p *Service) selectProbeTargets(files []pluginapi.HostAuthFileEntry, cfg co
 				banned := p.bans != nil && (p.bans.Active(key, now) || (email != "" && p.bans.Active(email, now)))
 				if !banned {
 					skipped++
+					skipProbe++
 					continue
 				}
 			}
@@ -1023,13 +1036,16 @@ func (p *Service) selectProbeTargets(files []pluginapi.HostAuthFileEntry, cfg co
 		}
 		cands = append(cands, cand{f: f, prio: prio})
 	}
-	// Full fleet each run (still skips recent usage OK / fresh probe OK above).
-	_ = scheduled
 	sort.SliceStable(cands, func(i, j int) bool { return cands[i].prio < cands[j].prio })
 	out := make([]pluginapi.HostAuthFileEntry, 0, len(cands))
 	for _, c := range cands {
 		out = append(out, c.f)
 	}
+	p.mu.Lock()
+	p.lastSkipUsageOK = skipUsage
+	p.lastSkipProbeOK = skipProbe
+	p.lastCandidate = candMode
+	p.mu.Unlock()
 	return out, skipped
 }
 
@@ -1108,14 +1124,20 @@ func (p *Service) Status() map[string]any {
 		"next_run":     nextRun,
 		"last_ok":      p.lastOK,
 		"last_fail":    p.lastFail,
-		"last_skip":    p.lastSkip,
-		"last_err":     p.lastErr,
-		"mode":         p.cfg.ProbeMode,
-		"interval":     p.cfg.ProbeIntervalSeconds,
-		"auto_execute": p.cfg.AutoExecute,
-		"batch_max":    0, // 0 = full fleet (no per-tick cap)
-		"history":      append([]Run(nil), p.history...),
-		"bulk":         map[string]any{"running": p.bulkRunning, "done": p.bulkDone, "total": p.bulkTotal, "ok": p.bulkOK, "fail": p.bulkFail, "label": p.bulkLabel},
+		"last_skip":          p.lastSkip,
+		"last_skip_usage_ok": p.lastSkipUsageOK,
+		"last_skip_probe_ok": p.lastSkipProbeOK,
+		"candidate_mode":     p.lastCandidate,
+		"only_disabled":      p.cfg.ProbeOnlyDisabled,
+		"last_err":           p.lastErr,
+		"mode":               p.cfg.ProbeMode,
+		"interval":           p.cfg.ProbeIntervalSeconds,
+		"auto_execute":       p.cfg.AutoExecute,
+		"concurrency":        p.cfg.EffectiveProbeConcurrency(),
+		"qps":                p.cfg.EffectiveProbeQPS(),
+		"batch_max":          0, // 0 = full fleet (no per-tick cap)
+		"history":            append([]Run(nil), p.history...),
+		"bulk":               map[string]any{"running": p.bulkRunning, "done": p.bulkDone, "total": p.bulkTotal, "ok": p.bulkOK, "fail": p.bulkFail, "label": p.bulkLabel},
 	}
 }
 

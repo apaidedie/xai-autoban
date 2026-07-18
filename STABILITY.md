@@ -110,6 +110,8 @@ Prefer **tag push** or **workflow_dispatch**; do not create an empty Release bef
 | `probe_timeout_seconds` | int | 20 |
 | `probe_concurrency` | int | 3 |
 | `probe_qps` | float | 2 |
+| `probe_disabled_concurrency` | int | 8（仅已禁用时；0=沿用 concurrency） |
+| `probe_disabled_qps` | float | 4（仅已禁用时；0=沿用 qps） |
 | `probe_mode` | responses_mini\|models | responses_mini |
 | `probe_base_url` | string | "" |
 | `probe_path` | string | /models |
