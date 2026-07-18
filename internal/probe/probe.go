@@ -164,9 +164,6 @@ type JobStatus struct {
 	Error   string  `json:"error,omitempty"`
 }
 
-// maxScheduledBatch caps accounts probed per scheduled tick (large fleets rotate).
-const maxScheduledBatch = 120
-
 // probeFreshOK is how long a successful probe stays "fresh" and can be skipped on scheduled runs.
 const probeFreshOK = 45 * time.Minute
 
@@ -1026,15 +1023,12 @@ func (p *Service) selectProbeTargets(files []pluginapi.HostAuthFileEntry, cfg co
 		}
 		cands = append(cands, cand{f: f, prio: prio})
 	}
+	// Full fleet each run (still skips recent usage OK / fresh probe OK above).
+	_ = scheduled
 	sort.SliceStable(cands, func(i, j int) bool { return cands[i].prio < cands[j].prio })
-	limit := len(cands)
-	if scheduled && limit > maxScheduledBatch {
-		skipped += limit - maxScheduledBatch
-		limit = maxScheduledBatch
-	}
-	out := make([]pluginapi.HostAuthFileEntry, 0, limit)
-	for i := 0; i < limit; i++ {
-		out = append(out, cands[i].f)
+	out := make([]pluginapi.HostAuthFileEntry, 0, len(cands))
+	for _, c := range cands {
+		out = append(out, c.f)
 	}
 	return out, skipped
 }
@@ -1119,7 +1113,7 @@ func (p *Service) Status() map[string]any {
 		"mode":         p.cfg.ProbeMode,
 		"interval":     p.cfg.ProbeIntervalSeconds,
 		"auto_execute": p.cfg.AutoExecute,
-		"batch_max":    maxScheduledBatch,
+		"batch_max":    0, // 0 = full fleet (no per-tick cap)
 		"history":      append([]Run(nil), p.history...),
 		"bulk":         map[string]any{"running": p.bulkRunning, "done": p.bulkDone, "total": p.bulkTotal, "ok": p.bulkOK, "fail": p.bulkFail, "label": p.bulkLabel},
 	}

@@ -2,7 +2,7 @@
 
 CLIProxyAPI 原生插件：自动隔离异常 xAI 凭据，支持策略配置、定时/手动巡检、禁用/删除、refresh 重授权与运维台。
 
-版本：**1.1.4**（Stable · maintenance）
+版本：**1.1.5**（Stable · maintenance）
 
 > **稳定性契约：** [STABILITY.md](./STABILITY.md) — 保证/不保证、配置冻结表、运维入口。  
 > **1.x 政策：** 不删/不改名冻结配置键（破坏性变更需 major）；默认策略变更写 CHANGELOG。
@@ -42,7 +42,7 @@ CLIProxyAPI 原生插件：自动隔离异常 xAI 凭据，支持策略配置、
 ## 功能
 
 - 运维台：筛选 / 全选 / 批量释放·隔离·禁用·启用·API 模式·删除 / 复检 / 巡检
-- 大号池：增量巡检（跳过近期成功、每轮限批）、using_api 缓存与后台刷新
+- 大号池：增量巡检（跳过近期成功，每轮候选全量）、凭证元数据缓存
 - 策略预设（保守/标准/激进）；导出需重授/待删（给 cpa-auth-inspect）
 - `auto_using_api` 默认 **off**（更安全）
 - Management 真删除（失败则禁用/隔离 + `pending_delete`）
