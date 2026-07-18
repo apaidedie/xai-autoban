@@ -205,8 +205,8 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
   .rcard .ck{grid-area:ck}.rcard .acc{grid-area:acc}.rcard .mid{grid-area:mid}.rcard .ops{grid-area:ops;justify-self:end}
 }
 .qcards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:0 0 10px}
-.code-strip{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:0}
-@media(max-width:1100px){.code-strip{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.code-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:0}
+@media(max-width:900px){.code-strip{grid-template-columns:1fr 1fr}}
 @media(max-width:700px){.code-strip{grid-template-columns:1fr 1fr}}
 .code-chip{
   min-height:76px;padding:12px 14px;border-radius:14px;border:1px solid var(--line);
@@ -225,7 +225,6 @@ td code{font-family:var(--mono);font-size:12px;color:#fff;background:rgba(2,6,23
 .code-chip.s402 b{color:#fcd34d}.code-chip.s402.active{border-color:rgba(251,191,36,.55)}
 .code-chip.s403 b{color:#fda4af}.code-chip.s403.active{border-color:rgba(251,113,133,.55)}
 .code-chip.s429 b{color:#ddd6fe}.code-chip.s429.active{border-color:rgba(167,139,250,.55)}
-.code-chip.s-api b{color:#67e8f9}.code-chip.s-api.active{border-color:rgba(34,211,238,.55);background:rgba(8,47,73,.35)}
 .code-chip.ghost{align-items:center;justify-content:center;color:var(--muted)}
 .code-chip.ghost b{display:none}
 .code-chip.ghost .cl{font-size:13px;letter-spacing:0;font-weight:750;white-space:nowrap}

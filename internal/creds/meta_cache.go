@@ -96,11 +96,24 @@ func (c *MetaCache) Apply(items []Info) {
 		if items[i].UsingAPI != nil {
 			continue
 		}
-		for _, k := range []string{items[i].AuthID, items[i].Name, items[i].Email} {
+		// Match any key we store (id / name / email / basename).
+		keys := []string{
+			items[i].AuthID,
+			items[i].Name,
+			items[i].Email,
+			strings.TrimSuffix(items[i].Name, ".json"),
+			strings.TrimSuffix(items[i].AuthID, ".json"),
+		}
+		for _, k := range keys {
 			if k == "" {
 				continue
 			}
 			if v, ok := c.getLocked(k, now); ok {
+				b := v
+				items[i].UsingAPI = &b
+				break
+			}
+			if v, ok := c.getLocked(strings.ToLower(k), now); ok {
 				b := v
 				items[i].UsingAPI = &b
 				break
@@ -273,7 +286,8 @@ func (c *MetaCache) NeedsFullRefresh() bool {
 	return time.Since(c.lastFull) > c.ttl
 }
 
-// CountUsingAPI returns cached true-count (may be partial until full refresh).
+// CountUsingAPI returns raw cache true-entries (aliases inflate; prefer RecountUsingAPI on fleet list).
+// Kept for tests/debug only.
 func (c *MetaCache) CountUsingAPI() int {
 	if c == nil {
 		return 0
@@ -297,6 +311,39 @@ func (c *MetaCache) CountUsingAPI() int {
 		}
 		seen[base] = struct{}{}
 		n++
+	}
+	return n
+}
+
+// CountUsingAPIAmong counts using_api=true for the current auth file list only (1 per file).
+func (c *MetaCache) CountUsingAPIAmong(files []pluginapi.HostAuthFileEntry) int {
+	if c == nil || len(files) == 0 {
+		return 0
+	}
+	n := 0
+	for _, f := range files {
+		keys := []string{
+			xai.AuthKey(f),
+			f.ID,
+			f.AuthIndex,
+			f.Name,
+			strings.ToLower(strings.TrimSpace(f.Email)),
+			strings.TrimSuffix(f.Name, ".json"),
+		}
+		found := false
+		for _, k := range keys {
+			if k == "" {
+				continue
+			}
+			if v, ok := c.GetUsingAPI(k); ok {
+				if v {
+					n++
+				}
+				found = true
+				break
+			}
+		}
+		_ = found
 	}
 	return n
 }

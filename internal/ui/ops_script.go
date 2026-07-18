@@ -23,11 +23,11 @@ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 
 function setActionEnabled(ok){
   const can=!!ok && !state.busy;
-  const ids=['btnRefresh','unbanSelected','banSelected','disableSelected','reenableSelected','usingApiSelected','usingApiOffSelected','deleteSelected','recheckSelected','saveConfigBtn','selectFilterBtn','clearSelectedBtn'];
+  const ids=['btnRefresh','unbanSelected','banSelected','disableSelected','reenableSelected','deleteSelected','recheckSelected','saveConfigBtn','selectFilterBtn','clearSelectedBtn'];
   ids.forEach(id=>{const el=$(id); if(el) el.disabled=!can;});
   const n=state.selected.size;
   if(can){
-    ['unbanSelected','banSelected','disableSelected','reenableSelected','usingApiSelected','usingApiOffSelected','deleteSelected','recheckSelected'].forEach(id=>{const el=$(id); if(el) el.disabled=n===0;});
+    ['unbanSelected','banSelected','disableSelected','reenableSelected','deleteSelected','recheckSelected'].forEach(id=>{const el=$(id); if(el) el.disabled=n===0;});
     if($('clearSelectedBtn')) $('clearSelectedBtn').disabled=n===0;
   }
   if($('unbanSelected')) $('unbanSelected').textContent=n?('释放 ('+n+')'):'释放';
@@ -35,14 +35,12 @@ function setActionEnabled(ok){
   if($('banSelected')) $('banSelected').textContent=n?('隔离 ('+n+')'):'隔离';
   if($('disableSelected')) $('disableSelected').textContent=n?('禁用 ('+n+')'):'禁用';
   if($('reenableSelected')) $('reenableSelected').textContent=n?('启用 ('+n+')'):'启用';
-  if($('usingApiSelected')) $('usingApiSelected').textContent=n?('开 API ('+n+')'):'开 API';
-  if($('usingApiOffSelected')) $('usingApiOffSelected').textContent=n?('关 API ('+n+')'):'关 API';
   if($('recheckSelected')) $('recheckSelected').textContent=n?('复检 ('+n+')'):'复检';
   const sh=$('selectedHint');
   if(sh) sh.textContent=n?('已选 '+n):'';
   const sf=$('selectFilterBtn');
   if(sf){
-    const fl={all:'全部',healthy:'健康',banned:'隔离',disabled:'禁用',using_api:'API 模式','401':'401','402':'402','403':'403','429':'429'}[state.filter]||state.filter;
+    const fl={all:'全部',healthy:'健康',banned:'隔离',disabled:'禁用','401':'401','402':'402','403':'403','429':'429'}[state.filter]||state.filter;
     sf.textContent=state.filter&&state.filter!=='all'?('全选 · '+fl):'全选筛选';
   }
 }
@@ -277,7 +275,6 @@ function paintChips(){
   set('f_401',c['401']??0); set('f_402',c['402']??0); set('f_403',c['403']??0); set('f_429',c['429']??0);
   set('ov_all',c.all??0); set('ov_healthy',c.healthy??0); set('ov_banned',c.banned??0);
   set('ov_401',c['401']??0); set('ov_402',c['402']??0); set('ov_403',c['403']??0); set('ov_429',c['429']??0);
-  set('ov_using_api', c.using_api??0);
   const sub=$('ov_banned_sub');
   if(sub) sub.textContent='账本 · 跳过调度';
   const disSub=document.querySelector('#overviewCards [data-filter="disabled"] .qs');
@@ -339,7 +336,7 @@ function jumpOverview(kind){
   if(list) list.scrollIntoView({behavior:'smooth',block:'start'});
 }
 function setFilter(f, toggle){
-  // Toggle off when clicking the same filter again (incl. API 模式).
+  // Toggle off when clicking the same filter again.
   if(toggle && state.filter===f) state.filter='all';
   else if(!toggle && state.filter===f) state.filter='all';
   else state.filter=f||'all';
@@ -411,7 +408,6 @@ function fillDrawer(s){
   $('f_probe_mode').value=s.probe_mode||'responses_mini';
   if($('f_probe_include_disabled')) $('f_probe_include_disabled').checked=!!s.probe_include_disabled;
   if($('f_probe_only_disabled')) $('f_probe_only_disabled').checked=!!s.probe_only_disabled;
-  if($('f_auto_using_api')) $('f_auto_using_api').value=s.auto_using_api||'off';
   $('f_delete_fallback').value=s.delete_fallback||'disable';
   $('f_action_on_401').value=s.action_on_401||'ban';
   $('f_action_on_402').value=s.action_on_402||'ban';
@@ -443,7 +439,7 @@ function collectDraft(){
     probe_mode: $('f_probe_mode').value,
     probe_include_disabled: !!($('f_probe_include_disabled')&&$('f_probe_include_disabled').checked),
     probe_only_disabled: !!($('f_probe_only_disabled')&&$('f_probe_only_disabled').checked),
-    auto_using_api: ($('f_auto_using_api')&&$('f_auto_using_api').value)||'off',
+    auto_using_api: 'off',
     probe_on_success: state.success,
     probe_action: state.fail,
     auto_execute: !!state.autoExecute,
@@ -467,7 +463,6 @@ function settingsMismatch(draft, got){
     ['probe_action', String(draft.probe_action||''), String(got.probe_action||'')],
     ['probe_mode', String(draft.probe_mode||''), String(got.probe_mode||'')],
     ['probe_enabled', !!draft.probe_enabled, !!got.probe_enabled],
-    ['auto_using_api', String(draft.auto_using_api||'off'), String(got.auto_using_api||'off')],
   ];
   for(const [k, want, have] of checks){
     if(want!==have) return k+' 期望 '+want+' 实际 '+have;
@@ -546,8 +541,6 @@ function rowActions(c){
   }else{
     more.push(['disable','禁用']);
   }
-  if(c.using_api===true) more.push(['using_api_off','关 API']);
-  else if(!c.disabled) more.push(['using_api','开 API']);
   if(c.banned && needsReauth(c) && !primary.some(x=>x.indexOf('data-act="unban"')>=0)) more.push(['unban','释放']);
   let html=primary.join('');
   if(more.length){
@@ -591,12 +584,10 @@ function midCell(c){
     // "禁用 · 403" already covers; add 兼隔离 only if no code
     if(![401,402,403,429].includes(Number(c.status_code||0))) parts.push('兼隔离');
   }
-  if(c.using_api===true) parts.push('API');
   let head=parts.join(' · ');
   const p=primaryStatus(c);
   const tags=['<span class="badge '+p.cls+'" title="'+esc(head)+'">'+esc(p.label)+'</span>'];
   if(c.disabled&&c.banned) tags.push('<span class="pill dim">兼隔离</span>');
-  if(c.using_api===true) tags.push('<span class="pill dim">API</span>');
   // soft 403 / probe: only when healthy-ish (not main drama)
   if(!c.banned && !c.disabled && c.soft_403_streak>0){
     tags.push('<span class="pill dim" title="软403连击">'+c.soft_403_streak+'/'+(c.soft_403_need||1)+'</span>');
@@ -616,14 +607,13 @@ function midCell(c){
 }
 function render(){
   const list=filtered();
-  const filterLabel={all:'全部',healthy:'健康',banned:'隔离',disabled:'禁用',using_api:'API 模式','401':'401','402':'402','403':'403','429':'429'}[state.filter]||state.filter;
+  const filterLabel={all:'全部',healthy:'健康',banned:'隔离',disabled:'禁用','401':'401','402':'402','403':'403','429':'429'}[state.filter]||state.filter;
   const p=state.page||{};
   $('resultCount').textContent=(p.total!=null?p.total:list.length)+' 条'+(state.filter&&state.filter!=='all'?(' · '+filterLabel):'')+(p.pages>1?(' · '+ (p.page||1)+'/'+p.pages):'');
   const lh=$('listHint');
   if(lh){
     if(state.filter==='banned') lh.textContent='筛选：隔离';
     else if(state.filter==='disabled') lh.textContent='筛选：禁用';
-    else if(state.filter==='using_api') lh.textContent='筛选：已开启 API 模式 · 再点卡片可取消';
     else if(['401','402','403','429'].includes(state.filter)) lh.textContent='筛选：'+filterLabel+'（状态码口径，可与隔离账本不同）';
     else lh.textContent='点上方卡片筛选 · 勾选后复检或批量操作';
   }
@@ -657,7 +647,7 @@ function render(){
 }
 async function runRowAction(act,id){
   if(!id||state.busy) return;
-  const labels={unban:'释放',ban:'隔离',disable:'禁用',reenable:'启用',reauth:'重授权',using_api:'开 API',using_api_off:'关 API',delete:'删除'};
+  const labels={unban:'释放',ban:'隔离',disable:'禁用',reenable:'启用',reauth:'重授权',delete:'删除'};
   if(!confirm('确认对凭证执行「'+(labels[act]||act)+'」？\n'+id)) return;
   try{
     setBusy(true, labels[act]||act);
@@ -680,8 +670,8 @@ async function bulkAct(act){
   if(state.busy) return;
   const ids=[...state.selected];
   if(!ids.length){ setMessage('请先勾选凭证',true); setOpResult('请先勾选凭证','err'); return; }
-  const labels={unban:'释放',ban:'隔离',disable:'禁用',reenable:'启用',reauth:'重授权',delete:'删除',using_api:'开 API',using_api_off:'关 API'};
-  const danger=act==='delete'?'\n\n删除不可轻易撤销。':(act==='using_api'?'\n\n将开启 API 模式并清除隔离。':(act==='using_api_off'?'\n\n将关闭 API 模式，恢复 OAuth/代理路径。':''));
+  const labels={unban:'释放',ban:'隔离',disable:'禁用',reenable:'启用',reauth:'重授权',delete:'删除'};
+  const danger=act==='delete'?'\n\n删除不可轻易撤销。':'';
   if(!confirm('对所选 '+ids.length+' 条执行「'+(labels[act]||act)+'」？'+danger)) return;
   if(act==='delete' && !confirm('再次确认删除 '+ids.length+' 条？')) return;
   try{
@@ -766,7 +756,7 @@ async function exportInspect(kind){
 }
 async function selectCurrentFilter(){
   if(state.busy) return;
-  const fl={all:'全部',healthy:'健康',banned:'隔离',disabled:'禁用',using_api:'API 模式','401':'401','402':'402','403':'403','429':'429'}[state.filter]||state.filter;
+  const fl={all:'全部',healthy:'健康',banned:'隔离',disabled:'禁用','401':'401','402':'402','403':'403','429':'429'}[state.filter]||state.filter;
   try{
     setBusy(true,'拉取筛选 ID');
     setMessage('正在获取「'+fl+'」全部凭证 ID…');
@@ -938,8 +928,6 @@ async function handleImportFile(file){
 }
 
 if($('importFile')) $('importFile').onchange=e=>{ const f=e.target.files&&e.target.files[0]; if(f) handleImportFile(f); };
-// API 模式 chip: setFilter toggles off when clicked again.
-if($('usingApiFilterBtn')) $('usingApiFilterBtn').onclick=()=>setFilter('using_api', true);
 $('search').oninput=e=>{
   state.query=e.target.value.trim();
   state.page.page=1;
@@ -953,10 +941,7 @@ if($('prevPageBtn')) $('prevPageBtn').onclick=()=>{ if((state.page.page||1)>1){ 
 if($('nextPageBtn')) $('nextPageBtn').onclick=()=>{ if((state.page.page||1)<(state.page.pages||1)){ state.page.page++; loadData(true);} };
 $('autoRefresh').onchange=()=>{if(state.timer) clearInterval(state.timer); state.timer=$('autoRefresh').checked?setInterval(()=>loadData(true),30000):null;};
 document.querySelectorAll('#statusChips [data-filter]').forEach(btn=>btn.onclick=()=>setFilter(btn.dataset.filter,true));
-document.querySelectorAll('#codeStrip [data-filter]').forEach(btn=>{
-  if(btn.id==='usingApiFilterBtn') return;
-  btn.onclick=()=>setFilter(btn.dataset.filter,true);
-});
+document.querySelectorAll('#codeStrip [data-filter]').forEach(btn=>btn.onclick=()=>setFilter(btn.dataset.filter,true));
 document.querySelectorAll('#overviewCards [data-jump]').forEach(btn=>btn.onclick=()=>jumpOverview(btn.dataset.jump));
 if($('toggleHistBtn')) $('toggleHistBtn').onclick=()=>{
   const wrap=$('histWrap'); const btn=$('toggleHistBtn'); if(!wrap||!btn) return;

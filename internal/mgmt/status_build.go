@@ -84,7 +84,8 @@ func (h *Handler) CurrentStatusPaged(query url.Values) StatusInfo {
 		soft403 = h.Engine.Soft403StreakSnapshot()
 		softNeed = h.Engine.Soft403Need()
 	}
-	// Status page: mostly cache. Background full refresh keeps using_api count warm.
+	// Status page: using_api from MetaCache + optional AuthGet samples.
+	// Card count and list total MUST use the same allCreds enrichment (no separate inflated cache sum).
 	allCreds, counts := creds.BuildFull(files, snapshot, probeLast, nil, soft403, softNeed, now)
 	if h.Meta == nil {
 		h.Meta = creds.NewMetaCache(15 * time.Minute)
@@ -93,8 +94,8 @@ func (h *Handler) CurrentStatusPaged(query url.Values) StatusInfo {
 	// Small sample for token flags on first page only (not full fleet).
 	tokenSample := 24
 	if pq.Filter == "using_api" {
-		// Filter needs more accuracy: pull missing up to a higher cap, still async-friendly.
-		jsonByID := creds.SampleMissingAuthJSON(h.Host, files, 400, h.Meta)
+		// Pull all cache-miss credentials so filter list matches true fleet state.
+		jsonByID := creds.SampleMissingAuthJSON(h.Host, files, 0, h.Meta)
 		if len(jsonByID) > 0 {
 			allCreds, counts = creds.BuildFull(files, snapshot, probeLast, jsonByID, soft403, softNeed, now)
 			h.Meta.Apply(allCreds)
@@ -106,11 +107,8 @@ func (h *Handler) CurrentStatusPaged(query url.Values) StatusInfo {
 			h.Meta.Apply(allCreds)
 		}
 	}
+	// Single source of truth: count using_api=true on current auth list after cache apply.
 	creds.RecountUsingAPI(allCreds, &counts)
-	// Prefer cache-wide count when larger (covers accounts not on this page).
-	if n := h.Meta.CountUsingAPI(); n > counts.UsingAPI {
-		counts.UsingAPI = n
-	}
 	if h.Meta.NeedsFullRefresh() {
 		h.Meta.RefreshAllAsync(h.Host, files)
 	}

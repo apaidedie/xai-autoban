@@ -64,9 +64,6 @@ const statusBodyTemplate = `
     <button type="button" class="code-chip s429" data-filter="429" title="隔离账本中状态码 429 的条数（限流）">
       <span class="cl">429 · 限流</span><b id="ov_429">0</b>
     </button>
-    <button type="button" class="code-chip s-api" data-filter="using_api" id="usingApiFilterBtn" title="已开启 API 模式的凭证数；点击筛选，再点取消">
-      <span class="cl">API 模式</span><b id="ov_using_api">0</b>
-    </button>
   </div>
   <details class="legend" id="statusLegend">
     <summary><span>用语说明</span><span class="chev">展开</span></summary>
@@ -79,7 +76,6 @@ const statusBodyTemplate = `
         <span class="k">巡检 / 复检</span><span>巡检=全量 · 复检=勾选；失败均按状态码动作（需自动执行）</span>
         <span class="k">401–429</span><span>仅统计<strong>隔离账本</strong>内状态码，不是全量探测分布</span>
         <span class="k">401/402/403</span><span>默认出现一次即按状态码动作；软 403 连击由 fail_streak_403 控制（默认 1）</span>
-        <span class="k">API 模式</span><span>CPA using_api；默认不自动开启（配置里可改）</span>
         <span class="k">真实流量</span><span>调用成功会释放隔离，并在 30 分钟内跳过巡检</span>
       </div>
     </div>
@@ -118,8 +114,6 @@ const statusBodyTemplate = `
               <button type="button" id="banSelected" onclick="bulkAct('ban')" disabled>隔离</button>
               <button type="button" id="disableSelected" onclick="bulkAct('disable')" disabled>禁用</button>
               <button type="button" id="reenableSelected" onclick="bulkAct('reenable')" disabled>启用</button>
-              <button type="button" id="usingApiSelected" onclick="bulkAct('using_api')" disabled title="开启 API 模式">开 API</button>
-              <button type="button" id="usingApiOffSelected" onclick="bulkAct('using_api_off')" disabled title="关闭 API 模式（恢复 OAuth/代理路径）">关 API</button>
               <button type="button" class="danger" id="deleteSelected" onclick="bulkAct('delete')" disabled>删除</button>
               <div class="more-div"></div>
               <button type="button" onclick="exportInspect('reauth')">导出需重授</button>
@@ -199,14 +193,6 @@ const statusBodyTemplate = `
       </div>
       <label class="chk" style="margin-bottom:8px"><input id="f_probe_include_disabled" type="checkbox"> 巡检包含已禁用凭证</label>
       <label class="chk" style="margin-bottom:10px"><input id="f_probe_only_disabled" type="checkbox"> 仅巡检已禁用凭证</label>
-      <div class="fg"><label>自动 API 模式</label>
-        <select id="f_auto_using_api" title="探测/复检失败时是否自动写 using_api。会改变账号走 API 路径，可能影响额度/限流；默认关闭更安全。">
-          <option value="off">关闭 · 仅手动（推荐，更安全）</option>
-          <option value="on_403">仅 403 时自动开 API 模式</option>
-          <option value="on_fail">401/402/403 都自动开</option>
-        </select>
-      </div>
-      <p class="hint drawer-hint">自动开启会改 CPA 凭证；不确定时保持「关闭」，用批量「API 模式」手动开。</p>
     </div>
     <div class="sec">
       <h4>自动执行</h4>

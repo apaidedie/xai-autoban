@@ -503,7 +503,6 @@ func (p *Service) runOnceBody(force bool, trigger string) (Result, error) {
 	}
 	var lastStart time.Time
 	var finished int
-	triedUsingAPI := map[string]struct{}{}
 
 	for _, file := range targets {
 		wg.Add(1)
@@ -555,24 +554,6 @@ func (p *Service) runOnceBody(force bool, trigger string) (Result, error) {
 				return
 			}
 			status, body, perr := p.ProbeOneWithJSON(cfg, host, authJSON)
-			// Auto using_api: gated by auto_using_api config; at most once per key per run.
-			if perr != nil && p.engine != nil {
-				doHeal := false
-				if mat, merr := parseAuthMaterial(authJSON); merr == nil {
-					mu.Lock()
-					_, tried := triedUsingAPI[key]
-					if ShouldAutoUsingAPI(cfg, status, mat, tried) {
-						triedUsingAPI[key] = struct{}{}
-						doHeal = true
-					}
-					mu.Unlock()
-				}
-				if doHeal {
-					if healed, st2, body2, err2 := p.tryEnableUsingAPIAndReprobe(cfg, host, f, key, authJSON); healed {
-						status, body, perr = st2, body2, err2
-					}
-				}
-			}
 			mu.Lock()
 			defer mu.Unlock()
 			if perr != nil {

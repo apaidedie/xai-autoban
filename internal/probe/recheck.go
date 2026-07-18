@@ -192,7 +192,6 @@ func (p *Service) RecheckSelected(authIDs []string, reenableOnOK bool) (RecheckS
 		minInterval = time.Duration(float64(time.Second) / cfg.ProbeQPS)
 	}
 	var lastStart time.Time
-	triedUsingAPI := map[string]struct{}{}
 
 	for _, id := range ids {
 		wg.Add(1)
@@ -225,30 +224,6 @@ func (p *Service) RecheckSelected(authIDs []string, reenableOnOK bool) (RecheckS
 				key = authID
 			}
 			status, body, perr := p.ProbeOne(cfg, p.host, f)
-			// Auto using_api: gated by config; once per key per recheck run.
-			if perr != nil && p.engine != nil {
-				idx := f.AuthIndex
-				if idx == "" {
-					idx = f.Name
-				}
-				if got, gerr := p.host.AuthGet(idx); gerr == nil {
-					doHeal := false
-					if mat, merr := parseAuthMaterial(got.JSON); merr == nil {
-						mu.Lock()
-						_, tried := triedUsingAPI[key]
-						if ShouldAutoUsingAPI(cfg, status, mat, tried) {
-							triedUsingAPI[key] = struct{}{}
-							doHeal = true
-						}
-						mu.Unlock()
-					}
-					if doHeal {
-						if healed, st2, body2, err2 := p.tryEnableUsingAPIAndReprobe(cfg, p.host, f, key, got.JSON); healed {
-							status, body, perr = st2, body2, err2
-						}
-					}
-				}
-			}
 			mu.Lock()
 			defer mu.Unlock()
 			res.Checked++
