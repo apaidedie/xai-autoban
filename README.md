@@ -1,86 +1,64 @@
 # xai-autoban
 
-CLIProxyAPI 原生插件：自动隔离异常 xAI 凭据，支持策略配置、定时/手动巡检、禁用/删除、refresh 重授权与运维台。
+CLIProxyAPI 原生插件：按状态码自动**隔离 / 禁用 / 删除**异常 xAI 凭证，支持定时巡检、复检、成功策略与运维台。
 
-版本：**1.1.6**（Stable · maintenance）
+版本：**1.1.7**（Stable · maintenance）
 
-> **稳定性契约：** [STABILITY.md](./STABILITY.md) — 保证/不保证、配置冻结表、运维入口。  
+> **稳定性契约：** [STABILITY.md](./STABILITY.md)  
 > **1.x 政策：** 不删/不改名冻结配置键（破坏性变更需 major）；默认策略变更写 CHANGELOG。
 
-## 工作原理（简要）
+## 用语（运维台统一）
+
+| 用语 | 含义 |
+|------|------|
+| **隔离** | 写入插件**隔离账本**，调度跳过；可「释放」或**到期自动释放** |
+| **释放** | 清除隔离账本（不打开 CPA 开关） |
+| **禁用** | 关闭 CPA 凭证开关；**不**因到期自动打开 |
+| **启用** | 打开 CPA 凭证开关 |
+| **释放并启用** | 清账本 + 开 CPA（成功策略） |
+| **巡检** | 按配置对候选凭证全量探测 |
+| **复检** | 对勾选凭证探测 |
+| **状态码动作** | 401/402/403/429 各自执行隔离\|禁用\|删除 |
+| **失败策略** | 其它失败的兜底动作（401–429 优先状态码） |
+| **真实流量** | CPA usage 成功/失败回调 |
+
+## 工作原理
 
 | 路径 | 作用 |
 |------|------|
-| **Usage 实时** | 请求失败 → 按语义隔离；**成功 → 释放隔离**（真实流量为准） |
-| **Scheduler** | 选号时跳过隔离账本中的凭证 |
-| **Probe / 复检** | 主动 `POST /responses` 探测；OAuth 走 `cli-chat-proxy.grok.com`（与 CPA 一致） |
+| **真实流量** | 失败 → 按状态码动作；成功 → 释放隔离（可选启用） |
+| **Scheduler** | 跳过隔离账本中的凭证 |
+| **巡检 / 复检** | `POST /responses` 探测；OAuth 走 `cli-chat-proxy.grok.com` |
 
-### 状态处理
+### 默认状态处理
 
 | 上游 | 默认 |
 |------|------|
-| 成功（真实调用） | 释放隔离；可选按策略启用 |
-| `401` / token 失效 | 隔离（可 reauth） |
-| `402` / free-usage | usage / 巡检 / 复检 **均**按 `action_on_402`（默认隔离） |
-| `403` 软权限拒绝 | 默认 **1 次**即隔离（`fail_streak_403=1`） |
-| `429` 裸限流 | 仅隔离 |
+| 成功（真实调用） | 释放隔离；可选按成功策略启用 |
+| `401` | 按 `action_on_401`（默认隔离；可配删除） |
+| `402` | 按 `action_on_402`（默认隔离，到期自动释放） |
+| `403` | 按 `action_on_403`（默认隔离；可配禁用，禁用不写账本） |
+| `429` | 按 `action_on_429`（默认隔离，优先响应头窗口） |
 | `5xx` 等 | 一般忽略 |
 
-### Probe 上游（与 CPA 对齐）
+### 巡检上游（与 CPA 对齐）
 
-| 凭证 | 探测地址 | 头 |
-|------|----------|-----|
-| OAuth（有 refresh_token） | `https://cli-chat-proxy.grok.com/v1` | Bearer + Grok CLI 头 |
-| API Key | `https://api.x.ai/v1` | Bearer |
+| 凭证 | 地址 |
+|------|------|
+| OAuth（有 refresh_token） | `https://cli-chat-proxy.grok.com/v1` |
+| API Key | `https://api.x.ai/v1` |
 
-默认 `probe_mode=responses_mini`：真实 `POST /responses`；可选 `models` 轻量列表。
-
-| 配置 | 默认 | 说明 |
-|------|------|------|
-| `auto_using_api` | `off` | 探测/复检失败是否自动写 `using_api`：`off`（默认，更安全）/ `on_403` / `on_fail` |
+默认 `probe_mode=responses_mini`。
 
 ## 功能
 
-- 运维台：筛选 / 全选 / 批量释放·隔离·禁用·启用·API 模式·删除 / 复检 / 巡检
-- 大号池：增量巡检（跳过近期成功，每轮候选全量）、凭证元数据缓存
-- 策略预设（保守/标准/激进）；导出需重授/待删（给 cpa-auth-inspect）
-- `auto_using_api` 默认 **off**（更安全）
+- 运维台：筛选 / 全选 / 批量释放·隔离·禁用·启用·删除 / 复检 / 巡检
+- 大号池：跳过近期成功、每轮候选全量
+- 导出需重授 / 待删（给 cpa-auth-inspect）
 - Management 真删除（失败则禁用/隔离 + `pending_delete`）
 - reauth：`refresh_token` → `auth.x.ai`
-- 状态持久化：`state_file`（默认 `xai-autoban-state.json`，运行时解析为绝对路径；运维台配置 + 隔离账本）
+- 状态持久化：`state_file`（运维台配置 + 隔离账本）
 - 兼容 **CPA-Manager-Plus**（resource 写通道）
-
-## 目录结构
-
-```
-main.go / abi_cgo.go     # 插件入口与 CGO ABI
-internal/
-  action/   隔离动作、禁用/删除/using_api、Management 客户端
-  ban/      隔离账本
-  classify/ 上游语义分类
-  config/   配置默认值与归一化
-  creds/    凭证列表投影 + using_api 缓存
-  host/     CPA host 回调
-  mgmt/     管理路由 / 状态组装 / bulk / export
-  probe/    巡检 / 复检 / 增量调度 / bulk 进度
-  reauth/   refresh_token 刷新
-  schedule/ 选号跳过隔离
-  ui/       运维台（status + css/body/script）
-  usage/    实时 usage 成功/失败
-docs/superpowers/        # 现行设计/计划
-docs/archive/            # 历史 plan/spec
-scripts/                 # build.sh / build.ps1
-.github/workflows/       # Release CI
-registry.json            # 插件商店
-STABILITY.md             # 1.x 契约
-```
-
-### 与 cpa-auth-inspect
-
-| 插件 | 职责 |
-|------|------|
-| **xai-autoban** | 运行时熔断、隔离、巡检、refresh 重授权 |
-| **[cpa-auth-inspect](https://github.com/YOUYCG/cpa-auth-inspect)** | 多厂商巡检、Chromium Device OAuth |
 
 ## 安装
 
@@ -100,7 +78,7 @@ plugins:
       management_key_env: CPA_MANAGEMENT_KEY
 ```
 
-重启 CPA → 插件商店安装 → 运维台：
+运维台：
 
 ```text
 /v0/resource/plugins/xai-autoban/status
@@ -111,33 +89,27 @@ plugins:
 需要 Go 1.21+、CGO。
 
 ```bash
-./scripts/build.sh          # Linux/macOS
-powershell -File scripts/build.ps1   # Windows
+./scripts/build.sh
+powershell -File scripts/build.ps1
 ```
 
 ## 配置入口
 
 | 入口 | 用途 |
 |------|------|
-| **运维台 → 编辑配置** | 巡检、策略、动作（主用） |
+| **运维台 → 配置** | 巡检、成功/失败策略、状态码动作 |
 | **插件管理** | 启用 + `management_key` / env / url / `disable_via` |
 
-### 状态文件（运维台配置 + 隔离账本）
+### 状态文件
 
-相对路径会解析为**绝对路径**，优先已有文件与可写数据目录：
-
-1. 环境变量：`XAI_AUTOBAN_DATA_DIR` → `CPA_DATA_DIR` → `CLIPROXYAPI_DATA_DIR` → `DATA_DIR` → `CPA_HOME`
-2. 可执行文件旁 `data/`、用户 config、工作目录 `data/`
-3. 也可在插件配置写绝对 `state_file`
-
-Docker / CPA 重建时请**挂载**该目录，否则运维台设置与隔离账本会丢失。运维台配置区会显示当前路径。
+相对路径会解析为绝对路径。Docker / 重建请挂载该目录，或设 `XAI_AUTOBAN_DATA_DIR` / 绝对 `state_file`。
 
 ### CPA-Manager-Plus 密钥
 
 | 密钥 | 用途 | 填本插件？ |
 |------|------|------------|
 | `cpamp_...` 面板密钥 | 登录 CPAMP | **否** |
-| CPA `remote-management.secret-key` | 禁用/删除凭证 | **是** |
+| CPA `remote-management.secret-key` | 禁用/删除/启用 | **是** |
 
 ## License
 

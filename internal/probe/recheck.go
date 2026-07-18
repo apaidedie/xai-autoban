@@ -246,7 +246,7 @@ func (p *Service) RecheckSelected(authIDs []string, reenableOnOK bool) (RecheckS
 				return
 			}
 			res.Failed++
-			msg := "探测失败"
+			msg := "巡检失败"
 			if status > 0 {
 				msg = fmt.Sprintf("%d", status)
 			} else if perr != nil {

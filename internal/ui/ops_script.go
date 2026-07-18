@@ -363,8 +363,8 @@ function paintPager(){
 }
 function formatDate(v){const d=new Date(v); return Number.isNaN(d.getTime())?v:d.toLocaleString('zh-CN',{hour12:false})}
 function formatRemaining(s){s=Math.max(0,Number(s||0)); const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60); if(d)return d+'天 '+h+'小时'; if(h)return h+'小时 '+m+'分'; return m+'分钟'}
-function reasonLabel(r){return ({payment_required:'额度不足',forbidden:'禁止访问',unauthorized:'未授权',rate_limited:'限流',rate_limited_fallback:'限流(默认等待)',probe_failed:'巡检失败',manual:'手动',token_expired:'Token 过期',needs_refresh:'待刷新'})[r]||r||'-'}
-function classLabel(c){return ({rate_limited:'限流',quota_exhausted:'额度用尽',reauth:'需重新授权',permission_denied:'权限拒绝',model_unavailable:'模型不可用',probe_error:'巡检错误',healthy:'健康',token_expired:'Token 过期',needs_refresh:'待刷新'})[c]||c||''}
+function reasonLabel(r){return ({payment_required:'额度不足',forbidden:'拒绝',unauthorized:'未授权',rate_limited:'限流',rate_limited_fallback:'限流(默认窗口)',probe_failed:'巡检失败',manual:'手动',token_expired:'Token 过期',needs_refresh:'需重授'})[r]||r||'-'}
+function classLabel(c){return ({rate_limited:'限流',quota_exhausted:'额度用尽',reauth:'需重授',permission_denied:'拒绝',model_unavailable:'模型不可用',probe_error:'巡检错误',healthy:'健康',token_expired:'Token 过期',needs_refresh:'需重授'})[c]||c||''}
 function labelAction(a){return ({ban:'隔离',disable:'禁用',delete:'删除',none:'不处理',unban:'释放',reenable:'启用',unban_and_reenable:'释放并启用',reauth:'重授权'})[a]||a||'-'}
 
 function renderSettingsSummary(s){
@@ -391,7 +391,7 @@ function renderHistory(list){
   if(!state.history.length){ el.textContent='暂无记录'; return; }
   el.innerHTML=state.history.slice(0,12).map(run=>{
     const r=run.result||{};
-    const mode=r.report_only?'只输出':'自动执行';
+    const mode=r.report_only?'只记录':'自动执行';
     const st=run.error?'失败':'完成';
     return '<button type="button" class="bs" title="#'+run.id+'">'+
       '<b>#'+run.id+' · '+st+'</b>'+
@@ -581,25 +581,24 @@ function midCell(c){
     else parts.push('健康');
   }
   if(c.disabled&&c.banned){
-    // "禁用 · 403" already covers; add 兼隔离 only if no code
-    if(![401,402,403,429].includes(Number(c.status_code||0))) parts.push('兼隔离');
+    // 禁用为主徽章时，辅标标明仍在隔离账本
+    if(![401,402,403,429].includes(Number(c.status_code||0))) parts.push('仍隔离');
   }
   let head=parts.join(' · ');
   const p=primaryStatus(c);
   const tags=['<span class="badge '+p.cls+'" title="'+esc(head)+'">'+esc(p.label)+'</span>'];
-  if(c.disabled&&c.banned) tags.push('<span class="pill dim">兼隔离</span>');
-  // soft 403 / probe: only when healthy-ish (not main drama)
+  if(c.disabled&&c.banned) tags.push('<span class="pill dim">仍隔离</span>');
   if(!c.banned && !c.disabled && c.soft_403_streak>0){
     tags.push('<span class="pill dim" title="软403连击">'+c.soft_403_streak+'/'+(c.soft_403_need||1)+'</span>');
   }
   const sub=[];
   if(c.banned&&c.remaining_seconds!=null&&c.remaining_seconds>=0){
-    sub.push('<span class="remain">剩 '+esc(formatRemaining(c.remaining_seconds))+'</span>');
+    sub.push('<span class="remain">剩 '+esc(formatRemaining(c.remaining_seconds))+' · 到期自动释放</span>');
   }
   const why=shortWhy(c);
   if(why && !(c.banned && Number(c.status_code)>0)) sub.push(esc(why));
   if(!c.banned && c.last_probe_ok===false && c.last_probe_status){
-    sub.push('探测'+c.last_probe_status);
+    sub.push('巡检'+c.last_probe_status);
   }
   return '<div class="mid"><div class="mid-top">'+tags.join('')+'</div>'+
     (sub.length?'<div class="mid-sub">'+sub.join('<span class="sep">·</span>')+'</div>':'')+

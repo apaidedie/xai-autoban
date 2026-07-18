@@ -855,8 +855,9 @@ func TestDisableActionViaManagementNoAuthSave(t *testing.T) {
 	if len(stub.Saves) != 0 {
 		t.Fatalf("management disable must not AuthSave; Saves=%d", len(stub.Saves))
 	}
-	if !defaultApp.bans.Active("auth-1", now) {
-		t.Fatal("expected ban ledger entry after disable action")
+	// Disable only flips CPA switch; must not write isolation ledger (1.1.6+).
+	if defaultApp.bans.Active("auth-1", now) {
+		t.Fatal("disable must not write isolation ledger")
 	}
 }
 
